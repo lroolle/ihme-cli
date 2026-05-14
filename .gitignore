@@ -1,4 +1,5 @@
 dist/
 ihme
 *.exe
+*.out
 .DS_Store

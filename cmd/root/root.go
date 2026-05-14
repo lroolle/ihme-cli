@@ -1,6 +1,17 @@
 package root
 
 import (
+	"fmt"
+
+	"github.com/lroolle/ihme-cli/cmd/auth"
+	copycmd "github.com/lroolle/ihme-cli/cmd/copy"
+	"github.com/lroolle/ihme-cli/cmd/edit"
+	"github.com/lroolle/ihme-cli/cmd/export"
+	"github.com/lroolle/ihme-cli/cmd/forward"
+	"github.com/lroolle/ihme-cli/cmd/lifecycle"
+	"github.com/lroolle/ihme-cli/cmd/list"
+	newcmd "github.com/lroolle/ihme-cli/cmd/new"
+	"github.com/lroolle/ihme-cli/cmd/view"
 	"github.com/spf13/cobra"
 )
 
@@ -9,18 +20,29 @@ func NewCmdRoot() *cobra.Command {
 		Use:   "ihme",
 		Short: "iCloud Hide My Email CLI",
 		Long:  "Manage iCloud Hide My Email addresses from the command line.",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
-
-	// TODO: register subcommands
-	// cmd.AddCommand(auth.NewCmdAuth())
-	// cmd.AddCommand(list.NewCmdList())
-	// cmd.AddCommand(newcmd.NewCmdNew())
-	// cmd.AddCommand(view.NewCmdView())
-	// cmd.AddCommand(edit.NewCmdEdit())
-	// cmd.AddCommand(export.NewCmdExport())
 
 	cmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	cmd.PersistentFlags().String("jq", "", "Filter JSON output with a jq expression")
+
+	cmd.AddCommand(auth.NewCmdAuth())
+	cmd.AddCommand(list.NewCmdList())
+	cmd.AddCommand(newcmd.NewCmdNew())
+	cmd.AddCommand(view.NewCmdView())
+	cmd.AddCommand(edit.NewCmdEdit())
+	cmd.AddCommand(copycmd.NewCmdCopy())
+	cmd.AddCommand(lifecycle.NewCmdDeactivate())
+	cmd.AddCommand(lifecycle.NewCmdReactivate())
+	cmd.AddCommand(lifecycle.NewCmdDelete())
+	cmd.AddCommand(export.NewCmdExport())
+	cmd.AddCommand(forward.NewCmdForward())
+	cmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run:   func(cmd *cobra.Command, args []string) { fmt.Println("ihme v0.1.0") },
+	})
 
 	return cmd
 }
