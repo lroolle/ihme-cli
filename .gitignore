@@ -1,0 +1,4 @@
+dist/
+ihme
+*.exe
+.DS_Store
