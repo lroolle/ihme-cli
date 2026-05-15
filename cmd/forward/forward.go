@@ -11,6 +11,10 @@ func NewCmdForward() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "forward",
 		Short: "Manage forward-to email address",
+		Long: `Show or change the forward-to email address for Hide My Email.
+
+JSON output (--json):
+  {"forwardTo":"user@icloud.com","available":["user@icloud.com",...],"hint":"ihme forward set <email>"}`,
 		Example: `  ihme forward
   ihme forward --json
   ihme forward set user@icloud.com`,

@@ -12,10 +12,18 @@ func NewCmdView() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view <ref>",
 		Short: "View details of a Hide My Email address",
-		Long:  "<ref> can be an anonymousId, email address, or label (fuzzy match).",
+		Long: `View details of a Hide My Email address.
+
+<ref> can be an anonymousId, email address, or label (fuzzy match).
+
+JSON output (--json):
+  {
+    "result": {"anonymousId","label","hme","forwardToEmail","isActive","createTimestamp","note",...},
+    "hints": {"edit":"ihme edit <id> --label ...", "deactivate":"ihme deactivate <id>", ...}
+  }`,
 		Example: `  ihme view github.com
   ihme view github.com --json
-  ihme view abc123@privaterelay.appleid.com`,
+  ihme view github.com --json --jq '.result.hme'`,
 		Args:    cmdutil.ExactRefArg("ihme view <ref>", "ihme view github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)

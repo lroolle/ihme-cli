@@ -15,11 +15,22 @@ func NewCmdList() *cobra.Command {
 		Use:     "list",
 		Short:   "List Hide My Email addresses",
 		Aliases: []string{"ls"},
+		Long: `List Hide My Email addresses with optional filters.
+
+JSON output (--json):
+  {
+    "addresses": [{"anonymousId","label","hme","isActive","createTimestamp","note",...}],
+    "count": 325,
+    "hints": {"view":"ihme view <ref> --json", ...}
+  }
+
+Use --jq to query: ihme list --json --jq '.addresses[] | select(.isActive)'`,
 		Example: `  ihme list
   ihme list --active
-  ihme list --tag dev
   ihme list --search netflix
-  ihme list --search github --active --json`,
+  ihme list --search github --active --json
+  ihme list --json --jq '.addresses[0:5]'
+  ihme list --sort label`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

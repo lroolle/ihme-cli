@@ -29,6 +29,13 @@ func NewCmdNew() *cobra.Command {
 
 Matches the iCloud web flow: generate first, pick, then reserve.
 
+JSON output without --yes (candidates, no reservation):
+  {"candidates":["a@icloud.com","b@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
+
+JSON output with --yes or --address (reserved):
+  {"anonymousId":"...","label":"...","hme":"a@icloud.com","isActive":true,...}
+
+Flags:
   --json           Show candidates without reserving (for agents)
   --address <addr> Reserve a specific previously-generated address
   --yes            Generate one and reserve immediately`,
@@ -36,7 +43,7 @@ Matches the iCloud web flow: generate first, pick, then reserve.
   ihme new github.com --json
   ihme new github.com --address pole-toils-3x@icloud.com
   ihme new github.com -y --json
-  ihme new github.com --tag dev --note "main account"`,
+  ihme new github.com --tag dev --note "main"`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("label required\n\n  Usage: ihme new <label>\n  Example: ihme new github.com")
