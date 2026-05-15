@@ -60,13 +60,20 @@ func (c *Client) Session() *SessionData {
 // cookieString builds the Cookie header value from stored session cookies.
 // Bypasses Go's cookie jar domain matching — cookies go to every service
 // request regardless of subdomain. This is how rclone handles it.
+// Deduplicates by name (last value wins) to handle legacy sessions that
+// accumulated copies across domains.
 func (c *Client) cookieString() string {
+	seen := make(map[string]struct{}, len(c.session.Cookies))
 	var b strings.Builder
 	first := true
 	for _, ck := range c.session.Cookies {
 		if ck.Value == "" {
 			continue
 		}
+		if _, dup := seen[ck.Name]; dup {
+			continue
+		}
+		seen[ck.Name] = struct{}{}
 		if !first {
 			b.WriteString("; ")
 		}
