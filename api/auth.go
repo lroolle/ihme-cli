@@ -231,10 +231,27 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 	var opts AuthOptionsResponse
 	json.Unmarshal(authBody, &opts)
 
-	// Determine verification method: SMS phone or trusted device push
-	if opts.PhoneNumberVerification != nil && len(opts.PhoneNumberVerification.TrustedPhoneNumbers) > 0 {
-		return c.handle2FASMS(opts.PhoneNumberVerification.TrustedPhoneNumbers, otpCallback)
+	// Some accounts nest auth state under phoneNumberVerification
+	if opts.PhoneNumberVerification != nil {
+		if len(opts.TrustedPhoneNumbers) == 0 {
+			opts.TrustedPhoneNumbers = opts.PhoneNumberVerification.TrustedPhoneNumbers
+		}
 	}
+
+	if len(opts.TrustedPhoneNumbers) > 0 {
+		// Check if any phone supports push (vs SMS-only)
+		hasPush := false
+		for _, p := range opts.TrustedPhoneNumbers {
+			if p.PushMode != "sms" {
+				hasPush = true
+				break
+			}
+		}
+		if !hasPush {
+			return c.handle2FASMS(opts.TrustedPhoneNumbers, otpCallback)
+		}
+	}
+
 	return c.handle2FADevice(otpCallback)
 }
 
@@ -287,6 +304,11 @@ func (c *Client) handle2FASMS(phones []TrustedPhoneNumber, otpCallback TwoFactor
 }
 
 func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
+	// Explicitly request push notification to trusted devices.
+	// Required for iOS 26.4+ where the SRP 409 no longer auto-pushes.
+	// See rclone session.go RequestPushNotification.
+	c.doAuthRequest("PUT", AuthEndpoint+"/verify/trusteddevice/securitycode", nil)
+
 	code, err := otpCallback()
 	if err != nil {
 		return fmt.Errorf("getting 2FA code: %w", err)
@@ -363,13 +385,6 @@ func (c *Client) accountLogin() error {
 
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
-
-	// Copy cookies to all webservice domains.
-	// accountLogin sets cookies on setup.icloud.com but HME lives on
-	// p{N}-maildomainws.icloud.com. Go's cookie jar won't forward them
-	// across subdomains unless we explicitly copy.
-	c.broadcastCookies()
-	c.saveCookies()
 	return nil
 }
 

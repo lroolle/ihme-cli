@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -17,13 +16,13 @@ import (
 )
 
 type Client struct {
-	http       *http.Client
-	session    *SessionData
-	clientID   string
-	frameID    string
-	authAttr   string
-	userAgent  string
-	Verbose    bool
+	http      *http.Client
+	session   *SessionData
+	clientID  string
+	frameID   string
+	authAttr  string
+	userAgent string
+	Verbose   bool
 }
 
 func NewClient() (*Client, error) {
@@ -41,7 +40,7 @@ func NewClient() (*Client, error) {
 		},
 		clientID:  uuid.New().String(),
 		session:   &SessionData{},
-		userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+		userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Safari/605.1.15",
 	}, nil
 }
 
@@ -51,13 +50,61 @@ func NewClientWithSession(sess *SessionData) (*Client, error) {
 		return nil, err
 	}
 	c.session = sess
-	c.restoreCookies()
-	c.broadcastCookies()
 	return c, nil
 }
 
 func (c *Client) Session() *SessionData {
 	return c.session
+}
+
+// cookieString builds the Cookie header value from stored session cookies.
+// Bypasses Go's cookie jar domain matching — cookies go to every service
+// request regardless of subdomain. This is how rclone handles it.
+func (c *Client) cookieString() string {
+	var b strings.Builder
+	first := true
+	for _, ck := range c.session.Cookies {
+		if ck.Value == "" {
+			continue
+		}
+		if !first {
+			b.WriteString("; ")
+		}
+		first = false
+		b.WriteString(ck.Name)
+		b.WriteByte('=')
+		b.WriteString(ck.Value)
+	}
+	return b.String()
+}
+
+// mergeCookies merges response cookies into the session cookie list.
+// Updates existing cookies by name, appends new ones.
+func (c *Client) mergeCookies(cookies []*http.Cookie) {
+	if len(cookies) == 0 {
+		return
+	}
+	idx := make(map[string]int, len(c.session.Cookies))
+	for i, ck := range c.session.Cookies {
+		idx[ck.Name] = i
+	}
+	for _, ck := range cookies {
+		if ck.Value == "" {
+			continue
+		}
+		sc := SavedCookie{
+			Name:   ck.Name,
+			Value:  ck.Value,
+			Domain: ck.Domain,
+			Path:   ck.Path,
+		}
+		if i, ok := idx[ck.Name]; ok {
+			c.session.Cookies[i] = sc
+		} else {
+			c.session.Cookies = append(c.session.Cookies, sc)
+			idx[ck.Name] = len(c.session.Cookies) - 1
+		}
+	}
 }
 
 func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []byte, error) {
@@ -93,7 +140,8 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	if c.authAttr != "" {
 		req.Header.Set("X-Apple-Auth-Attributes", c.authAttr)
 	}
-	req.Header.Set("X-Apple-I-FD-Client-Info", `{"U":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15","L":"en-US","Z":"GMT-05:00","V":"1.1","F":""}`)
+	req.Header.Set("X-Apple-I-FD-Client-Info", fmt.Sprintf(
+		`{"U":"%s","L":"en-US","Z":"GMT-05:00","V":"1.1","F":""}`, c.userAgent))
 
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[auth] %s %s\n", method, url)
@@ -115,6 +163,7 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	}
 
 	c.captureAuthHeaders(resp)
+	c.mergeCookies(resp.Cookies())
 	return resp, respBody, nil
 }
 
@@ -159,6 +208,10 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 
+	if cs := c.cookieString(); cs != "" {
+		req.Header.Set("Cookie", cs)
+	}
+
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[svc] %s %s\n", method, url)
 	}
@@ -177,6 +230,8 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[svc] -> %d (%d bytes)\n", resp.StatusCode, len(respBody))
 	}
+
+	c.mergeCookies(resp.Cookies())
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return respBody, fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, url, truncate(string(respBody), 200))
@@ -210,100 +265,6 @@ func (c *Client) hmeURL(version int, path string) (string, error) {
 		ClientBuildNumber, ClientMasteringNumber, c.clientID, c.session.Dsid)
 
 	return fmt.Sprintf("%s/v%d/hme/%s%s", base, version, path, params), nil
-}
-
-func (c *Client) broadcastCookies() {
-	// Collect cookies from all known iCloud domains
-	sources := []string{
-		"https://setup.icloud.com",
-		"https://setup.icloud.com.cn",
-		"https://www.icloud.com",
-		"https://idmsa.apple.com",
-	}
-	var all []*http.Cookie
-	seen := make(map[string]bool)
-	for _, s := range sources {
-		u, _ := url.Parse(s)
-		for _, ck := range c.http.Jar.Cookies(u) {
-			if !seen[ck.Name] {
-				seen[ck.Name] = true
-				all = append(all, ck)
-			}
-		}
-	}
-
-	// Push to all webservice domains
-	targets := []string{"https://www.icloud.com", "https://icloud.com"}
-	for _, ws := range c.session.Webservices {
-		if ws.URL != "" {
-			targets = append(targets, ws.URL)
-		}
-	}
-	for _, t := range targets {
-		u, _ := url.Parse(t)
-		if u != nil {
-			c.http.Jar.SetCookies(u, all)
-		}
-	}
-}
-
-func (c *Client) saveCookies() {
-	domains := []string{
-		"https://www.icloud.com",
-		"https://icloud.com",
-		"https://setup.icloud.com",
-		"https://setup.icloud.com.cn",
-		"https://idmsa.apple.com",
-	}
-	for _, ws := range c.session.Webservices {
-		if ws.URL != "" {
-			domains = append(domains, ws.URL)
-		}
-	}
-	var saved []SavedCookie
-	for _, d := range domains {
-		u, _ := url.Parse(d)
-		if u == nil {
-			continue
-		}
-		for _, ck := range c.http.Jar.Cookies(u) {
-			saved = append(saved, SavedCookie{
-				Name:   ck.Name,
-				Value:  ck.Value,
-				Domain: u.Host,
-				Path:   "/",
-			})
-		}
-	}
-	c.session.Cookies = saved
-}
-
-func (c *Client) restoreCookies() {
-	for _, d := range []string{
-		"https://www.icloud.com",
-		"https://icloud.com",
-		"https://setup.icloud.com",
-		"https://setup.icloud.com.cn",
-		"https://idmsa.apple.com",
-	} {
-		u, _ := url.Parse(d)
-		if u == nil {
-			continue
-		}
-		var cookies []*http.Cookie
-		for _, sc := range c.session.Cookies {
-			if sc.Domain == u.Host {
-				cookies = append(cookies, &http.Cookie{
-					Name:  sc.Name,
-					Value: sc.Value,
-					Path:  sc.Path,
-				})
-			}
-		}
-		if len(cookies) > 0 {
-			c.http.Jar.SetCookies(u, cookies)
-		}
-	}
 }
 
 func truncate(s string, n int) string {

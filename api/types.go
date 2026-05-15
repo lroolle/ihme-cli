@@ -89,7 +89,9 @@ type WebserviceEndpoint struct {
 
 type AuthOptionsResponse struct {
 	PhoneNumberVerification *PhoneNumberVerification `json:"phoneNumberVerification,omitempty"`
+	TrustedPhoneNumbers     []TrustedPhoneNumber     `json:"trustedPhoneNumbers,omitempty"`
 	TrustedDevices          []TrustedDevice          `json:"trustedDevices,omitempty"`
+	NoTrustedDevices        bool                     `json:"noTrustedDevices,omitempty"`
 }
 
 type PhoneNumberVerification struct {
