@@ -34,6 +34,17 @@ func newCmdLogin() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Sign in with your Apple ID",
+		Long: `Sign in with your Apple ID using SRP authentication + 2FA.
+
+Credentials are never stored. Session tokens are saved to:
+  ~/Library/Application Support/ihme/session.json (macOS)
+  ~/.config/ihme/session.json (Linux)
+Override with IHME_SESSION_PATH.
+
+Trust token (~30 days) allows subsequent logins without 2FA.`,
+		Example: `  ihme auth login
+  ihme auth login --apple-id user@icloud.com
+  IHME_APPLE_ID=user@icloud.com ihme auth login`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
 
@@ -111,6 +122,12 @@ func newCmdStatus() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show current auth status",
+		Long: `Show current authentication status.
+
+JSON output (--json):
+  {"loggedIn":true,"appleId":"...","savedAt":"...","expired":false,"hint":"ihme list --json"}`,
+		Example: `  ihme auth status
+  ihme auth status --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
 			sess, err := api.LoadSession(sessPath)

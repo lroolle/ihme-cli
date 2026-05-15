@@ -19,8 +19,13 @@ func NewCmdEdit() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit <ref>",
 		Short: "Edit label, note, or tags of a Hide My Email address",
+		Long: `Edit metadata of a Hide My Email address.
+
+Only specified flags are changed; omitted fields keep their current value.
+Tags replace all existing tags (not additive).`,
 		Example: `  ihme edit github.com --label GitHub
-  ihme edit github.com --tag dev,work --note "main"`,
+  ihme edit github.com --tag dev,work --note "main"
+  ihme edit github.com --tag ""`,
 		Args:    cmdutil.ExactRefArg("ihme edit <ref>", "ihme edit github.com --label GitHub"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)

@@ -13,8 +13,13 @@ import (
 
 func NewCmdDeactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:     "deactivate <ref>",
-		Short:   "Deactivate a Hide My Email address",
+		Use:   "deactivate <ref>",
+		Short: "Deactivate a Hide My Email address",
+		Long: `Deactivate a Hide My Email address. Mail to this address will be rejected.
+Can be reactivated later with 'ihme reactivate'.
+
+JSON output (--json):
+  {"status":"deactivated","hme":"...","id":"...","hints":{"reactivate":"...","delete":"..."}}`,
 		Example: "  ihme deactivate github.com",
 		Args:    cmdutil.ExactRefArg("ihme deactivate <ref>", "ihme deactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -62,8 +67,12 @@ func NewCmdDeactivate() *cobra.Command {
 
 func NewCmdReactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:     "reactivate <ref>",
-		Short:   "Reactivate a deactivated Hide My Email address",
+		Use:   "reactivate <ref>",
+		Short: "Reactivate a deactivated Hide My Email address",
+		Long: `Reactivate a previously deactivated Hide My Email address.
+
+JSON output (--json):
+  {"status":"reactivated","hme":"...","id":"...","hint":"ihme view <id> --json"}`,
 		Example: "  ihme reactivate github.com",
 		Args:    cmdutil.ExactRefArg("ihme reactivate <ref>", "ihme reactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {

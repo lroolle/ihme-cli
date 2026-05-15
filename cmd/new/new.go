@@ -33,12 +33,7 @@ JSON output without --yes (candidates, no reservation):
   {"candidates":["a@icloud.com","b@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
 
 JSON output with --yes or --address (reserved):
-  {"anonymousId":"...","label":"...","hme":"a@icloud.com","isActive":true,...}
-
-Flags:
-  --json           Show candidates without reserving (for agents)
-  --address <addr> Reserve a specific previously-generated address
-  --yes            Generate one and reserve immediately`,
+  {"anonymousId":"...","label":"...","hme":"a@icloud.com","isActive":true,...}`,
 		Example: `  ihme new github.com
   ihme new github.com --json
   ihme new github.com --address pole-toils-3x@icloud.com
