@@ -21,16 +21,16 @@
 
 ## Install
 
-**Download binary** (no Go required):
+**Download binary** from [Releases](https://github.com/lroolle/ihme-cli/releases):
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-arm64 -o ihme
-chmod +x ihme && sudo mv ihme /usr/local/bin/
+curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz
+sudo mv ihme /usr/local/bin/
 
 # Linux
-curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-linux-amd64 -o ihme
-chmod +x ihme && sudo mv ihme /usr/local/bin/
+curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_linux_x86_64.tar.gz | tar xz
+sudo mv ihme /usr/local/bin/
 ```
 
 **Go install:**
@@ -50,10 +50,10 @@ git clone https://github.com/lroolle/ihme-cli.git && cd ihme-cli && make install
 
 ```
 Set up the ihme skill for managing iCloud Hide My Email addresses:
-1. Download the binary: curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
-2. Install the skill: mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
+1. Install: curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
+2. Install skill: mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
 3. Verify: ihme version
-Then run ihme auth login to authenticate.
+Then run ihme auth login to sign in.
 ```
 
 </details>

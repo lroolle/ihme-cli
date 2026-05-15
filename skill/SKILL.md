@@ -21,13 +21,13 @@ If `ihme` is not installed, install it:
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-arm64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
 
 # macOS (Intel)
-curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-amd64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_x86_64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
 
 # Linux
-curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-linux-amd64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_linux_x86_64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
 
 # Or via Go
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
