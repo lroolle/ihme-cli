@@ -1,6 +1,7 @@
 package new
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -9,14 +10,14 @@ import (
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/pkg/tags"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func NewCmdNew() *cobra.Command {
 	var (
 		note    string
 		tagList []string
-		count   int
-		dryRun  bool
+		yes     bool
 	)
 
 	cmd := &cobra.Command{
@@ -24,13 +25,13 @@ func NewCmdNew() *cobra.Command {
 		Short: "Generate and reserve a new Hide My Email address",
 		Long: `Generate a new Hide My Email address and reserve it with the given label.
 
-By default, generates one address and reserves it immediately.
-Use -n to generate multiple candidates and pick one interactively.
-Use --dry-run to generate without reserving.`,
+Shows the generated address and lets you confirm, regenerate for a
+different one, or cancel. Use --yes to skip confirmation (for scripts
+and agents).`,
 		Example: `  ihme new github.com
   ihme new github.com --tag dev --note "main account"
-  ihme new github.com -n 3
-  ihme new github.com --dry-run --json`,
+  ihme new github.com --yes
+  ihme new github.com --yes --json`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("label required\n\n  Usage: ihme new <label>\n\n  Example: ihme new github.com --tag dev")
@@ -42,31 +43,29 @@ Use --dry-run to generate without reserving.`,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			label := args[0]
+			jsonFlag, _ := cmd.Flags().GetBool("json")
 
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
 			}
 
-			jsonFlag, _ := cmd.Flags().GetBool("json")
-
-			if count > 1 {
-				return generateMultiple(cmd, client, label, count, dryRun, jsonFlag, tagList, note)
-			}
+			interactive := !yes && !jsonFlag && term.IsTerminal(int(os.Stdin.Fd()))
 
 			hme, err := client.GenerateHme()
 			if err != nil {
 				return err
 			}
 
-			if dryRun {
-				if jsonFlag {
-					fmt.Printf(`{"hme":"%s","label":"%s"}`, hme, label)
-					fmt.Println()
-				} else {
-					fmt.Println(hme)
+			if interactive {
+				hme, err = confirmLoop(client, hme)
+				if err != nil {
+					return err
 				}
-				return nil
+				if hme == "" {
+					fmt.Println("Cancelled.")
+					return nil
+				}
 			}
 
 			noteField := tags.Serialize(tagList, note)
@@ -85,57 +84,35 @@ Use --dry-run to generate without reserving.`,
 
 	cmd.Flags().StringVar(&note, "note", "", "Note for the address")
 	cmd.Flags().StringSliceVar(&tagList, "tag", nil, "Tags (repeatable)")
-	cmd.Flags().IntVarP(&count, "count", "n", 1, "Generate N candidates to choose from")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Generate only, don't reserve")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation, reserve immediately")
 	return cmd
 }
 
-func generateMultiple(cmd *cobra.Command, client *api.Client, label string, count int, dryRun, jsonFlag bool, tagList []string, note string) error {
-	candidates := make([]string, 0, count)
-	for i := 0; i < count; i++ {
-		hme, err := client.GenerateHme()
+func confirmLoop(client *api.Client, hme string) (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("\n  %s\n\n", hme)
+		fmt.Print("Use this address? [y]es / [r]egenerate / [c]ancel: ")
+
+		line, err := reader.ReadString('\n')
 		if err != nil {
-			return fmt.Errorf("generating candidate %d: %w", i+1, err)
+			return "", err
 		}
-		candidates = append(candidates, hme)
-	}
+		choice := strings.TrimSpace(strings.ToLower(line))
 
-	if dryRun || jsonFlag {
-		if jsonFlag {
-			type candidate struct {
-				Index int    `json:"index"`
-				Hme   string `json:"hme"`
+		switch {
+		case choice == "y" || choice == "yes" || choice == "":
+			return hme, nil
+		case choice == "r" || choice == "regenerate":
+			next, err := client.GenerateHme()
+			if err != nil {
+				return "", fmt.Errorf("regenerating: %w", err)
 			}
-			items := make([]candidate, len(candidates))
-			for i, c := range candidates {
-				items[i] = candidate{Index: i + 1, Hme: c}
-			}
-			return cmdutil.OutputResult(cmd, items)
+			hme = next
+		case choice == "c" || choice == "cancel" || choice == "n" || choice == "no":
+			return "", nil
+		default:
+			fmt.Println("  Enter y, r, or c")
 		}
-		for _, c := range candidates {
-			fmt.Println(c)
-		}
-		return nil
 	}
-
-	fmt.Println("Generated addresses:")
-	for i, c := range candidates {
-		fmt.Printf("  [%d] %s\n", i+1, c)
-	}
-	fmt.Printf("Pick one (1-%d): ", count)
-
-	var choice int
-	if _, err := fmt.Fscan(os.Stdin, &choice); err != nil || choice < 1 || choice > count {
-		return fmt.Errorf("invalid choice — enter a number 1-%d", count)
-	}
-
-	selected := candidates[choice-1]
-	noteField := tags.Serialize(tagList, note)
-	reserved, err := client.ReserveHme(selected, label, noteField)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
-	return nil
 }
