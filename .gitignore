@@ -1,6 +1,6 @@
 dist/
-ihme
-ihme-linux
+/ihme
+/ihme-linux
 *.exe
 *.out
 .DS_Store
