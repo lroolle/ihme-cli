@@ -68,6 +68,55 @@ func TestFilterCombined(t *testing.T) {
 	}
 }
 
+func TestFilterSearch(t *testing.T) {
+	result := Apply(testEmails, Options{Search: "github"})
+	if len(result) != 1 || result[0].Label != "github.com" {
+		t.Errorf("search 'github': got %d results", len(result))
+	}
+}
+
+func TestFilterSearchCaseInsensitive(t *testing.T) {
+	result := Apply(testEmails, Options{Search: "AMAZON"})
+	if len(result) != 1 || result[0].Label != "amazon.com" {
+		t.Errorf("search 'AMAZON': got %d results", len(result))
+	}
+}
+
+func TestFilterSearchByEmail(t *testing.T) {
+	result := Apply(testEmails, Options{Search: "b@relay"})
+	if len(result) != 1 || result[0].Label != "amazon.com" {
+		t.Errorf("search by email: got %d results", len(result))
+	}
+}
+
+func TestFilterSearchByNote(t *testing.T) {
+	result := Apply(testEmails, Options{Search: "deprecated"})
+	if len(result) != 1 || result[0].Label != "old-site.com" {
+		t.Errorf("search by note: got %d results", len(result))
+	}
+}
+
+func TestFilterSearchNoMatch(t *testing.T) {
+	result := Apply(testEmails, Options{Search: "nonexistent"})
+	if len(result) != 0 {
+		t.Errorf("expected 0 results, got %d", len(result))
+	}
+}
+
+func TestSortByLabel(t *testing.T) {
+	result := Apply(testEmails, Options{Sort: "label"})
+	if result[0].Label != "amazon.com" {
+		t.Errorf("first by label should be amazon.com, got %s", result[0].Label)
+	}
+}
+
+func TestSortByLabelDesc(t *testing.T) {
+	result := Apply(testEmails, Options{Sort: "label:desc"})
+	if result[0].Label != "old-site.com" {
+		t.Errorf("first by label:desc should be old-site.com, got %s", result[0].Label)
+	}
+}
+
 func TestFilterEmpty(t *testing.T) {
 	result := Apply(nil, Options{Active: true})
 	if len(result) != 0 {

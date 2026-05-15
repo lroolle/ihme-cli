@@ -18,8 +18,8 @@ func NewCmdList() *cobra.Command {
 		Example: `  ihme list
   ihme list --active
   ihme list --tag dev
-  ihme list --json
-  ihme list --json --jq '.[].hme'`,
+  ihme list --search netflix
+  ihme list --search github --active --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -55,5 +55,7 @@ func NewCmdList() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Active, "active", false, "Show only active addresses")
 	cmd.Flags().BoolVar(&opts.Inactive, "inactive", false, "Show only inactive addresses")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Filter by tag")
+	cmd.Flags().StringVarP(&opts.Search, "search", "s", "", "Search label, address, or note")
+	cmd.Flags().StringVar(&opts.Sort, "sort", "", "Sort by: date, label, date:asc, label:desc")
 	return cmd
 }

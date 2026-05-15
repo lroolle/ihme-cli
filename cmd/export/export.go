@@ -58,7 +58,9 @@ func NewCmdExport() *cobra.Command {
 	cmd.Flags().StringVarP(&format, "format", "f", "csv", "Output format: csv, json")
 	cmd.Flags().StringVarP(&outFile, "output", "o", "", "Output file (default: stdout)")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Filter by tag")
+	cmd.Flags().StringVarP(&opts.Search, "search", "s", "", "Search label, address, or note")
 	cmd.Flags().BoolVar(&opts.Active, "active", false, "Export only active")
 	cmd.Flags().BoolVar(&opts.Inactive, "inactive", false, "Export only inactive")
+	cmd.Flags().StringVar(&opts.Sort, "sort", "", "Sort by: date, label, date:asc, label:desc")
 	return cmd
 }
