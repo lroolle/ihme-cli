@@ -5,75 +5,80 @@ iCloud Hide My Email CLI. Go + Cobra.
 ## Build
 
 ```
-go build -o ihme ./cmd/ihme
+make              # build
+make check        # vet + test + build
+make cross        # cross-compile all platforms
 ```
 
 ## Architecture
 
 ```
 cmd/
-  ihme/main.go          Entry point
+  ihme/main.go          Entry point (version from ldflags)
   root/root.go           Root command, subcommand registration
-  auth/                  login, status, logout (SRP + 2FA)
-  list/                  List with --active/--inactive/--tag filters
-  new/                   Generate + reserve in one shot
+  auth/                  login (SRP + 2FA), status, logout
+  list/                  List with --search/--active/--inactive/--tag/--sort
+  new/                   Generate candidates, interactive pick, --address to reserve
   view/                  View single address by ref
   edit/                  Edit label/note/tags
   copy/                  Copy address to clipboard
-  lifecycle/             deactivate, reactivate, delete
+  lifecycle/             deactivate, reactivate, delete (with --yes confirmation)
   export/                CSV/JSON export with filters
   forward/               forward-to management
 
 api/
-  types.go               HmeEmail, SessionData, auth request/response types
+  types.go               HmeEmail, SessionData, SavedCookie, auth types
   endpoints.go           URL constants, header maps
-  client.go              HTTP client with cookie jar, auth/service request helpers
-  auth.go                SRP auth flow: start -> federate -> init -> complete -> 2FA -> trust -> accountLogin
+  client.go              HTTP client, manual Cookie header (rclone pattern), mergeCookies
+  auth.go                SRP auth: start -> federate -> init -> complete -> 2FA -> trust -> accountLogin
   session.go             Session persistence to ~/.config/ihme/session.json
   hme.go                 HME CRUD: list, generate, reserve, update, deactivate, reactivate, delete
 
 internal/
-  srp/                   SRP-6a with Apple modifications (NG_2048, SHA-256, NoUserNameInX)
-  cmdutil/               GetClient helper, OutputResult (table/JSON/jq dispatch)
+  srp/                   SRP-6a (NG_2048, SHA-256, NoUserNameInX)
+  cmdutil/               GetClient, OutputResult, ExactRefArg
 
 pkg/
   output/                Table, JSON, CSV, detail formatters
-  tags/                  Parse/serialize #tag convention from note field
-  resolver/              Universal ref resolver (anonymousId, email, label fuzzy match)
+  filter/                --active/--inactive/--tag/--search/--sort
+  tags/                  Parse/serialize #tag convention
+  resolver/              Universal ref resolver (ID, email, label fuzzy)
 ```
 
 ## Auth flow
 
-Apple SRP via idmsa.apple.com (web auth path, not GSA):
-1. GET  /appleauth/auth/authorize/signin — init session
-2. POST /appleauth/auth/federate — submit email
-3. POST /appleauth/auth/signin/init — SRP public key exchange
-4. POST /appleauth/auth/signin/complete — SRP proof (M1/M2)
-5. POST /appleauth/auth/verify/trusteddevice/securitycode — 2FA (if 409)
-6. GET  /appleauth/auth/2sv/trust — trust token
-7. POST setup.icloud.com/setup/ws/1/accountLogin — get webservices map
+Apple SRP via idmsa.apple.com (web auth, not GSA):
+1. GET  /authorize/signin — init session
+2. POST /federate — submit email
+3. POST /signin/init — SRP key exchange
+4. POST /signin/complete — SRP proof (M1/M2)
+5. 2FA: SMS (PUT /verify/phone) or device push (PUT /verify/trusteddevice/securitycode)
+6. GET  /2sv/trust — trust token
+7. POST setup.icloud.com/accountLogin — get webservices map + cookies
 
-Password derivation: SHA256(password) -> PBKDF2(hash, salt, iterations, 32)
-Protocol s2k_fo uses hex-encoded SHA256 instead of raw bytes.
+Cookie handling: manual Cookie header from session cookie list (rclone pattern).
+No Go cookie jar domain matching — cookies go to all service requests.
+CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 
-## HME API
+## Session resume
 
-Base: {webservices.premiummailsettings.url}
-- GET  /v2/hme/list
-- POST /v1/hme/generate, reserve, updateMetaData, deactivate, reactivate, delete, updateForwardTo
+1. Load session + cookies from disk
+2. Try validate (uses persisted cookies, no Apple sign-in email)
+3. If validate fails, fall back to accountLogin (triggers sign-in email)
+4. Save updated session after resume
 
 ## Design rules
 
 - Every command supports --json and --jq
+- --json output includes hints with follow-up commands
+- --help documents JSON response shapes
 - <ref> resolves by anonymousId, email, or label (fuzzy)
+- Errors include usage example and fix command
 - Errors to stderr, data to stdout
 - Exit codes: 0 success, 1 error, 2 auth required
-- Session stored at ~/.config/ihme/session.json (0600)
-- Trust token enables 2FA-free re-login for ~30 days
+- Session at ~/.config/ihme/session.json (0600)
+- --verbose/-v is global, logs all HTTP requests
 
-## Reference implementations
+## Release
 
-- Go-iClient (github.com/Johnw7789/Go-iClient) — Go SRP + HME reference
-- pyicloud / icloudpd — Python SRP + 2FA reference
-- rclone iclouddrive — Go SRP production implementation
-- Our browser extension — API surface and HME types
+goreleaser on tag push. Archives include LICENSE, README, SKILL.md.

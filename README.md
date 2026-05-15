@@ -17,11 +17,19 @@
   <img src="docs/demo.svg" alt="ihme demo" width="680">
 </p>
 
+<div align="center">
+
+[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Agent integration](#agent-integration) · [Auth](#auth-details)
+
+</div>
+
+---
+
 > **Note**: Unofficial tool. Uses Apple's undocumented iCloud web API. Not affiliated with Apple. Use at your own risk.
 
 ## Install
 
-**Download binary** from [Releases](https://github.com/lroolle/ihme-cli/releases):
+**A. Download binary** from [Releases](https://github.com/lroolle/ihme-cli/releases):
 
 ```bash
 # macOS (Apple Silicon)
@@ -33,30 +41,24 @@ curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_linux
 sudo mv ihme /usr/local/bin/
 ```
 
-**Go install:**
+**B. Go install:**
 
 ```bash
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
 ```
 
-**Build from source:**
-
-```bash
-git clone https://github.com/lroolle/ihme-cli.git && cd ihme-cli && make install
-```
-
-<details>
-<summary><strong>Install via Claude Code</strong> — paste this prompt:</summary>
+**C. Or paste this prompt to your AI agent:**
 
 ```
-Set up the ihme skill for managing iCloud Hide My Email addresses:
-1. Install: curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
-2. Install skill: mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
+Install the ihme skill for iCloud Hide My Email management:
+
+1. Download and install the binary:
+   curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
+2. Install the skill definition:
+   mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
 3. Verify: ihme version
-Then run ihme auth login to sign in.
+4. Authenticate: ihme auth login (interactive — needs Apple ID + 2FA)
 ```
-
-</details>
 
 ## Quick start
 
@@ -133,24 +135,14 @@ FORWARD
 
 ## JSON & jq
 
-Every command supports `--json` and `--jq`. Response shapes are in `ihme <cmd> --help`.
+Every command supports `--json` and `--jq`. Response shapes are documented in `ihme <cmd> --help`.
 
 ```bash
-# First 5 addresses
 ihme list --json --jq '.addresses[0:5]'
-
-# Just the email strings
 ihme list --search github --json --jq '.addresses[].hme'
-
-# Address count
 ihme list --json --jq '.count'
-
-# Get one address field
 ihme view github.com --json --jq '.result.hme'
-
-# Agent: generate candidates, pick, reserve
 ihme new mysite.com --json | jq '.candidates'
-ihme new mysite.com --address chosen@icloud.com --json
 ```
 
 ## Agent integration
@@ -177,7 +169,6 @@ ihme new example.com --tag shopping --note "prime account"
 # Stored as: #shopping | prime account
 
 ihme list --tag shopping
-ihme edit example.com --tag shopping,personal
 ```
 
 ## Auth details
