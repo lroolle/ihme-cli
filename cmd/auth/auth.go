@@ -61,6 +61,7 @@ func newCmdLogin() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			client.Verbose, _ = cmd.Flags().GetBool("verbose")
 
 			sess, err := api.LoadSession(sessPath)
 			if err != nil {

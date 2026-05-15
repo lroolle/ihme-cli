@@ -23,8 +23,9 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	client.Verbose, _ = cmd.Flags().GetBool("verbose")
 
-	if err := client.ValidateSession(); err != nil {
+	if err := client.ResumeSession(); err != nil {
 		return nil, fmt.Errorf("session expired — run 'ihme auth login' to re-authenticate: %w", err)
 	}
 

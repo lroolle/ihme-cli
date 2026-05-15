@@ -1,0 +1,113 @@
+* [2026-05-14] Session resume: a fundamental design miss              :FIX:ARCH:
+
+** Tension
+
+Auth works. Login succeeds. Session tokens save correctly.
+But every subsequent command fails with 421 because the session
+can't resume. The CLI is useless — it can authenticate but can't
+do anything with the authentication.
+
+This is not a bug. This is a design failure.
+
+** Observation
+
+Every implementation that supports session resume persists cookies
+to disk:
+
+| Implementation | Saves tokens | Saves cookies | Resume works |
+|----------------|-------------|---------------|--------------|
+| pyicloud       | yes         | yes (LWPCookieJar) | yes    |
+| icloudpd       | yes         | yes (LWPCookieJar) | yes    |
+| icloudgo       | yes         | yes (cookie.json)  | yes    |
+| go-iclient     | no          | no (memory only)   | no     |
+| icloud.js      | no          | no (memory only)   | no     |
+| ihme-cli (us)  | yes         | NO                 | NO     |
+
+Go-iClient and icloud.js don't support session resume at all —
+they're libraries that run in a single process. We modeled our
+session layer after Go-iClient (a library) when we're building
+a CLI (multiple processes). A CLI that can't resume sessions
+across invocations is fundamentally broken.
+
+The validate endpoint needs cookies. accountLogin sets cookies.
+We save tokens but not cookies. New process = empty cookie jar =
+421.
+
+This was knowable from day one by reading any of the three
+implementations that actually work (pyicloud, icloudpd, icloudgo).
+We had all three cloned in reference/. We read them for the SRP
+math but never looked at how they persist sessions.
+
+** What went wrong (process failure)
+
+1. *Wrong reference model.* We copied Go-iClient's client
+   architecture (in-memory state, single process). Go-iClient is
+   a library. We're a CLI. Different lifecycle, different
+   persistence requirements.
+
+2. *Implemented before understanding.* We built the entire session
+   layer, all commands, two rounds of review, README, and skill
+   definition before testing a single real login. The session
+   design was never validated against reality.
+
+3. *Reviewed for code quality, not for correctness.* Two expert
+   reviews caught SRP bugs, error handling, and Go idioms. Neither
+   asked: "does session resume actually work?" Because we never
+   tested it.
+
+4. *Debugging by assumption.* When list failed with 421, we
+   assumed it was a CN routing issue (wrong). Then assumed the
+   validate endpoint was the problem (wrong). Then assumed we
+   needed different headers (wrong). The answer was in the
+   reference code the entire time: cookies must be persisted.
+
+5. *Repeated login attempts.* Each failed assumption led to
+   another auth attempt against Apple's servers. This risks
+   account lockout and is disrespectful of the user's trust.
+
+** Decision
+
+Two paths:
+
+A. *Persist cookies to disk* — what pyicloud/icloudpd/icloudgo do.
+   Correct but complex in Go (net/http cookiejar has no built-in
+   serialization).
+
+B. *Re-call accountLogin on each command* — simpler. accountLogin
+   takes sessionToken + trustToken (which we save), doesn't need
+   cookies, and returns fresh cookies + webservices. Effectively
+   re-establishes the session on every invocation.
+
+Going with B for now. It adds one HTTP call per command but
+eliminates the cookie persistence problem entirely. Can add A
+later if the extra call becomes a problem.
+
+** Tradeoff
+
+Path B means every command does an accountLogin round-trip (~200ms).
+For a CLI tool this is acceptable. For high-frequency scripting it
+adds up. Cookie persistence (Path A) would eliminate this cost.
+
+More importantly: we burned hours on symptoms instead of reading
+the reference implementations carefully. The cost wasn't the code —
+it was the repeated login attempts and the user's trust.
+
+** Rules going forward
+
+1. *Test the happy path before building commands.* Login → save →
+   new process → resume → API call. If this doesn't work, nothing
+   else matters.
+
+2. *Match reference to use case.* Library references for library
+   problems. CLI references for CLI problems. Go-iClient is not
+   a CLI.
+
+3. *Read persistence code first.* For any networked CLI, session
+   persistence is the hard problem. Read how references solve it
+   before writing a line.
+
+** Artifacts
+
+Fixed: cmdutil.GetClient now calls ResumeSession (accountLogin)
+instead of ValidateSession. Session tokens are sufficient for
+accountLogin — no cookies needed.

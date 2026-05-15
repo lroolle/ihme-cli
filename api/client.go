@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ type Client struct {
 	frameID    string
 	authAttr   string
 	userAgent  string
+	Verbose    bool
 }
 
 func NewClient() (*Client, error) {
@@ -76,8 +78,8 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	req.Header.Set("User-Agent", c.userAgent)
 
 	if c.frameID != "" {
-		req.Header.Set("X-Apple-OAuth-State", c.frameID)
-		req.Header.Set("X-Apple-Frame-Id", c.frameID)
+		req.Header.Set("X-Apple-OAuth-State", "auth-"+c.frameID)
+		req.Header.Set("X-Apple-Frame-Id", "auth-"+c.frameID)
 	}
 	if c.session.Scnt != "" {
 		req.Header.Set("scnt", c.session.Scnt)
@@ -87,6 +89,11 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	}
 	if c.authAttr != "" {
 		req.Header.Set("X-Apple-Auth-Attributes", c.authAttr)
+	}
+	req.Header.Set("X-Apple-I-FD-Client-Info", `{"U":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15","L":"en-US","Z":"GMT-05:00","V":"1.1","F":""}`)
+
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] %s %s\n", method, url)
 	}
 
 	resp, err := c.http.Do(req)
@@ -98,6 +105,10 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp, nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] -> %d (%d bytes)\n", resp.StatusCode, len(respBody))
 	}
 
 	c.captureAuthHeaders(resp)
@@ -145,6 +156,10 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[svc] %s %s\n", method, url)
+	}
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request to %s: %w", url, err)
@@ -156,11 +171,22 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[svc] -> %d (%d bytes)\n", resp.StatusCode, len(respBody))
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return respBody, fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, url, truncate(string(respBody), 200))
 	}
 
 	return respBody, nil
+}
+
+func (c *Client) setupURL() string {
+	if c.session.AccountCountry == "CN" {
+		return SetupEndpointCN
+	}
+	return SetupEndpoint
 }
 
 func (c *Client) hmeBaseURL() (string, error) {

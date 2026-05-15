@@ -87,6 +87,28 @@ type WebserviceEndpoint struct {
 	Status string `json:"status"`
 }
 
+type AuthOptionsResponse struct {
+	PhoneNumberVerification *PhoneNumberVerification `json:"phoneNumberVerification,omitempty"`
+	TrustedDevices          []TrustedDevice          `json:"trustedDevices,omitempty"`
+}
+
+type PhoneNumberVerification struct {
+	TrustedPhoneNumbers []TrustedPhoneNumber `json:"trustedPhoneNumbers"`
+}
+
+type TrustedPhoneNumber struct {
+	ID                 int    `json:"id"`
+	NumberWithDialCode string `json:"numberWithDialCode"`
+	ObfuscatedNumber   string `json:"obfuscatedNumber"`
+	LastTwoDigits      string `json:"lastTwoDigits"`
+	PushMode           string `json:"pushMode"`
+}
+
+type TrustedDevice struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
+}
+
 type SessionData struct {
 	AppleID        string                       `json:"appleId"`
 	SessionToken   string                       `json:"sessionToken"`

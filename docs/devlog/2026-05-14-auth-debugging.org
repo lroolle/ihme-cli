@@ -1,0 +1,117 @@
+* [2026-05-14] Auth debugging: assumptions vs ground truth    :FIX:RELIABILITY:
+
+** Tension
+
+Auth flow reached Apple's servers correctly on every attempt. SRP
+succeeded. Trust token acquired. "Logged in successfully." printed.
+But `ihme list` fails with 421. We burned 5+ login attempts
+debugging, each one risking account rate-limiting or lockout from
+Apple.
+
+** Observation
+
+Three distinct bugs found through live testing, each caused by
+assumptions made during implementation:
+
+*** Bug 1: Silent errors
+
+`SilenceErrors: true` on root command + no error print in main.go.
+User ran `ihme auth login`, it failed at the 2FA prompt, but the
+terminal showed nothing. User thought auth itself was broken.
+
+Cause: copied the `SilenceErrors` pattern from gh-cli without
+copying the error printing logic that goes with it.
+
+*** Bug 2: 2FA code never arrives
+
+The 409 (2FA required) was handled, but no verification code
+appeared on the user's devices. We assumed the 409 response itself
+triggers Apple to push the code. We then tried:
+- PUT /verify/trusteddevice → 405 (wrong method, no reference does this)
+- GET /appleauth/auth → 200 (Go-iClient does this, but not the trigger)
+
+Root cause: auth options response showed `"pushMode": "sms"` for all
+phone numbers. This account uses SMS verification, not device push.
+SMS requires an explicit `PUT /verify/phone` call to send the code.
+We never made that call.
+
+What we assumed: the 2FA code pushes automatically.
+What the data said: `pushMode: "sms"` means YOU must request it.
+
+*** Bug 3: CN account routing (current)
+
+`accountLogin` to `setup.icloud.com` returns 200 during login.
+But `validate` to `setup.icloud.com` returns 421 with
+`{"country":"CN","region":"SH"}`.
+
+The user has a +86 phone number. Apple routes this account to CN
+infrastructure. We hardcoded `setup.icloud.com` everywhere. The
+fix to use `setup.icloud.com.cn` based on `AccountCountry` didn't
+work because `AccountCountry` might not be set from auth response
+headers, and `accountLogin` seems to succeed even with the wrong
+URL while `validate` does not.
+
+Go-iClient hardcodes `"USA"` for accountCountryCode — it has never
+been tested with CN accounts.
+
+** Decision
+
+Pattern of failures: every bug came from implementing based on
+what we THOUGHT Apple's protocol does, rather than what the actual
+responses tell us.
+
+Rules going forward:
+
+1. *Log everything on first contact*. Every new endpoint gets
+   verbose response logging before we write handling code.
+
+2. *Parse before assuming*. The auth options response TOLD us
+   `pushMode: "sms"`. The 421 response TOLD us `country: "CN"`.
+   We had the data; we didn't read it.
+
+3. *Retry before failing*. When an endpoint returns a redirect-like
+   error (421) with a new URL, try the new URL. Don't require the
+   user to re-authenticate.
+
+4. *Add verbose to service requests too*. We only had verbose
+   logging on auth requests. The `accountLogin` and `validate`
+   calls were invisible.
+
+5. *Minimize login attempts*. Each failed auth attempt is a signal
+   to Apple. Test with session validation before full re-login.
+
+** Tradeoff
+
+We chose to implement SRP auth from scratch instead of importing
+browser cookies. SRP is more complete but much harder to debug —
+Apple's undocumented protocol has regional routing, SMS vs push
+variants, and version-dependent headers that we can only discover
+through live testing.
+
+The cookie import approach would have been working in 20 minutes.
+The SRP approach has taken hours and still has bugs. But SRP gives
+headless operation, which is the whole point of the CLI.
+
+Both approaches should exist: SRP for headless, cookie import as
+fallback.
+
+** Next
+
+Fix the 421: when `validate` or `accountLogin` returns 421, parse
+the response for the correct region and retry with the CN URL. Add
+verbose logging to `doServiceRequest`. Then re-test — carefully,
+one attempt only.
+
+** Artifacts
+
+Bugs fixed so far:
+- main.go: added error printing
+- handle2FA: SMS flow (PUT /verify/phone → POST /verify/phone/securitycode)
+- endpoints: ClientBuildNumber 2420Hotfix36 → 2602Build17
+- headers: added X-Requested-With, X-Apple-I-FD-Client-Info, etc.
+- frameID: fixed auth-auth- double prefix
+- --verbose: moved to global persistent flag
+
+Still broken:
+- 421 from validate on CN accounts
+- doServiceRequest has no verbose logging

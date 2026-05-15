@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ type TwoFactorCallback func() (string, error)
 
 func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) error {
 	c.session.AppleID = strings.ToLower(appleID)
-	c.frameID = "auth-" + uuid.New().String()
+	c.frameID = strings.ToLower(uuid.New().String())
 
 	if err := c.authStart(); err != nil {
 		return fmt.Errorf("auth start: %w", err)
@@ -48,9 +49,36 @@ func (c *Client) LoginWithSession() error {
 	return c.accountLogin()
 }
 
+func (c *Client) ResumeSession() error {
+	if c.session.SessionToken == "" && c.session.TrustToken == "" {
+		return fmt.Errorf("no session data")
+	}
+	return c.accountLogin()
+}
+
 func (c *Client) ValidateSession() error {
-	url := SetupEndpoint + "/validate"
+	url := c.setupURL() + "/validate"
 	body, err := c.doServiceRequest("POST", url, nil)
+
+	// 421 = wrong region. Apple's response tells us the right one.
+	if err != nil && len(body) > 0 {
+		var errResp struct {
+			RequestInfo []struct {
+				Country string `json:"country"`
+			} `json:"requestInfo"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && len(errResp.RequestInfo) > 0 {
+			country := errResp.RequestInfo[0].Country
+			if country == "CN" && c.session.AccountCountry != "CN" {
+				c.session.AccountCountry = "CN"
+				if c.Verbose {
+					fmt.Fprintf(os.Stderr, "[svc] 421 redirect: switching to CN endpoint\n")
+				}
+				return c.ValidateSession()
+			}
+		}
+		return fmt.Errorf("validate session: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("validate session: %w", err)
 	}
@@ -70,8 +98,9 @@ func (c *Client) ValidateSession() error {
 }
 
 func (c *Client) authStart() error {
+	fid := "auth-" + c.frameID
 	params := fmt.Sprintf("?frame_id=%s&language=en_US&skVersion=7&iframeId=%s&client_id=%s&redirect_uri=%s&response_type=code&response_mode=web_message&state=%s&authVersion=latest",
-		c.frameID, c.frameID, WidgetKey, "https://www.icloud.com", c.frameID)
+		fid, fid, WidgetKey, "https://www.icloud.com", fid)
 	url := AuthEndpoint + "/authorize/signin" + params
 
 	resp, _, err := c.doAuthRequest("GET", url, nil)
@@ -164,6 +193,9 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 	case 200:
 		return nil
 	case 409:
+		if c.Verbose {
+			fmt.Fprintf(os.Stderr, "[auth] 409 body: %s\n", string(body))
+		}
 		return c.handle2FA(otpCallback)
 	case 403:
 		return fmt.Errorf("invalid credentials")
@@ -179,17 +211,79 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 		return fmt.Errorf("two-factor authentication required but no callback provided")
 	}
 
+	_, authBody, _ := c.doAuthRequest("GET", AuthEndpoint, nil)
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] auth options: %s\n", truncate(string(authBody), 2000))
+	}
+
+	var opts AuthOptionsResponse
+	json.Unmarshal(authBody, &opts)
+
+	// Determine verification method: SMS phone or trusted device push
+	if opts.PhoneNumberVerification != nil && len(opts.PhoneNumberVerification.TrustedPhoneNumbers) > 0 {
+		return c.handle2FASMS(opts.PhoneNumberVerification.TrustedPhoneNumbers, otpCallback)
+	}
+	return c.handle2FADevice(otpCallback)
+}
+
+func (c *Client) handle2FASMS(phones []TrustedPhoneNumber, otpCallback TwoFactorCallback) error {
+	// Use first phone number by default
+	phone := phones[0]
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] requesting SMS to %s (id=%d)\n", phone.NumberWithDialCode, phone.ID)
+	}
+
+	// Request SMS: PUT /verify/phone
+	smsReq := map[string]any{
+		"phoneNumber": map[string]any{"id": phone.ID},
+		"mode":        "sms",
+	}
+	resp, _, err := c.doAuthRequest("PUT", AuthEndpoint+"/verify/phone", smsReq)
+	if err != nil {
+		return fmt.Errorf("requesting SMS: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("SMS request returned %d", resp.StatusCode)
+	}
+
+	fmt.Fprintf(os.Stderr, "Verification code sent to %s\n", phone.NumberWithDialCode)
+
 	code, err := otpCallback()
 	if err != nil {
 		return fmt.Errorf("getting 2FA code: %w", err)
 	}
 
-	url := AuthEndpoint + "/verify/trusteddevice/securitycode"
+	// Submit SMS code: POST /verify/phone/securitycode
+	body := map[string]any{
+		"phoneNumber":  map[string]any{"id": phone.ID},
+		"securityCode": map[string]string{"code": code},
+		"mode":         "sms",
+	}
+	resp, respBody, err := c.doAuthRequest("POST", AuthEndpoint+"/verify/phone/securitycode", body)
+	if err != nil {
+		return fmt.Errorf("submitting SMS code: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case 200, 204:
+		return nil
+	case 401, 403:
+		return fmt.Errorf("incorrect verification code")
+	default:
+		return fmt.Errorf("SMS verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+	}
+}
+
+func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
+	code, err := otpCallback()
+	if err != nil {
+		return fmt.Errorf("getting 2FA code: %w", err)
+	}
+
 	body := map[string]any{
 		"securityCode": map[string]string{"code": code},
 	}
-
-	resp, respBody, err := c.doAuthRequest("POST", url, body)
+	resp, respBody, err := c.doAuthRequest("POST", AuthEndpoint+"/verify/trusteddevice/securitycode", body)
 	if err != nil {
 		return fmt.Errorf("submitting 2FA code: %w", err)
 	}
@@ -197,7 +291,7 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 	switch resp.StatusCode {
 	case 200, 204:
 		return nil
-	case 401:
+	case 401, 403:
 		return fmt.Errorf("incorrect verification code")
 	default:
 		return fmt.Errorf("2FA verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
@@ -217,7 +311,7 @@ func (c *Client) getTrust() error {
 }
 
 func (c *Client) accountLogin() error {
-	url := SetupEndpoint + "/accountLogin"
+	url := c.setupURL() + "/accountLogin"
 	req := AccountLoginRequest{
 		AccountCountryCode: c.session.AccountCountry,
 		DsWebAuthToken:     c.session.SessionToken,
@@ -226,6 +320,26 @@ func (c *Client) accountLogin() error {
 	}
 
 	body, err := c.doServiceRequest("POST", url, req)
+
+	// 421 = wrong region, retry with CN
+	if err != nil && len(body) > 0 {
+		var errResp struct {
+			RequestInfo []struct {
+				Country string `json:"country"`
+			} `json:"requestInfo"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && len(errResp.RequestInfo) > 0 {
+			country := errResp.RequestInfo[0].Country
+			if country == "CN" && c.session.AccountCountry != "CN" {
+				c.session.AccountCountry = "CN"
+				if c.Verbose {
+					fmt.Fprintf(os.Stderr, "[svc] 421 redirect: switching to CN endpoint\n")
+				}
+				return c.accountLogin()
+			}
+		}
+		return fmt.Errorf("account login: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("account login: %w", err)
 	}

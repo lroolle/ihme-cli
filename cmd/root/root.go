@@ -26,6 +26,7 @@ func NewCmdRoot() *cobra.Command {
 
 	cmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	cmd.PersistentFlags().String("jq", "", "Filter JSON output with a jq expression")
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "Show request/response details")
 
 	cmd.AddCommand(auth.NewCmdAuth())
 	cmd.AddCommand(list.NewCmdList())
