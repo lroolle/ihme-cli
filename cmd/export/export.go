@@ -19,6 +19,10 @@ func NewCmdExport() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export addresses to CSV or JSON",
+		Example: `  ihme export
+  ihme export --format json
+  ihme export --active --tag dev -o dev.csv
+  ihme export --format json -o all.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

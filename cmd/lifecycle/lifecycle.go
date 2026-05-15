@@ -42,6 +42,18 @@ func NewCmdDeactivate() *cobra.Command {
 				return err
 			}
 
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			if jsonFlag {
+				return cmdutil.OutputResult(cmd, map[string]any{
+					"status": "deactivated",
+					"hme":    hme.Hme,
+					"id":     hme.AnonymousID,
+					"hints": map[string]string{
+						"reactivate": fmt.Sprintf("ihme reactivate %s", hme.AnonymousID),
+						"delete":     fmt.Sprintf("ihme delete %s --yes", hme.AnonymousID),
+					},
+				})
+			}
 			fmt.Printf("Deactivated %s\n", hme.Hme)
 			return nil
 		},
@@ -79,6 +91,15 @@ func NewCmdReactivate() *cobra.Command {
 				return err
 			}
 
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			if jsonFlag {
+				return cmdutil.OutputResult(cmd, map[string]any{
+					"status": "reactivated",
+					"hme":    hme.Hme,
+					"id":     hme.AnonymousID,
+					"hint":   fmt.Sprintf("ihme view %s --json", hme.AnonymousID),
+				})
+			}
 			fmt.Printf("Reactivated %s\n", hme.Hme)
 			return nil
 		},

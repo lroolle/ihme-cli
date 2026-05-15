@@ -17,6 +17,10 @@ func NewCmdAuth() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Authenticate with iCloud",
+		Example: `  ihme auth login
+  ihme auth login --apple-id user@icloud.com
+  ihme auth status --json
+  ihme auth logout`,
 	}
 	cmd.AddCommand(newCmdLogin())
 	cmd.AddCommand(newCmdStatus())
@@ -125,6 +129,7 @@ func newCmdStatus() *cobra.Command {
 					"appleId":  sess.AppleID,
 					"savedAt":  sess.SavedAt.Format("2006-01-02T15:04:05Z07:00"),
 					"expired":  sess.IsExpired(),
+					"hint":     "ihme list --json",
 				}
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")

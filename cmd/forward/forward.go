@@ -11,6 +11,9 @@ func NewCmdForward() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "forward",
 		Short: "Manage forward-to email address",
+		Example: `  ihme forward
+  ihme forward --json
+  ihme forward set user@icloud.com`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -27,6 +30,7 @@ func NewCmdForward() *cobra.Command {
 				return cmdutil.OutputResult(cmd, map[string]any{
 					"forwardTo": result.SelectedFwdTo,
 					"available": result.ForwardToEmails,
+					"hint":      "ihme forward set <email>",
 				})
 			}
 
