@@ -46,13 +46,14 @@ git clone https://github.com/lroolle/ihme-cli.git && cd ihme-cli && make install
 ```
 
 <details>
-<summary><strong>Install via Claude Code</strong> — paste this into Claude Code:</summary>
+<summary><strong>Install via Claude Code</strong> — paste this prompt:</summary>
 
 ```
-Install the ihme CLI for iCloud Hide My Email management:
-1. Run: go install github.com/lroolle/ihme-cli/cmd/ihme@latest
-2. Copy the skill file: mkdir -p ~/.claude/skills/ihme-cli && curl -o ~/.claude/skills/ihme-cli/SKILL.md https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md
-3. Run: ihme auth login
+Set up the ihme skill for managing iCloud Hide My Email addresses:
+1. Download the binary: curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+2. Install the skill: mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
+3. Verify: ihme version
+Then run ihme auth login to authenticate.
 ```
 
 </details>

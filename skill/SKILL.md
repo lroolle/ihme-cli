@@ -15,7 +15,26 @@ tools:
 
 # ihme — iCloud Hide My Email CLI
 
-Requires iCloud+ and prior `ihme auth login`.
+## Setup
+
+If `ihme` is not installed, install it:
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-arm64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+
+# macOS (Intel)
+curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-amd64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+
+# Linux
+curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-linux-amd64 -o /usr/local/bin/ihme && chmod +x /usr/local/bin/ihme
+
+# Or via Go
+go install github.com/lroolle/ihme-cli/cmd/ihme@latest
+```
+
+First run requires `ihme auth login` (interactive — Apple ID + 2FA).
+Check with `ihme auth status --json` before other commands.
 
 ## JSON response shapes
 
@@ -33,6 +52,9 @@ reactivate      → {"status":"reactivated","hme":"...","id":"...","hint":"..."}
 ## Commands
 
 ```bash
+# Check auth first
+ihme auth status --json
+
 # List and search (325+ addresses supported)
 ihme list --json --jq '.addresses[0:5]'
 ihme list --search netflix --json
@@ -64,7 +86,7 @@ ihme forward set user@icloud.com
 
 ## <ref> resolution
 
-All commands accepting `<ref>` resolve in order: anonymousId → email → label (exact) → label (fuzzy).
+All commands accepting `<ref>` resolve in order: anonymousId > email > label (exact) > label (fuzzy).
 
 ## Error handling
 
