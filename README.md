@@ -10,6 +10,7 @@
   <a href="https://github.com/lroolle/ihme-cli/releases"><img src="https://img.shields.io/github/v/release/lroolle/ihme-cli?color=blue&label=release" alt="Release"></a>
   <a href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"><img src="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white" alt="Go"></a>
+  <a href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-SRP%2097%25%20|%20filter%20100%25-brightgreen" alt="Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
 </p>
 
@@ -47,7 +48,15 @@ sudo mv ihme /usr/local/bin/
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
 ```
 
-**C. Or paste this prompt to your AI agent:**
+**C. With [`skills`](https://github.com/vercel-labs/skills) (any compatible agent):**
+
+```bash
+npx skills add lroolle/ihme-cli -g
+```
+
+The `-g` flag installs globally so every project picks it up.
+
+**D. Or paste this prompt to your AI agent:**
 
 ```
 Install the ihme skill for iCloud Hide My Email management:
