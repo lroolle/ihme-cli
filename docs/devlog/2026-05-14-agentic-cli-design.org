@@ -1,0 +1,179 @@
+* [2026-05-14] Agentic CLI design principles                    :ARCH:REFERENCE:
+
+** Tension
+
+Standard CLIs are designed for humans who read docs and learn
+flags. Agentic CLIs are used by LLMs that guess, fail, and retry.
+The failure mode is different: a human reads --help once; an LLM
+reads the error message every time and decides what to try next.
+
+If the error says "accepts 1 arg(s), received 0" — a human knows
+to check --help. An LLM will either hallucinate a flag or retry
+with garbage. The error message IS the interface for agents.
+
+** Observation: what gh and atl do right
+
+From our reference/ repos (gh-cli, atlas-cli):
+
+*** Error messages are complete instructions
+
+gh:
+  $ gh pr create
+  Error: no git remotes found
+  Use 'gh repo set-default' to select a default repo
+
+Not "error: missing remote" — it tells you WHAT went wrong AND
+the exact command to fix it.
+
+atl:
+  $ atl issue list
+  Error: not authenticated
+  Run 'atl auth login' to authenticate, or set ATL_TOKEN
+
+Not "error: 401" — it names the fix.
+
+*** --help is structured for parsing
+
+gh structures help output as:
+  USAGE: (exact syntax, copy-pasteable)
+  FLAGS: (with defaults and types)
+  EXAMPLES: (real commands that work)
+  LEARN MORE: (links)
+
+An agent can parse EXAMPLES to learn usage patterns. It can't
+parse prose.
+
+*** JSON output is always available
+
+Every gh command supports --json with field selection:
+  gh pr list --json number,title,state
+
+The agent never has to parse tables. Tables are for humans.
+
+*** Exit codes carry meaning
+
+  0 = success
+  1 = error
+  2 = usage error (wrong args)
+  4 = auth required
+
+An agent can branch on exit code without parsing stderr.
+
+** Observation: what breaks agents
+
+From our own debugging:
+
+1. *Silent failures*. SilenceErrors + no print = agent sees
+   nothing, retries forever.
+
+2. *Ambiguous errors*. "HTTP 421" means nothing to an agent.
+   "Session expired, run ihme auth login" is actionable.
+
+3. *Missing context in errors*. "accepts 1 arg(s), received 0"
+   should be "ihme new <label> — label is required, e.g.
+   'ihme new github.com'".
+
+4. *No machine-readable error format*. When --json is set,
+   errors should be JSON too:
+   {"error":"not authenticated","fix":"ihme auth login"}
+
+** Design principles for ihme
+
+*** 1. Errors are instructions, not descriptions
+
+Bad:  "Error: accepts 1 arg(s), received 0"
+Good: "Error: label required\n\n  ihme new <label>\n\n  Example: ihme new github.com --tag dev"
+
+The error should contain enough information for an agent to
+self-correct on the next attempt.
+
+*** 2. Wrong usage returns the right usage
+
+Every command should have a custom Args validator that returns
+the usage example, not cobra's generic message.
+
+*** 3. --json errors are JSON
+
+When --json flag is set, errors go to stdout as:
+  {"error": "message", "hint": "what to do"}
+Exit code still indicates failure.
+
+*** 4. Commands are composable verbs
+
+  ihme new <label>           # generate + reserve (one shot)
+  ihme generate              # just generate, print address
+  ihme reserve <address>     # just reserve a generated address
+
+An agent might want to generate, inspect, then reserve.
+Or generate several, pick the best, reserve one.
+
+*** 5. Prompts show the command that would skip them
+
+  "Two-factor code (or use --code <code>): "
+  "Delete xyz@relay.com? [y/N] (or use --yes): "
+
+An agent hitting a prompt knows immediately how to bypass it
+on the next attempt.
+
+*** 6. Stateless where possible
+
+Each command re-establishes session from saved tokens.
+No daemon, no background state, no "you must run X before Y"
+except auth.
+
+*** 7. Help examples are real
+
+Every --help includes at least 2 examples that work:
+
+  Examples:
+    ihme new github.com
+    ihme new github.com --tag dev --note "main account"
+    ihme new github.com --json
+
+*** 8. Discoverable surface
+
+  ihme --help                # all commands
+  ihme new --help            # command-specific
+  ihme completion bash       # shell completions
+
+No hidden commands. No magic flags. No config-file-only options.
+
+** Applying to ihme new
+
+Current: `ihme new <label>` does generate + reserve in one shot.
+This is good for the common case but bad for the "pick a better
+address" workflow.
+
+Proposed:
+  ihme new github.com           # generate + reserve (default)
+  ihme new github.com -n 3      # generate 3, show all, prompt to pick
+  ihme new github.com --dry-run # generate only, print address, don't reserve
+
+For agents:
+  ihme new github.com --json    # returns {"hme":"...","label":"..."}
+  ihme new github.com -n 3 --json  # returns [{"hme":"..."},...]
+
+The -n flag calls generate N times, user/agent picks one, then
+we reserve it. --dry-run just generates without reserving.
+
+** Architecture note: lib + cli split
+
+Current: api/ is the library layer, cmd/ is the CLI layer.
+This is already the right split. The api/ package could be
+imported by other Go programs. The cli is one consumer.
+
+If we wanted to use Go-iClient as the api layer:
+- Missing: SMS 2FA, CN routing, session resume, s2k_fo
+- Has: TLS fingerprinting (we don't need), in-memory only
+- Verdict: we'd fork it and rewrite most of it anyway
+
+Our api/ is already a standalone library. It handles what
+Go-iClient doesn't. The right move is to keep it and make
+it importable, not to replace it.
+
+** Next
+
+1. Fix ihme new: add -n/--count for multi-generate, --dry-run
+2. Add usage examples to all command --help
+3. Make error messages actionable (include fix commands)
+4. Add ihme generate (standalone) and ihme reserve (standalone)

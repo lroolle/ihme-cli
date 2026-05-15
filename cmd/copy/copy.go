@@ -8,6 +8,7 @@ import (
 
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/pkg/resolver"
+
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,8 @@ func NewCmdCopy() *cobra.Command {
 		Use:   "copy <ref>",
 		Short: "Copy a Hide My Email address to clipboard",
 		Aliases: []string{"cp"},
-		Args:  cobra.ExactArgs(1),
+		Example: "  ihme copy github.com",
+		Args:    cmdutil.ExactRefArg("ihme copy <ref>", "ihme copy github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

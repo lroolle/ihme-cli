@@ -13,9 +13,10 @@ import (
 
 func NewCmdDeactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "deactivate <ref>",
-		Short: "Deactivate a Hide My Email address",
-		Args:  cobra.ExactArgs(1),
+		Use:     "deactivate <ref>",
+		Short:   "Deactivate a Hide My Email address",
+		Example: "  ihme deactivate github.com",
+		Args:    cmdutil.ExactRefArg("ihme deactivate <ref>", "ihme deactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -49,9 +50,10 @@ func NewCmdDeactivate() *cobra.Command {
 
 func NewCmdReactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "reactivate <ref>",
-		Short: "Reactivate a deactivated Hide My Email address",
-		Args:  cobra.ExactArgs(1),
+		Use:     "reactivate <ref>",
+		Short:   "Reactivate a deactivated Hide My Email address",
+		Example: "  ihme reactivate github.com",
+		Args:    cmdutil.ExactRefArg("ihme reactivate <ref>", "ihme reactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -87,9 +89,10 @@ func NewCmdDelete() *cobra.Command {
 	var force, yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <ref>",
-		Short: "Permanently delete a Hide My Email address",
-		Args:  cobra.ExactArgs(1),
+		Use:     "delete <ref>",
+		Short:   "Permanently delete a Hide My Email address",
+		Example: "  ihme delete github.com\n  ihme delete github.com --force --yes",
+		Args:    cmdutil.ExactRefArg("ihme delete <ref>", "ihme delete github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

@@ -11,7 +11,8 @@ func NewCmdView() *cobra.Command {
 		Use:   "view <ref>",
 		Short: "View details of a Hide My Email address",
 		Long:  "<ref> can be an anonymousId, email address, or label (fuzzy match).",
-		Args:  cobra.ExactArgs(1),
+		Example: "  ihme view github.com\n  ihme view abc123@privaterelay.appleid.com --json",
+		Args:    cmdutil.ExactRefArg("ihme view <ref>", "ihme view github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

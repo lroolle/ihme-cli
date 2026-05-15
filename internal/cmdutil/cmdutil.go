@@ -54,6 +54,18 @@ func OutputResult(cmd *cobra.Command, v any) error {
 	return nil
 }
 
+func ExactRefArg(use, example string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("<ref> required — an address label, email, or ID\n\n  Usage: %s\n  Example: %s", use, example)
+		}
+		if len(args) > 1 {
+			return fmt.Errorf("expected 1 argument, got %d\n\n  Usage: %s", len(args), use)
+		}
+		return nil
+	}
+}
+
 func CheckErr(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)

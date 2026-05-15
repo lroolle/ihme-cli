@@ -51,9 +51,15 @@ func NewCmdForward() *cobra.Command {
 
 func newCmdForwardSet() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <email>",
-		Short: "Change forward-to email address",
-		Args:  cobra.ExactArgs(1),
+		Use:     "set <email>",
+		Short:   "Change forward-to email address",
+		Example: "  ihme forward set user@icloud.com",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("email required\n\n  Usage: ihme forward set <email>\n  Example: ihme forward set user@icloud.com")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {

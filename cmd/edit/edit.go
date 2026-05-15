@@ -19,7 +19,8 @@ func NewCmdEdit() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit <ref>",
 		Short: "Edit label, note, or tags of a Hide My Email address",
-		Args:  cobra.ExactArgs(1),
+		Example: "  ihme edit github.com --label GitHub\n  ihme edit github.com --tag dev,work --note \"main\"",
+		Args:    cmdutil.ExactRefArg("ihme edit <ref>", "ihme edit github.com --label GitHub"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
