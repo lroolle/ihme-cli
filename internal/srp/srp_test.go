@@ -93,8 +93,8 @@ func TestDerivePasswordS2K(t *testing.T) {
 		t.Errorf("s2k key length = %d, want 32", len(s2kKey))
 	}
 
-	// s2k_fo: hex-encoded
-	hexInput := []byte(fmt.Sprintf("%x", passHash))
+	// s2k_fo: uppercase hex-encoded (Apple's protocol)
+	hexInput := []byte(fmt.Sprintf("%X", passHash))
 	s2kfoKey := pbkdf2.Key(hexInput, salt, iterations, 32, sha256.New)
 	if len(s2kfoKey) != 32 {
 		t.Errorf("s2k_fo key length = %d, want 32", len(s2kfoKey))

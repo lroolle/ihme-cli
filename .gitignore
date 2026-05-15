@@ -1,5 +1,7 @@
 dist/
 ihme
+ihme-linux
 *.exe
 *.out
 .DS_Store
+session.json

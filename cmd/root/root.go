@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCmdRoot() *cobra.Command {
+func NewCmdRoot(version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ihme",
 		Short: "iCloud Hide My Email CLI",
@@ -42,7 +42,7 @@ func NewCmdRoot() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print version",
-		Run:   func(cmd *cobra.Command, args []string) { fmt.Println("ihme v0.1.0") },
+		Run:   func(cmd *cobra.Command, args []string) { fmt.Printf("ihme %s\n", version) },
 	})
 
 	return cmd

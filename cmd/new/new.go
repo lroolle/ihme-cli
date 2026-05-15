@@ -139,7 +139,7 @@ func interactive(client *api.Client, candidates []string, label, noteField strin
 		return fmt.Errorf("invalid choice — enter 1-%d or c", len(candidates))
 	}
 
-	return reserve(client, candidates[idx-1], label, "", false, cmd)
+	return reserve(client, candidates[idx-1], label, noteField, false, cmd)
 }
 
 func generateN(client *api.Client, n int) ([]string, error) {
