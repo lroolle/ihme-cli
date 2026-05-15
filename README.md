@@ -1,120 +1,175 @@
-# ihme
+<p align="center">
+  <h1 align="center">ihme</h1>
+  <p align="center">
+    iCloud Hide My Email, from the terminal.<br>
+    For humans who pick. For agents who script. For scripts that just run.
+  </p>
+</p>
 
-Manage iCloud Hide My Email addresses from the terminal. List, create, search, edit, deactivate, export — for humans and AI agents.
+<p align="center">
+  <a href="https://github.com/lroolle/ihme-cli/releases"><img src="https://img.shields.io/github/v/release/lroolle/ihme-cli?color=blue&label=release" alt="Release"></a>
+  <a href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"><img src="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white" alt="Go"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+</p>
 
-[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <img src="docs/demo.svg" alt="ihme demo" width="680">
+</p>
 
-> **Disclaimer**: Unofficial tool using Apple's undocumented iCloud web API. Use at your own risk. Not affiliated with Apple.
+> **Note**: Unofficial tool. Uses Apple's undocumented iCloud web API. Not affiliated with Apple. Use at your own risk.
 
 ## Install
 
+**Download binary** (no Go required):
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-darwin-arm64 -o ihme
+chmod +x ihme && sudo mv ihme /usr/local/bin/
+
+# Linux
+curl -L https://github.com/lroolle/ihme-cli/releases/latest/download/ihme-linux-amd64 -o ihme
+chmod +x ihme && sudo mv ihme /usr/local/bin/
+```
+
 **Go install:**
+
 ```bash
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
 ```
 
 **Build from source:**
+
 ```bash
-git clone https://github.com/lroolle/ihme-cli.git
-cd ihme-cli
-make install
+git clone https://github.com/lroolle/ihme-cli.git && cd ihme-cli && make install
 ```
 
-**Install via Claude Code** — paste this:
+<details>
+<summary><strong>Install via Claude Code</strong> — paste this into Claude Code:</summary>
+
 ```
-Install the ihme CLI from github.com/lroolle/ihme-cli using go install,
-then copy skill/SKILL.md to ~/.claude/skills/ihme-cli/SKILL.md so I can
-manage iCloud Hide My Email addresses.
+Install the ihme CLI for iCloud Hide My Email management:
+1. Run: go install github.com/lroolle/ihme-cli/cmd/ihme@latest
+2. Copy the skill file: mkdir -p ~/.claude/skills/ihme-cli && curl -o ~/.claude/skills/ihme-cli/SKILL.md https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md
+3. Run: ihme auth login
 ```
+
+</details>
 
 ## Quick start
 
 ```bash
-# Sign in (Apple ID + 2FA)
-ihme auth login
-
-# List all addresses
-ihme list
-
-# Search
-ihme list --search netflix
-
-# Create a new address (interactive: shows 3 candidates, pick one)
-ihme new github.com
-
-# View details
-ihme view github.com
-
-# Export
-ihme export -o addresses.csv
+ihme auth login                    # Sign in (Apple ID + 2FA)
+ihme list                          # See all your addresses
+ihme list --search netflix         # Find one
+ihme new github.com                # Create (pick from 3 candidates)
+ihme view github.com               # Details
+ihme export -o backup.csv          # Export everything
 ```
 
-## Commands
+## How `ihme new` works
+
+Matches the iCloud web flow — generate candidates, pick the one you like, reserve it:
 
 ```
-ihme auth login              Sign in with Apple ID (SRP + 2FA)
-ihme auth status             Show session state
-ihme auth logout             Clear session
+$ ihme new github.com --tag dev
 
-ihme list                    List all addresses
-ihme list --search <query>   Search label, address, or note
-ihme list --active           Filter by status
-ihme list --tag <tag>        Filter by tag
-ihme list --sort label       Sort by label or date
+  [1] uploads_tease.6t@icloud.com
+  [2] copay.jacket-4c@icloud.com
+  [3] rotors.gutless.7q@icloud.com
 
-ihme new <label>             Generate candidates, pick, reserve
-ihme new <label> --yes       Auto-pick first candidate
-ihme new <label> --json      Get candidates for agent selection
-
-ihme view <ref>              View address details
-ihme edit <ref>              Edit label, note, tags
-ihme copy <ref>              Copy address to clipboard
-ihme deactivate <ref>        Stop receiving mail
-ihme reactivate <ref>        Resume receiving mail
-ihme delete <ref>            Permanently delete (interactive confirm)
-
-ihme export                  Export to CSV (default) or JSON
-ihme forward                 Show/change forward-to address
+Select [1-3] or [c]ancel: 2
+Reserved: copay.jacket-4c@icloud.com (label: github.com)
 ```
 
-`<ref>` accepts an anonymousId, email address, or label (fuzzy match).
+| Who | Command | What happens |
+|-----|---------|-------------|
+| Human | `ihme new github.com` | Show ~3 candidates, pick interactively |
+| Agent | `ihme new github.com --json` then `--address <pick>` | Get candidates, reserve one |
+| Script | `ihme new github.com -y` | Take first, reserve, done |
 
-## JSON output
+## All commands
 
-Every command supports `--json` and `--jq`. Response shapes are documented in `ihme <cmd> --help`.
+```
+AUTH
+  ihme auth login                Sign in with Apple ID (SRP + 2FA)
+  ihme auth status [--json]      Session state
+  ihme auth logout               Clear session
+
+LIST & SEARCH
+  ihme list                      All addresses (table)
+  ihme list --search <query>     Search label, address, or note
+  ihme list --active             Only active
+  ihme list --tag <tag>          Filter by tag
+  ihme list --sort label         Sort by label or date
+
+CREATE
+  ihme new <label>               Interactive: pick from ~3 candidates
+  ihme new <label> --yes         Script: take first
+  ihme new <label> --json        Agent: get candidates without reserving
+
+MANAGE
+  ihme view <ref>                View details
+  ihme edit <ref>                Edit label, note, tags
+  ihme copy <ref>                Copy address to clipboard
+  ihme deactivate <ref>          Stop receiving mail
+  ihme reactivate <ref>          Resume receiving mail
+  ihme delete <ref> [--yes]      Permanent deletion (confirms first)
+
+EXPORT
+  ihme export                    CSV to stdout
+  ihme export --format json      JSON to stdout
+  ihme export -o file.csv        To file
+  ihme export --search dev       Filtered export
+
+FORWARD
+  ihme forward [--json]          Show forward-to address
+  ihme forward set <email>       Change it
+```
+
+`<ref>` resolves by: anonymousId > email > label (exact) > label (fuzzy).
+
+## JSON & jq
+
+Every command supports `--json` and `--jq`. Response shapes are in `ihme <cmd> --help`.
 
 ```bash
-# List with jq
+# First 5 addresses
 ihme list --json --jq '.addresses[0:5]'
+
+# Just the email strings
 ihme list --search github --json --jq '.addresses[].hme'
 
-# View a single address
+# Address count
+ihme list --json --jq '.count'
+
+# Get one address field
 ihme view github.com --json --jq '.result.hme'
 
-# Create: get candidates, then reserve
-candidates=$(ihme new github.com --json)
-ihme new github.com --address $(echo $candidates | jq -r '.candidates[0]') --json
-
-# One-shot create
-ihme new github.com --yes --json
+# Agent: generate candidates, pick, reserve
+ihme new mysite.com --json | jq '.candidates'
+ihme new mysite.com --address chosen@icloud.com --json
 ```
 
-## Creating addresses
+## Agent integration
 
-The `ihme new` flow matches iCloud's web UI:
+Built for AI agents (Claude Code, GPT, etc.):
 
-| Mode | Command | Behavior |
-|------|---------|----------|
-| Human | `ihme new github.com` | Show ~3 candidates, pick interactively |
-| Agent | `ihme new github.com --json` | Return candidates, reserve with `--address` |
-| Script | `ihme new github.com -y` | Take first candidate, reserve immediately |
+| Feature | How |
+|---------|-----|
+| **Response schemas** | Documented in every `--help` |
+| **Next-action hints** | JSON output includes `hints` with follow-up commands |
+| **Actionable errors** | Wrong usage returns the fix: `Usage: ihme view <ref>` |
+| **No prompts** | `--yes` skips all interactive confirmation |
+| **Exit codes** | 0 success, 1 error, 2 auth required |
+| **Composable** | stdout = data, stderr = status |
 
-Apple's pool rotates ~3 unique addresses. The CLI deduplicates and stops early when the pool is exhausted.
+Ships with a Claude Code skill: [`skill/SKILL.md`](skill/SKILL.md)
 
 ## Tags
 
-Tags stored in the note field using `#tag | note` convention:
+Shared convention with the [browser extension](https://github.com/dedoussis/icloud-hide-my-email-browser-extension):
 
 ```bash
 ihme new example.com --tag shopping --note "prime account"
@@ -124,51 +179,34 @@ ihme list --tag shopping
 ihme edit example.com --tag shopping,personal
 ```
 
-Compatible with the [icloud-hide-my-email-browser-extension](https://github.com/dedoussis/icloud-hide-my-email-browser-extension) tag format.
+## Auth details
 
-## Agent integration
+SRP-6a over `idmsa.apple.com`. Password never transmitted.
 
-Designed for AI agents (Claude Code, etc.):
-
-- **JSON schemas in `--help`**: every command documents its response shape
-- **Hints in JSON output**: next-action commands included in responses
-- **Actionable errors**: wrong usage returns the correct usage and an example
-- **`--yes` flag**: skip interactive prompts for scripted use
-- **Deterministic exit codes**: 0 success, 1 error, 2 auth required
-
-Ships with a Claude Code skill definition in [`skill/SKILL.md`](skill/SKILL.md).
-
-## Auth
-
-SRP-6a authentication over `idmsa.apple.com`:
-
-1. SRP handshake (password never transmitted)
-2. Two-factor authentication (SMS or trusted device push)
-3. Trust token stored locally (~30 day validity)
-
-Session file locations:
-- macOS: `~/Library/Application Support/ihme/session.json`
-- Linux: `~/.config/ihme/session.json`
-
-Override with `IHME_SESSION_PATH`. File permissions: `0600`.
-
-Credentials are never stored. Only session tokens and cookies are persisted.
+- 2FA: SMS or trusted device push (iOS 26.4+ supported)
+- Trust token: ~30 days, skips 2FA on subsequent logins
+- Session: `~/Library/Application Support/ihme/session.json` (macOS) or `~/.config/ihme/session.json` (Linux)
+- Credentials never stored. File permissions `0600`.
+- Override path: `IHME_SESSION_PATH`
 
 ## Limits
 
-- ~5 addresses per 30 minutes (Apple rate limit)
-- ~750 total addresses per account
-- Trust token valid ~30 days before re-authentication
+| Limit | Value |
+|-------|-------|
+| Addresses per 30 min | ~5 |
+| Total per account | ~750 |
+| Trust token lifetime | ~30 days |
+| Candidate pool | ~3 unique |
 
 ## Development
 
 ```bash
 make              # build
-make test         # run tests
-make test-cover   # tests with coverage
+make test         # tests
+make test-cover   # with coverage
 make check        # vet + test + build
-make cross        # build for linux/darwin/windows
-make completions  # generate shell completions
+make cross        # linux/darwin/windows x amd64/arm64
+make completions  # bash/zsh/fish
 ```
 
 ## License
