@@ -2,7 +2,6 @@ package new
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -14,13 +13,12 @@ import (
 	"golang.org/x/term"
 )
 
-const defaultCandidates = 3
-
 func NewCmdNew() *cobra.Command {
 	var (
 		note    string
 		tagList []string
 		yes     bool
+		pick    int
 		count   int
 	)
 
@@ -29,16 +27,16 @@ func NewCmdNew() *cobra.Command {
 		Short: "Generate and reserve a new Hide My Email address",
 		Long: `Generate Hide My Email address candidates and reserve one.
 
-By default generates 3 candidates (Apple's rotation pool) and lets
-you pick. Use --yes to skip selection and reserve the first one.
+Shows candidates and lets you pick interactively. Apple's pool
+rotates ~3 unique addresses.
 
-With --json, returns candidates for agent selection — then call
-'ihme reserve <address> <label>' to claim one.`,
+For agents: --pick N generates candidates and reserves the Nth one
+in a single call — no interactive prompt, no separate commands.`,
 		Example: `  ihme new github.com
-  ihme new github.com --yes
-  ihme new github.com --tag dev --note "main account"
-  ihme new github.com --json
-  ihme new github.com -n 5`,
+  ihme new github.com -y
+  ihme new github.com --pick 2
+  ihme new github.com --pick 1 --json
+  ihme new github.com --tag dev --note "main account"`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("label required\n\n  Usage: ihme new <label>\n  Example: ihme new github.com")
@@ -57,64 +55,96 @@ With --json, returns candidates for agent selection — then call
 				return err
 			}
 
-			n := count
 			if yes {
-				n = 1
+				return generateAndReserve(client, 1, 1, label, tagList, note, jsonFlag, cmd)
 			}
 
-			candidates, err := generateN(client, n)
-			if err != nil {
-				return err
+			if pick > 0 {
+				return generateAndReserve(client, count, pick, label, tagList, note, jsonFlag, cmd)
 			}
 
-			// Agent mode: return candidates as JSON for external selection
-			if jsonFlag && !yes {
-				out := map[string]any{
-					"candidates": candidates,
-					"label":      label,
-					"hint":       fmt.Sprintf("ihme reserve <address> %s", label),
-				}
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				return enc.Encode(out)
+			if !term.IsTerminal(int(os.Stdin.Fd())) || jsonFlag {
+				return generateAndReserve(client, 1, 1, label, tagList, note, jsonFlag, cmd)
 			}
 
-			// Script mode: take first
-			if yes {
-				return reserveAndPrint(client, candidates[0], label, tagList, note, jsonFlag, cmd)
-			}
-
-			// Interactive mode: pick from list
-			if !term.IsTerminal(int(os.Stdin.Fd())) {
-				return reserveAndPrint(client, candidates[0], label, tagList, note, jsonFlag, cmd)
-			}
-
-			selected, err := pickInteractive(candidates)
-			if err != nil {
-				return err
-			}
-			if selected == "" {
-				fmt.Println("Cancelled.")
-				return nil
-			}
-
-			return reserveAndPrint(client, selected, label, tagList, note, jsonFlag, cmd)
+			return interactiveNew(client, count, label, tagList, note, cmd)
 		},
 	}
 
 	cmd.Flags().StringVar(&note, "note", "", "Note for the address")
 	cmd.Flags().StringSliceVar(&tagList, "tag", nil, "Tags (repeatable)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Reserve the first candidate immediately")
-	cmd.Flags().IntVarP(&count, "count", "n", defaultCandidates, "Number of candidates to generate")
+	cmd.Flags().IntVar(&pick, "pick", 0, "Generate candidates and reserve the Nth one")
+	cmd.Flags().IntVarP(&count, "count", "n", 3, "Number of candidates to generate")
 	return cmd
+}
+
+func generateAndReserve(client *api.Client, n, pick int, label string, tagList []string, note string, jsonFlag bool, cmd *cobra.Command) error {
+	candidates, err := generateN(client, n)
+	if err != nil {
+		return err
+	}
+
+	if pick < 1 || pick > len(candidates) {
+		pick = 1
+	}
+
+	selected := candidates[pick-1]
+	noteField := tags.Serialize(tagList, note)
+	reserved, err := client.ReserveHme(selected, label, noteField)
+	if err != nil {
+		return err
+	}
+
+	if jsonFlag {
+		return cmdutil.OutputResult(cmd, reserved)
+	}
+	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
+	return nil
+}
+
+func interactiveNew(client *api.Client, n int, label string, tagList []string, note string, cmd *cobra.Command) error {
+	candidates, err := generateN(client, n)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	for i, c := range candidates {
+		fmt.Printf("  [%d] %s\n", i+1, c)
+	}
+	fmt.Printf("\nSelect [1-%d] or [c]ancel: ", len(candidates))
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	choice := strings.TrimSpace(strings.ToLower(line))
+	if choice == "c" || choice == "cancel" {
+		fmt.Println("Cancelled.")
+		return nil
+	}
+
+	var idx int
+	if _, err := fmt.Sscan(choice, &idx); err != nil || idx < 1 || idx > len(candidates) {
+		return fmt.Errorf("invalid choice — enter 1-%d or c", len(candidates))
+	}
+
+	noteField := tags.Serialize(tagList, note)
+	reserved, err := client.ReserveHme(candidates[idx-1], label, noteField)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
+	return nil
 }
 
 func generateN(client *api.Client, n int) ([]string, error) {
 	seen := make(map[string]bool)
 	var candidates []string
 	dupeStreak := 0
-	// Apple's pool is small (~3). Stop early if we keep getting duplicates
-	// rather than hammering the server.
 	for dupeStreak < 3 && len(candidates) < n {
 		hme, err := client.GenerateHme()
 		if err != nil {
@@ -132,42 +162,4 @@ func generateN(client *api.Client, n int) ([]string, error) {
 		candidates = append(candidates, hme)
 	}
 	return candidates, nil
-}
-
-func pickInteractive(candidates []string) (string, error) {
-	fmt.Println()
-	for i, c := range candidates {
-		fmt.Printf("  [%d] %s\n", i+1, c)
-	}
-	fmt.Printf("\nSelect [1-%d] or [c]ancel: ", len(candidates))
-
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return "", err
-	}
-	choice := strings.TrimSpace(strings.ToLower(line))
-
-	if choice == "c" || choice == "cancel" {
-		return "", nil
-	}
-
-	var idx int
-	if _, err := fmt.Sscan(choice, &idx); err != nil || idx < 1 || idx > len(candidates) {
-		return "", fmt.Errorf("invalid choice — enter 1-%d or c", len(candidates))
-	}
-	return candidates[idx-1], nil
-}
-
-func reserveAndPrint(client *api.Client, hme, label string, tagList []string, note string, jsonFlag bool, cmd *cobra.Command) error {
-	noteField := tags.Serialize(tagList, note)
-	reserved, err := client.ReserveHme(hme, label, noteField)
-	if err != nil {
-		return err
-	}
-	if jsonFlag {
-		return cmdutil.OutputResult(cmd, reserved)
-	}
-	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
-	return nil
 }

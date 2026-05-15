@@ -8,11 +8,9 @@ import (
 	"github.com/lroolle/ihme-cli/cmd/edit"
 	"github.com/lroolle/ihme-cli/cmd/export"
 	"github.com/lroolle/ihme-cli/cmd/forward"
-	"github.com/lroolle/ihme-cli/cmd/generate"
 	"github.com/lroolle/ihme-cli/cmd/lifecycle"
 	"github.com/lroolle/ihme-cli/cmd/list"
 	newcmd "github.com/lroolle/ihme-cli/cmd/new"
-	"github.com/lroolle/ihme-cli/cmd/reserve"
 	"github.com/lroolle/ihme-cli/cmd/view"
 	"github.com/spf13/cobra"
 )
@@ -33,8 +31,6 @@ func NewCmdRoot() *cobra.Command {
 	cmd.AddCommand(auth.NewCmdAuth())
 	cmd.AddCommand(list.NewCmdList())
 	cmd.AddCommand(newcmd.NewCmdNew())
-	cmd.AddCommand(generate.NewCmdGenerate())
-	cmd.AddCommand(reserve.NewCmdReserve())
 	cmd.AddCommand(view.NewCmdView())
 	cmd.AddCommand(edit.NewCmdEdit())
 	cmd.AddCommand(copycmd.NewCmdCopy())
