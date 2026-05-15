@@ -1,143 +1,176 @@
 # ihme
 
-A CLI for iCloud Hide My Email. Manage email aliases from the terminal.
+Manage iCloud Hide My Email addresses from the terminal. List, create, search, edit, deactivate, export — for humans and AI agents.
 
-Requires an iCloud+ subscription.
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Disclaimer**: This is an unofficial tool. It uses Apple's undocumented iCloud web API. Use at your own risk. Apple may change or block access at any time.
+> **Disclaimer**: Unofficial tool using Apple's undocumented iCloud web API. Use at your own risk. Not affiliated with Apple.
 
 ## Install
 
+**Go install:**
 ```bash
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
 ```
 
-Or build from source:
-
+**Build from source:**
 ```bash
 git clone https://github.com/lroolle/ihme-cli.git
 cd ihme-cli
 make install
 ```
 
+**Install via Claude Code** — paste this:
+```
+Install the ihme CLI from github.com/lroolle/ihme-cli using go install,
+then copy skill/SKILL.md to ~/.claude/skills/ihme-cli/SKILL.md so I can
+manage iCloud Hide My Email addresses.
+```
+
 ## Quick start
 
 ```bash
+# Sign in (Apple ID + 2FA)
 ihme auth login
+
+# List all addresses
 ihme list
-ihme new github.com
-ihme view github.com
+
+# Search
 ihme list --search netflix
+
+# Create a new address (interactive: shows 3 candidates, pick one)
+ihme new github.com
+
+# View details
+ihme view github.com
+
+# Export
+ihme export -o addresses.csv
 ```
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `auth login` | Sign in with Apple ID (SRP + 2FA) |
-| `auth status` | Show current session state |
-| `auth logout` | Clear stored session |
-| `list` | List addresses with filters |
-| `new <label>` | Generate candidates, pick, reserve |
-| `view <ref>` | View address details |
-| `edit <ref>` | Edit label, note, or tags |
-| `copy <ref>` | Copy address to clipboard |
-| `deactivate <ref>` | Stop receiving mail |
-| `reactivate <ref>` | Resume receiving mail |
-| `delete <ref>` | Permanently delete |
-| `export` | Export to CSV or JSON |
-| `forward` | Show/change forward-to address |
+```
+ihme auth login              Sign in with Apple ID (SRP + 2FA)
+ihme auth status             Show session state
+ihme auth logout             Clear session
+
+ihme list                    List all addresses
+ihme list --search <query>   Search label, address, or note
+ihme list --active           Filter by status
+ihme list --tag <tag>        Filter by tag
+ihme list --sort label       Sort by label or date
+
+ihme new <label>             Generate candidates, pick, reserve
+ihme new <label> --yes       Auto-pick first candidate
+ihme new <label> --json      Get candidates for agent selection
+
+ihme view <ref>              View address details
+ihme edit <ref>              Edit label, note, tags
+ihme copy <ref>              Copy address to clipboard
+ihme deactivate <ref>        Stop receiving mail
+ihme reactivate <ref>        Resume receiving mail
+ihme delete <ref>            Permanently delete (interactive confirm)
+
+ihme export                  Export to CSV (default) or JSON
+ihme forward                 Show/change forward-to address
+```
 
 `<ref>` accepts an anonymousId, email address, or label (fuzzy match).
 
-## Search and filter
+## JSON output
+
+Every command supports `--json` and `--jq`. Response shapes are documented in `ihme <cmd> --help`.
 
 ```bash
-ihme list --search netflix
-ihme list --active --tag dev
-ihme list --sort label
-ihme list --search github --active --json
+# List with jq
+ihme list --json --jq '.addresses[0:5]'
+ihme list --search github --json --jq '.addresses[].hme'
+
+# View a single address
+ihme view github.com --json --jq '.result.hme'
+
+# Create: get candidates, then reserve
+candidates=$(ihme new github.com --json)
+ihme new github.com --address $(echo $candidates | jq -r '.candidates[0]') --json
+
+# One-shot create
+ihme new github.com --yes --json
 ```
 
 ## Creating addresses
 
-Interactive (human):
-```bash
-$ ihme new github.com
-  [1] abc123@icloud.com
-  [2] xyz789@icloud.com
-  [3] def456@icloud.com
-Select [1-3]: 2
-Reserved: xyz789@icloud.com (label: github.com)
-```
+The `ihme new` flow matches iCloud's web UI:
 
-Agent workflow:
-```bash
-$ ihme new github.com --json
-{"candidates":["abc@icloud.com","def@icloud.com","ghi@icloud.com"],...}
-$ ihme new github.com --address def@icloud.com --json
-```
+| Mode | Command | Behavior |
+|------|---------|----------|
+| Human | `ihme new github.com` | Show ~3 candidates, pick interactively |
+| Agent | `ihme new github.com --json` | Return candidates, reserve with `--address` |
+| Script | `ihme new github.com -y` | Take first candidate, reserve immediately |
 
-Script:
-```bash
-ihme new github.com --yes --json
-```
-
-## JSON output
-
-Every command supports `--json` and `--jq`. Response schemas are documented in each command's `--help`:
-
-```bash
-ihme list --json --jq '.addresses[0:5]'
-ihme view github.com --json --jq '.result.hme'
-ihme auth status --json
-```
+Apple's pool rotates ~3 unique addresses. The CLI deduplicates and stops early when the pool is exhausted.
 
 ## Tags
 
-Tags stored in the note field using `#tag` convention:
+Tags stored in the note field using `#tag | note` convention:
 
 ```bash
 ihme new example.com --tag shopping --note "prime account"
+# Stored as: #shopping | prime account
+
 ihme list --tag shopping
 ihme edit example.com --tag shopping,personal
 ```
 
 Compatible with the [icloud-hide-my-email-browser-extension](https://github.com/dedoussis/icloud-hide-my-email-browser-extension) tag format.
 
-## Auth
-
-SRP-6a authentication over `idmsa.apple.com`. Credentials are never stored. Session tokens saved to:
-
-- macOS: `~/Library/Application Support/ihme/session.json`
-- Linux: `~/.config/ihme/session.json`
-
-Trust token valid ~30 days. Override path with `IHME_SESSION_PATH`.
-
 ## Agent integration
 
 Designed for AI agents (Claude Code, etc.):
 
-- `--json` on every command with documented response schemas
-- `--jq` for inline filtering
-- `--yes` on destructive commands to skip confirmation
-- Actionable error messages with fix commands
-- `--help` includes JSON output shapes for each command
-- Hints in JSON output point to the next useful command
+- **JSON schemas in `--help`**: every command documents its response shape
+- **Hints in JSON output**: next-action commands included in responses
+- **Actionable errors**: wrong usage returns the correct usage and an example
+- **`--yes` flag**: skip interactive prompts for scripted use
+- **Deterministic exit codes**: 0 success, 1 error, 2 auth required
 
-Ships with a Claude Code skill definition in `skill/SKILL.md`.
+Ships with a Claude Code skill definition in [`skill/SKILL.md`](skill/SKILL.md).
+
+## Auth
+
+SRP-6a authentication over `idmsa.apple.com`:
+
+1. SRP handshake (password never transmitted)
+2. Two-factor authentication (SMS or trusted device push)
+3. Trust token stored locally (~30 day validity)
+
+Session file locations:
+- macOS: `~/Library/Application Support/ihme/session.json`
+- Linux: `~/.config/ihme/session.json`
+
+Override with `IHME_SESSION_PATH`. File permissions: `0600`.
+
+Credentials are never stored. Only session tokens and cookies are persisted.
 
 ## Limits
 
 - ~5 addresses per 30 minutes (Apple rate limit)
 - ~750 total addresses per account
 - Trust token valid ~30 days before re-authentication
-- Apple's pool rotates ~3 candidate addresses
 
-## Disclaimer
+## Development
 
-This project is not affiliated with Apple. It uses Apple's undocumented iCloud web API, which may change without notice. The authors are not responsible for any consequences of using this tool, including but not limited to account restrictions.
+```bash
+make              # build
+make test         # run tests
+make test-cover   # tests with coverage
+make check        # vet + test + build
+make cross        # build for linux/darwin/windows
+make completions  # generate shell completions
+```
 
 ## License
 
-MIT
+[MIT](LICENSE)

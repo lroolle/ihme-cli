@@ -1,78 +1,82 @@
 ---
 name: ihme
-description: Manage iCloud Hide My Email addresses from the command line
+description: Manage iCloud Hide My Email addresses — list, create, edit, deactivate, export
 triggers:
   - hide my email
   - HME
   - icloud email
   - private relay
-  - generate email address
-  - manage email aliases
-  - disposable email
+  - generate email
   - email alias
+  - disposable email
 tools:
   - ihme
 ---
 
 # ihme — iCloud Hide My Email CLI
 
-Manage iCloud Hide My Email addresses. Requires iCloud+ subscription and prior authentication via `ihme auth login`.
+Requires iCloud+ and prior `ihme auth login`.
+
+## JSON response shapes
+
+```
+list --json     → {"addresses":[{anonymousId,label,hme,isActive,createTimestamp,note,...}],"count":N,"hints":{...}}
+view --json     → {"result":{anonymousId,label,hme,forwardToEmail,isActive,...},"hints":{...}}
+new --json      → {"candidates":["a@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
+new -y --json   → {anonymousId,label,hme,isActive,...}
+forward --json  → {"forwardTo":"...","available":[...],"hint":"ihme forward set <email>"}
+auth status     → {"loggedIn":true,"appleId":"...","expired":false,...}
+deactivate      → {"status":"deactivated","hme":"...","id":"...","hints":{...}}
+reactivate      → {"status":"reactivated","hme":"...","id":"...","hint":"..."}
+```
 
 ## Commands
 
 ```bash
-# Auth
-ihme auth login              # Sign in with Apple ID (SRP + 2FA)
-ihme auth status             # Check session
-ihme auth logout             # Clear session
+# List and search (325+ addresses supported)
+ihme list --json --jq '.addresses[0:5]'
+ihme list --search netflix --json
+ihme list --active --tag dev --json
+ihme list --sort label --json
 
-# List and filter
-ihme list                    # All addresses (table)
-ihme list --json             # JSON output
-ihme list --active           # Active only
-ihme list --tag dev          # Filter by tag
-ihme list --json --jq '.[].hme'  # Extract just addresses
-
-# Create
-ihme new github.com                          # Generate + reserve
-ihme new github.com --note "main" --tag dev  # With metadata
+# Create (two-step: generate candidates, then reserve)
+ihme new github.com --json                              # step 1: get candidates
+ihme new github.com --address abc@icloud.com --json     # step 2: reserve one
+ihme new github.com --yes --json                        # one-shot: take first
 
 # View and edit
-ihme view github.com         # Detail view (resolves by label, email, or ID)
-ihme edit github.com --label "GitHub" --tag dev,work
-ihme copy github.com         # Copy address to clipboard
+ihme view github.com --json --jq '.result.hme'
+ihme edit github.com --label GitHub --tag dev,work
 
 # Lifecycle
-ihme deactivate github.com   # Stop receiving mail
-ihme reactivate github.com   # Resume
-ihme delete github.com -y    # Permanent removal
+ihme deactivate github.com --json
+ihme reactivate github.com --json
+ihme delete github.com --yes --json
 
 # Export
-ihme export                  # CSV to stdout
-ihme export --format json -o addresses.json
-ihme export --active --tag dev
+ihme export --format json
+ihme export --search github --active -o filtered.csv
 
 # Forward-to
-ihme forward                 # Show current
-ihme forward set new@icloud.com
+ihme forward --json
+ihme forward set user@icloud.com
 ```
 
-## Output
+## <ref> resolution
 
-Every command supports `--json` and `--jq` for machine-readable output:
+All commands accepting `<ref>` resolve in order: anonymousId → email → label (exact) → label (fuzzy).
 
-```bash
-ihme list --json --jq '.[] | select(.isActive == false) | .hme'
-ihme view github.com --json
-ihme new example.com --json
+## Error handling
+
+Errors include the fix command:
 ```
-
-## Reference resolution
-
-`<ref>` arguments accept: anonymousId, full email address, or label (exact then fuzzy match).
+Error: <ref> required — an address label, email, or ID
+  Usage: ihme deactivate <ref>
+  Example: ihme deactivate github.com
+```
 
 ## Exit codes
 
 - 0: success
 - 1: error
-- 2: not authenticated
+- 2: not authenticated (run `ihme auth login`)
