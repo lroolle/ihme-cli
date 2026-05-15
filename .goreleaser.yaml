@@ -32,7 +32,7 @@ archives:
   - id: nix
     formats: [tar.gz]
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{- if eq .Os "darwin" }}macOS{{- else }}{{ .Os }}{{- end }}_{{- if eq .Arch "amd64" }}x86_64{{- else }}{{ .Arch }}{{- end }}
+      {{ .ProjectName }}_{{- if eq .Os "darwin" }}macOS{{- else }}{{ .Os }}{{- end }}_{{- if eq .Arch "amd64" }}x86_64{{- else }}{{ .Arch }}{{- end }}
     files:
       - LICENSE
       - README.md

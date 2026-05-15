@@ -14,6 +14,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=3m
+
       - run: go vet ./...
       - run: go test ./... -cover
       - run: go build -o ihme ./cmd/ihme

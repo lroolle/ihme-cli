@@ -76,7 +76,7 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 - Errors include usage example and fix command
 - Errors to stderr, data to stdout
 - Exit codes: 0 success, 1 error, 2 auth required
-- Session at ~/.config/ihme/session.json (0600)
+- Session at ~/Library/Application Support/ihme/session.json (macOS) or ~/.config/ihme/session.json (Linux), 0600
 - --verbose/-v is global, logs all HTTP requests
 
 ## Release

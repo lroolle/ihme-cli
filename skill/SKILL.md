@@ -55,7 +55,7 @@ reactivate      → {"status":"reactivated","hme":"...","id":"...","hint":"..."}
 # Check auth first
 ihme auth status --json
 
-# List and search (325+ addresses supported)
+# List and search (hundreds of addresses supported)
 ihme list --json --jq '.addresses[0:5]'
 ihme list --search netflix --json
 ihme list --active --tag dev --json

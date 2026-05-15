@@ -223,13 +223,18 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 		return fmt.Errorf("two-factor authentication required but no callback provided")
 	}
 
-	_, authBody, _ := c.doAuthRequest("GET", AuthEndpoint, nil)
+	_, authBody, err := c.doAuthRequest("GET", AuthEndpoint, nil)
+	if err != nil {
+		return fmt.Errorf("fetching auth options: %w", err)
+	}
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[auth] auth options: %s\n", truncate(string(authBody), 2000))
 	}
 
 	var opts AuthOptionsResponse
-	json.Unmarshal(authBody, &opts)
+	if err := json.Unmarshal(authBody, &opts); err != nil {
+		return fmt.Errorf("parsing auth options: %w", err)
+	}
 
 	// Some accounts nest auth state under phoneNumberVerification
 	if opts.PhoneNumberVerification != nil {
