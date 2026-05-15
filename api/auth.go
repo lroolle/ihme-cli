@@ -363,6 +363,12 @@ func (c *Client) accountLogin() error {
 
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
+
+	// Copy cookies to all webservice domains.
+	// accountLogin sets cookies on setup.icloud.com but HME lives on
+	// p{N}-maildomainws.icloud.com. Go's cookie jar won't forward them
+	// across subdomains unless we explicitly copy.
+	c.broadcastCookies()
 	c.saveCookies()
 	return nil
 }

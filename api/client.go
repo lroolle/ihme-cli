@@ -52,6 +52,7 @@ func NewClientWithSession(sess *SessionData) (*Client, error) {
 	}
 	c.session = sess
 	c.restoreCookies()
+	c.broadcastCookies()
 	return c, nil
 }
 
@@ -211,6 +212,41 @@ func (c *Client) hmeURL(version int, path string) (string, error) {
 	return fmt.Sprintf("%s/v%d/hme/%s%s", base, version, path, params), nil
 }
 
+func (c *Client) broadcastCookies() {
+	// Collect cookies from all known iCloud domains
+	sources := []string{
+		"https://setup.icloud.com",
+		"https://setup.icloud.com.cn",
+		"https://www.icloud.com",
+		"https://idmsa.apple.com",
+	}
+	var all []*http.Cookie
+	seen := make(map[string]bool)
+	for _, s := range sources {
+		u, _ := url.Parse(s)
+		for _, ck := range c.http.Jar.Cookies(u) {
+			if !seen[ck.Name] {
+				seen[ck.Name] = true
+				all = append(all, ck)
+			}
+		}
+	}
+
+	// Push to all webservice domains
+	targets := []string{"https://www.icloud.com", "https://icloud.com"}
+	for _, ws := range c.session.Webservices {
+		if ws.URL != "" {
+			targets = append(targets, ws.URL)
+		}
+	}
+	for _, t := range targets {
+		u, _ := url.Parse(t)
+		if u != nil {
+			c.http.Jar.SetCookies(u, all)
+		}
+	}
+}
+
 func (c *Client) saveCookies() {
 	domains := []string{
 		"https://www.icloud.com",
@@ -218,6 +254,11 @@ func (c *Client) saveCookies() {
 		"https://setup.icloud.com",
 		"https://setup.icloud.com.cn",
 		"https://idmsa.apple.com",
+	}
+	for _, ws := range c.session.Webservices {
+		if ws.URL != "" {
+			domains = append(domains, ws.URL)
+		}
 	}
 	var saved []SavedCookie
 	for _, d := range domains {
