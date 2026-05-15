@@ -53,6 +53,18 @@ func (c *Client) ResumeSession() error {
 	if c.session.SessionToken == "" && c.session.TrustToken == "" {
 		return fmt.Errorf("no session data")
 	}
+
+	// Try validate first (uses persisted cookies, no sign-in alert)
+	if len(c.session.Cookies) > 0 {
+		if err := c.ValidateSession(); err == nil {
+			return nil
+		}
+		if c.Verbose {
+			fmt.Fprintf(os.Stderr, "[svc] validate failed, falling back to accountLogin\n")
+		}
+	}
+
+	// Fall back to accountLogin (triggers Apple sign-in email)
 	return c.accountLogin()
 }
 
@@ -351,6 +363,7 @@ func (c *Client) accountLogin() error {
 
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
+	c.saveCookies()
 	return nil
 }
 

@@ -29,6 +29,9 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 		return nil, fmt.Errorf("session expired — run 'ihme auth login' to re-authenticate: %w", err)
 	}
 
+	// Save updated session (cookies may have been refreshed)
+	api.SaveSession(sessPath, client.Session())
+
 	return client, nil
 }
 

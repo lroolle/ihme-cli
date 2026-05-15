@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ func NewClientWithSession(sess *SessionData) (*Client, error) {
 		return nil, err
 	}
 	c.session = sess
+	c.restoreCookies()
 	return c, nil
 }
 
@@ -207,6 +209,60 @@ func (c *Client) hmeURL(version int, path string) (string, error) {
 		ClientBuildNumber, ClientMasteringNumber, c.clientID, c.session.Dsid)
 
 	return fmt.Sprintf("%s/v%d/hme/%s%s", base, version, path, params), nil
+}
+
+func (c *Client) saveCookies() {
+	domains := []string{
+		"https://www.icloud.com",
+		"https://icloud.com",
+		"https://setup.icloud.com",
+		"https://setup.icloud.com.cn",
+		"https://idmsa.apple.com",
+	}
+	var saved []SavedCookie
+	for _, d := range domains {
+		u, _ := url.Parse(d)
+		if u == nil {
+			continue
+		}
+		for _, ck := range c.http.Jar.Cookies(u) {
+			saved = append(saved, SavedCookie{
+				Name:   ck.Name,
+				Value:  ck.Value,
+				Domain: u.Host,
+				Path:   "/",
+			})
+		}
+	}
+	c.session.Cookies = saved
+}
+
+func (c *Client) restoreCookies() {
+	for _, d := range []string{
+		"https://www.icloud.com",
+		"https://icloud.com",
+		"https://setup.icloud.com",
+		"https://setup.icloud.com.cn",
+		"https://idmsa.apple.com",
+	} {
+		u, _ := url.Parse(d)
+		if u == nil {
+			continue
+		}
+		var cookies []*http.Cookie
+		for _, sc := range c.session.Cookies {
+			if sc.Domain == u.Host {
+				cookies = append(cookies, &http.Cookie{
+					Name:  sc.Name,
+					Value: sc.Value,
+					Path:  sc.Path,
+				})
+			}
+		}
+		if len(cookies) > 0 {
+			c.http.Jar.SetCookies(u, cookies)
+		}
+	}
 }
 
 func truncate(s string, n int) string {

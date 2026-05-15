@@ -118,5 +118,13 @@ type SessionData struct {
 	AccountCountry string                       `json:"accountCountry"`
 	Dsid           string                       `json:"dsid"`
 	Webservices    map[string]WebserviceEndpoint `json:"webservices"`
+	Cookies        []SavedCookie                `json:"cookies,omitempty"`
 	SavedAt        time.Time                    `json:"savedAt"`
+}
+
+type SavedCookie struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Domain string `json:"domain"`
+	Path   string `json:"path"`
 }
