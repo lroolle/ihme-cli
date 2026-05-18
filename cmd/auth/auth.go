@@ -37,8 +37,7 @@ func newCmdLogin() *cobra.Command {
 		Long: `Sign in with your Apple ID using SRP authentication + 2FA.
 
 Credentials are never stored. Session tokens are saved to:
-  ~/Library/Application Support/ihme/session.json (macOS)
-  ~/.config/ihme/session.json (Linux)
+  ~/.config/ihme/session.json (respects $XDG_CONFIG_HOME)
 Override with IHME_SESSION_PATH.
 
 Trust token (~30 days) allows subsequent logins without 2FA.`,

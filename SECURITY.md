@@ -3,10 +3,12 @@
 ## Session storage
 
 `ihme` stores session tokens and cookies at:
-- macOS: `~/Library/Application Support/ihme/session.json`
-- Linux: `~/.config/ihme/session.json`
+- macOS / Linux: `~/.config/ihme/session.json` (respects `$XDG_CONFIG_HOME`)
+- Windows: `%AppData%\ihme\session.json`
 
-File permissions are `0600` (owner read/write only). Override with `IHME_SESSION_PATH`.
+Override the full path with `IHME_SESSION_PATH`.
+
+File permissions are `0600` (owner read/write only).
 
 **What's stored**: session token, trust token, scnt, session ID, cookies, webservice URLs.
 

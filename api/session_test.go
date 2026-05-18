@@ -116,6 +116,58 @@ func TestSessionExpiry(t *testing.T) {
 	}
 }
 
+func TestConfigDir(t *testing.T) {
+	tests := []struct {
+		name string
+		envs map[string]string
+		want string
+	}{
+		{
+			name: "XDG_CONFIG_HOME set",
+			envs: map[string]string{"XDG_CONFIG_HOME": "/custom/config", "HOME": "/home/test"},
+			want: "/custom/config",
+		},
+		{
+			name: "HOME fallback",
+			envs: map[string]string{"XDG_CONFIG_HOME": "", "HOME": "/home/test"},
+			want: "/home/test/.config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.envs {
+				t.Setenv(k, v)
+			}
+			got := configDir()
+			if got != tt.want {
+				t.Errorf("configDir() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultSessionPath(t *testing.T) {
+	t.Run("IHME_SESSION_PATH override", func(t *testing.T) {
+		t.Setenv("IHME_SESSION_PATH", "/override/session.json")
+		got := DefaultSessionPath()
+		if got != "/override/session.json" {
+			t.Errorf("got %q, want /override/session.json", got)
+		}
+	})
+
+	t.Run("default uses configDir", func(t *testing.T) {
+		t.Setenv("IHME_SESSION_PATH", "")
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("HOME", "/home/test")
+		got := DefaultSessionPath()
+		want := "/home/test/.config/ihme/session.json"
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+}
+
 func TestSessionFilePermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "session.json")

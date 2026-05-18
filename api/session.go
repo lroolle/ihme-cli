@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -12,11 +13,40 @@ func DefaultSessionPath() string {
 	if p := os.Getenv("IHME_SESSION_PATH"); p != "" {
 		return p
 	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		dir = filepath.Join(os.Getenv("HOME"), ".config")
+	newPath := filepath.Join(configDir(), "ihme", "session.json")
+
+	// Migrate from pre-v0.2 macOS path (~/Library/Application Support/ihme/)
+	if runtime.GOOS == "darwin" {
+		if _, err := os.Stat(newPath); os.IsNotExist(err) {
+			oldDir, _ := os.UserConfigDir()
+			if oldDir != "" {
+				oldPath := filepath.Join(oldDir, "ihme", "session.json")
+				if _, err := os.Stat(oldPath); err == nil {
+					os.MkdirAll(filepath.Dir(newPath), 0700)
+					if os.Rename(oldPath, newPath) == nil {
+						os.Remove(filepath.Dir(oldPath))
+					}
+				}
+			}
+		}
 	}
-	return filepath.Join(dir, "ihme", "session.json")
+	return newPath
+}
+
+func configDir() string {
+	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
+		return d
+	}
+	if runtime.GOOS == "windows" {
+		if d, err := os.UserConfigDir(); err == nil {
+			return d
+		}
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return filepath.Join(home, ".config")
 }
 
 func LoadSession(path string) (*SessionData, error) {

@@ -186,7 +186,7 @@ SRP-6a over `idmsa.apple.com`. Password never transmitted.
 
 - 2FA: SMS or trusted device push (iOS 26.4+ supported)
 - Trust token: ~30 days, skips 2FA on subsequent logins
-- Session: `~/Library/Application Support/ihme/session.json` (macOS) or `~/.config/ihme/session.json` (Linux)
+- Session: `~/.config/ihme/session.json` (respects `$XDG_CONFIG_HOME`)
 - Credentials never stored. File permissions `0600`.
 - Override path: `IHME_SESSION_PATH`
 
