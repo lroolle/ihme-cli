@@ -86,7 +86,19 @@ ihme forward set user@icloud.com
 
 ## <ref> resolution
 
-All commands accepting `<ref>` resolve in order: anonymousId > email > label (exact) > label (fuzzy).
+All commands accepting `<ref>` resolve in order: anonymousId (prefix >= 6 chars) > email > label (exact) > label (fuzzy).
+
+## Choosing an address
+
+When selecting from candidates, apply taste:
+
+- **Euphony**: pick what sounds pleasant read aloud. You'll see it for years.
+- **Neutral-to-positive affect**: reject deficit words (paupers, denials, debts, graves). An address is a micro-identity — it should not carry weight.
+- **Concrete specificity**: prefer real nouns with physicality (pianola, compass, glade) over abstractions or units. Specific things are memorable; categories are forgettable.
+- **Visual rhythm**: favor clean separator variety (dot, dash) over mixed noise (underscore + dot + number prefix). Short.longer-short reads better than long-long-suffix.
+- **No leading digits**: `65.ampere` reads like a form field. Letters first.
+
+An HME address is a mask that still has personality. The best ones feel like they could be a place, a callsign, or an album title — evocative without trying.
 
 ## Error handling
 

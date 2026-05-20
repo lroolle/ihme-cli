@@ -36,11 +36,12 @@ func PrintTable(w io.Writer, emails []api.HmeEmail) {
 func PrintJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
 	return enc.Encode(v)
 }
 
 func PrintJQ(w io.Writer, v any, expr string) error {
-	data, err := json.Marshal(v)
+	data, err := marshalRaw(v)
 	if err != nil {
 		return err
 	}
@@ -71,6 +72,16 @@ func PrintCSV(w io.Writer, emails []api.HmeEmail) error {
 		})
 	}
 	return cw.Error()
+}
+
+func marshalRaw(v any) ([]byte, error) {
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return []byte(strings.TrimSuffix(buf.String(), "\n")), nil
 }
 
 func PrintDetail(w io.Writer, e *api.HmeEmail) {

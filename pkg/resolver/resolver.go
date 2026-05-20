@@ -19,6 +19,18 @@ func Resolve(ref string, emails []api.HmeEmail) (*api.HmeEmail, error) {
 		}
 	}
 
+	if len(ref) >= 6 {
+		var idMatches []*api.HmeEmail
+		for i := range emails {
+			if strings.HasPrefix(emails[i].AnonymousID, ref) {
+				idMatches = append(idMatches, &emails[i])
+			}
+		}
+		if len(idMatches) == 1 {
+			return idMatches[0], nil
+		}
+	}
+
 	for i := range emails {
 		if emails[i].Hme == ref {
 			return &emails[i], nil

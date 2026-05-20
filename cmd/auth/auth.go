@@ -149,6 +149,7 @@ JSON output (--json):
 				}
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
+				enc.SetEscapeHTML(false)
 				return enc.Encode(out)
 			}
 

@@ -7,13 +7,14 @@ import (
 )
 
 var testEmails = []api.HmeEmail{
-	{AnonymousID: "abc123", Hme: "abc@privaterelay.appleid.com", Label: "github.com"},
-	{AnonymousID: "def456", Hme: "def@privaterelay.appleid.com", Label: "amazon.com"},
-	{AnonymousID: "ghi789", Hme: "ghi@privaterelay.appleid.com", Label: "netflix.com"},
+	{AnonymousID: "abc123full", Hme: "abc@privaterelay.appleid.com", Label: "github.com"},
+	{AnonymousID: "def456full", Hme: "def@privaterelay.appleid.com", Label: "amazon.com"},
+	{AnonymousID: "ghi789full", Hme: "ghi@privaterelay.appleid.com", Label: "netflix.com"},
+	{AnonymousID: "abc123other", Hme: "xyz@privaterelay.appleid.com", Label: "gitlab.com"},
 }
 
 func TestResolveByID(t *testing.T) {
-	hme, err := Resolve("abc123", testEmails)
+	hme, err := Resolve("abc123full", testEmails)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -37,8 +38,8 @@ func TestResolveByExactLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hme.AnonymousID != "ghi789" {
-		t.Errorf("got ID %q, want ghi789", hme.AnonymousID)
+	if hme.AnonymousID != "ghi789full" {
+		t.Errorf("got ID %q, want ghi789full", hme.AnonymousID)
 	}
 }
 
@@ -47,8 +48,8 @@ func TestResolveByLabelCaseInsensitive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hme.AnonymousID != "abc123" {
-		t.Errorf("got ID %q, want abc123", hme.AnonymousID)
+	if hme.AnonymousID != "abc123full" {
+		t.Errorf("got ID %q, want abc123full", hme.AnonymousID)
 	}
 }
 
@@ -57,8 +58,32 @@ func TestResolveFuzzyLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if hme.AnonymousID != "ghi789" {
-		t.Errorf("got ID %q, want ghi789", hme.AnonymousID)
+	if hme.AnonymousID != "ghi789full" {
+		t.Errorf("got ID %q, want ghi789full", hme.AnonymousID)
+	}
+}
+
+func TestResolveByIDPrefix(t *testing.T) {
+	hme, err := Resolve("def456", testEmails)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hme.AnonymousID != "def456full" {
+		t.Errorf("got ID %q, want def456full", hme.AnonymousID)
+	}
+}
+
+func TestResolveByIDPrefixAmbiguous(t *testing.T) {
+	_, err := Resolve("abc123", testEmails)
+	if err == nil {
+		t.Error("expected error for ambiguous prefix matching abc123full and abc123other")
+	}
+}
+
+func TestResolveByIDPrefixTooShort(t *testing.T) {
+	_, err := Resolve("def45", testEmails)
+	if err == nil {
+		t.Error("expected error: prefix under 6 chars should not match")
 	}
 }
 

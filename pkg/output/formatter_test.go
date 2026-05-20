@@ -142,3 +142,20 @@ func TestPrintDetailInactive(t *testing.T) {
 		t.Error("should not show Tags line when no tags")
 	}
 }
+
+func TestPrintJSONNoHTMLEscape(t *testing.T) {
+	var buf bytes.Buffer
+	data := map[string]string{
+		"hint": "ihme new <label> --address <addr>",
+	}
+	if err := PrintJSON(&buf, data); err != nil {
+		t.Fatalf("PrintJSON: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "\\u003c") || strings.Contains(out, "\\u003e") {
+		t.Errorf("JSON should not HTML-escape angle brackets: %s", out)
+	}
+	if !strings.Contains(out, "<label>") || !strings.Contains(out, "<addr>") {
+		t.Errorf("JSON should contain literal angle brackets: %s", out)
+	}
+}
