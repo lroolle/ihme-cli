@@ -156,7 +156,7 @@ ihme new mysite.com --json | jq '.candidates'
 
 ## Agent integration
 
-Built for AI agents (Claude Code, GPT, etc.):
+Built for AI agents — Claude Code, Codex, Cursor, Gemini CLI, Copilot, Windsurf, Devin, Amp, Junie, and any tool that speaks [agents.md](https://agents.md):
 
 | Feature | How |
 |---------|-----|
@@ -167,7 +167,7 @@ Built for AI agents (Claude Code, GPT, etc.):
 | **Exit codes** | 0 success, 1 error, 2 auth required |
 | **Composable** | stdout = data, stderr = status |
 
-Ships with a Claude Code skill: [`skill/SKILL.md`](skill/SKILL.md)
+Ships with a Claude Code skill ([`skill/SKILL.md`](skill/SKILL.md)) and an [`AGENTS.md`](AGENTS.md) for compatible agents.
 
 ## Tags
 
