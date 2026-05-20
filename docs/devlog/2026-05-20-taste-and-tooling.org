@@ -1,0 +1,195 @@
+* [2026-05-20] Taste, tooling, and what a CLI owes its output      :FIX:FEAT:ARCH:
+
+** Tension
+
+Three problems surfaced while dogfooding v0.1.2:
+
+1. JSON output showed =<address>= instead of =<address>=.
+   Agents parsing our hints field see garbage. Humans see garbage.
+   The hints system — our best UX decision — is undermined by a
+   Go default we never questioned.
+
+2. The table truncates IDs to 8 chars. The resolver requires the
+   full ID. So =ihme view 77h48ngc= (copied from the table) fails
+   with "no address matching." We built a table that lies about
+   what you can do with the data it shows.
+
+3. When generating a new HME address, we had no framework for
+   choosing between candidates. The selection was arbitrary — first
+   one, random, whatever. For a tool that creates identities you
+   carry for years, "whatever" is not good enough.
+
+** Observation
+
+*** HTML escaping
+
+Go's =json.Encoder= HTML-escapes =<>=& by default — a web
+safety measure inherited from an era when JSON was embedded in
+HTML templates. For a CLI that writes to terminals and pipes,
+this is purely destructive.
+
+Three output paths affected:
+- =PrintJSON= (all commands)
+- =PrintJQ= (=--jq= filter pipe)
+- =cmd/auth/auth.go= (status --json, direct encoder)
+
+The fix is =enc.SetEscapeHTML(false)= on every encoder.
+=PrintJQ= also used =json.Marshal= (which has no escape toggle),
+requiring a =marshalRaw= helper that encodes through a
+=json.Encoder= with HTML escaping disabled.
+
+*** Prefix resolution
+
+The table displays:
+
+#+begin_src
+ID        LABEL   ADDRESS
+77h48ngc  wicket  east.pianola-3g@icloud.com
+#+end_src
+
+The 8-char ID is what the user sees, copies, and pastes.
+The resolver did exact match on the full =anonymousId=
+(=77h48ngc2c0333=). This is a classic display-vs-model mismatch:
+the UI presents a truncated view but the API demands the full value.
+
+Git solves this with prefix matching — =git show abc123= works if
+the prefix is unambiguous. Same principle applies here.
+
+Constraints:
+- Minimum 6 chars (shorter risks collision in a 326-address set)
+- Unique match only (ambiguous prefix falls through to email/label)
+- Prefix match sits between exact-ID and email in the resolution chain
+
+*** Taste in address selection
+
+Given three candidates for "wicket":
+
+| Address                    | Assessment                                |
+|----------------------------|-------------------------------------------|
+| =65.ampere_amid@icloud.com=   | Leading digits feel bureaucratic. "amid"  |
+|                            | is a preposition without an object.       |
+|                            | Mixed separators (dot + underscore).      |
+| =paupers-denials-8j@icloud.com= | Two deficit nouns. "Paupers" and          |
+|                            | "denials" are about lack and refusal.     |
+|                            | This address sounds like a rejection.     |
+| =east.pianola-3g@icloud.com=  | Direction + specific noun. "Pianola" is   |
+|                            | a self-playing piano — concrete,          |
+|                            | physical, slightly whimsical. Clean       |
+|                            | dot/dash rhythm. Reads like a place.      |
+
+The deeper question: what makes a good throwaway identity?
+
+An HME address is a mask. You give it to services, see it in your
+inbox, carry it for years. It's trivial enough to be disposable
+but present enough to be recognizable. The same instinct that
+makes good variable names applies: the right level of
+expressiveness without trying too hard.
+
+Principles crystallized:
+
+1. *Euphony*: sounds pleasant read aloud
+2. *Positive affect*: no deficit words (paupers, debts, graves)
+3. *Concrete specificity*: real nouns > abstractions > units
+4. *Visual rhythm*: clean separator variety, short.longer-short
+5. *No leading digits*: letters-first reads like a name, not a form
+
+** Decision
+
+*** JSON escaping: global fix
+
+Added =SetEscapeHTML(false)= to all three output paths.
+Created =marshalRaw()= for =PrintJQ= since =json.Marshal= has no
+escape toggle. This is the kind of default that Go gets wrong for
+CLI tools — web-safe JSON is not terminal-safe JSON.
+
+*** Prefix resolver: git-style
+
+Added prefix matching (>= 6 chars) to =pkg/resolver/resolver.go=
+between exact-ID and email matching. Unique match only — if two
+IDs share a prefix, it falls through to email/label resolution
+instead of erroring. This matches git's behavior and user
+expectations.
+
+*** Taste: codified in SKILL.md
+
+Wrote the five principles into =skill/SKILL.md= as an "address
+selection" guide. This means any agent using the ihme skill will
+apply these criteria when picking from candidates. The taste is
+now part of the tool's interface, not just an ad-hoc judgment.
+
+Also added an operational guide: how agents should use the tool
+(generate -> evaluate -> confirm -> reserve), label conventions
+(bare nouns over dated prefixes), tag taxonomy.
+
+** Tradeoff
+
+*** Prefix collision risk
+
+With 326 addresses and 6-char minimum prefix, collision
+probability is negligible. At 1000+ addresses, we might need to
+raise the minimum or add a disambiguation prompt. Acceptable for
+now.
+
+*** Taste is subjective
+
+Codifying aesthetic judgment into a skill file is opinionated.
+Someone might prefer =65.ampere_amid= for its technical feel.
+The principles are guidelines, not rules — the user can always
+override with =--address=. But having a default aesthetic is
+better than having none.
+
+*** marshalRaw allocates a string builder
+
+The =PrintJQ= path now does encoder -> string builder -> byte
+slice instead of direct =json.Marshal=. Adds one allocation.
+For CLI output (kilobytes, not gigabytes), this is irrelevant.
+
+** Expert review findings
+
+Full codebase review by Linus-style reviewer. Verdict: *approve*.
+
+Confirmed sound:
+- SRP-6a implementation (proper padding, Apple variants, B/u validation)
+- Session security (0600, 0700, XDG, no stored credentials)
+- Cookie handling (manual header, rclone pattern, documented)
+- CLI UX (JSON+jq, hints, fuzzy resolver, exit codes)
+- Architecture (api/cmd/pkg/internal separation, no layer violations)
+
+Bugs found:
+1. =handle2FADevice= silently discards push notification error
+2. =UpdateHmeMetadata= can't clear a note (empty string omitted)
+3. =PrintJQ= doesn't check if =jq= is installed
+4. =forward set= accepts any string without email validation
+5. =generateN= stops at 3 dupe streak with no warning
+
+#1 and #2 are real bugs. #3-5 are polish. None are security
+issues. None affect the happy path.
+
+** Artifacts
+
+#+begin_src
+v0.1.2 -> v0.1.3
+2 commits, 6 files changed, +90 -12 lines
+
+Coverage:
+  SRP:      97.9%
+  filter:   93.0%
+  resolver: 87.1% (was ~70%, prefix tests added)
+  output:   72.5% (HTML escape test added)
+  tags:     100%
+  api:      16.9% (unchanged — needs HTTP fixtures)
+
+New tests:
+  TestPrintJSONNoHTMLEscape
+  TestResolveByIDPrefix
+  TestResolveByIDPrefixAmbiguous
+  TestResolveByIDPrefixTooShort
+#+end_src
+
+** Next
+
+1. Fix the two real bugs (#1 silent 2FA push, #2 note clearing)
+2. Fix CI lint (golangci-lint v2.x for go1.26.2 compat)
+3. Homebrew tap for macOS distribution
+4. README demo GIF (asciinema)
+5. =ihme audit= for address hygiene at scale

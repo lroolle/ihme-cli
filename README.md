@@ -20,7 +20,7 @@
 
 <div align="center">
 
-[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Agent integration](#agent-integration) · [Auth](#auth-details)
+[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Agent integration](#agent-integration) · [Auth](#auth-details) · [Roadmap](ROADMAP.md)
 
 </div>
 
@@ -140,7 +140,7 @@ FORWARD
   ihme forward set <email>       Change it
 ```
 
-`<ref>` resolves by: anonymousId > email > label (exact) > label (fuzzy).
+`<ref>` resolves by: anonymousId (full or 6+ char prefix) > email > label (exact) > label (fuzzy).
 
 ## JSON & jq
 
