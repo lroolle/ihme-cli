@@ -114,3 +114,22 @@ Error: <ref> required — an address label, email, or ID
 - 0: success
 - 1: error
 - 2: not authenticated (run `ihme auth login`)
+
+## Operational guide (for agents)
+
+When creating addresses on behalf of the user:
+
+1. Generate candidates: `ihme new <label> --json`
+2. Evaluate each against the taste criteria above
+3. State the pick and one-line reasoning — let the user override
+4. Reserve only after confirmation (never use `--yes` unless told "just pick one")
+
+Label convention: use the service or team name as a bare noun. Dates age; names don't.
+- Good: `wicket`, `github`, `linear`
+- Avoid: `240501_chatgpt openai`, `0315 claude felix 2`
+
+Tags: apply from a small controlled set when the user specifies context.
+Common tags: `#work`, `#dev`, `#personal`, `#throwaway`, `#team-<name>`.
+
+Periodic hygiene: `ihme list --sort date:asc` to surface old addresses for audit.
+Only 1 of 326 addresses is deactivated — suggest pruning dead services quarterly.
