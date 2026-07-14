@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/pkg/resolver"
 	"github.com/spf13/cobra"
@@ -28,23 +29,13 @@ JSON output (--json):
 				return err
 			}
 
-			result, err := client.ListHme()
+			hme, changed, err := app.New(client).Deactivate(args[0])
 			if err != nil {
 				return err
 			}
-
-			hme, err := resolver.Resolve(args[0], result.HmeEmails)
-			if err != nil {
-				return err
-			}
-
-			if !hme.IsActive {
+			if !changed {
 				fmt.Printf("%s is already inactive\n", hme.Hme)
 				return nil
-			}
-
-			if err := client.DeactivateHme(hme.AnonymousID); err != nil {
-				return err
 			}
 
 			jsonFlag, _ := cmd.Flags().GetBool("json")

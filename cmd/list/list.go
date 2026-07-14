@@ -3,6 +3,7 @@ package list
 import (
 	"fmt"
 
+	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/pkg/filter"
 	"github.com/spf13/cobra"
@@ -37,12 +38,10 @@ Use --jq to query: ihme list --json --jq '.addresses[] | select(.isActive)'`,
 				return err
 			}
 
-			result, err := client.ListHme()
+			emails, err := app.New(client).List(opts)
 			if err != nil {
 				return err
 			}
-
-			emails := filter.Apply(result.HmeEmails, opts)
 
 			jsonFlag, _ := cmd.Flags().GetBool("json")
 			if jsonFlag {

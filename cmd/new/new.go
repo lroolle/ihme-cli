@@ -6,9 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lroolle/ihme-cli/api"
+	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
-	"github.com/lroolle/ihme-cli/pkg/tags"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -56,24 +55,23 @@ JSON output with --yes or --address (reserved):
 			if err != nil {
 				return err
 			}
-
-			noteField := tags.Serialize(tagList, note)
+			svc := app.New(client)
 
 			// --address: reserve a specific address (agent step 2)
 			if address != "" {
-				return reserve(client, address, label, noteField, jsonFlag, cmd)
+				return reserve(svc, address, label, tagList, note, jsonFlag, cmd)
 			}
 
 			// --yes: generate one, reserve, done (script mode)
 			if yes {
-				hme, err := client.GenerateHme()
+				candidates, err := svc.Generate(1)
 				if err != nil {
 					return err
 				}
-				return reserve(client, hme, label, noteField, jsonFlag, cmd)
+				return reserve(svc, candidates[0], label, tagList, note, jsonFlag, cmd)
 			}
 
-			candidates, err := generateN(client, count)
+			candidates, err := svc.Generate(count)
 			if err != nil {
 				return err
 			}
@@ -90,11 +88,11 @@ JSON output with --yes or --address (reserved):
 
 			// non-TTY: take first
 			if !term.IsTerminal(int(os.Stdin.Fd())) {
-				return reserve(client, candidates[0], label, noteField, false, cmd)
+				return reserve(svc, candidates[0], label, tagList, note, false, cmd)
 			}
 
 			// interactive: pick from list
-			return interactive(client, candidates, label, noteField, cmd)
+			return interactive(svc, candidates, label, tagList, note, cmd)
 		},
 	}
 
@@ -106,8 +104,8 @@ JSON output with --yes or --address (reserved):
 	return cmd
 }
 
-func reserve(client *api.Client, hme, label, noteField string, jsonFlag bool, cmd *cobra.Command) error {
-	reserved, err := client.ReserveHme(hme, label, noteField)
+func reserve(svc *app.Service, hme, label string, tagList []string, note string, jsonFlag bool, cmd *cobra.Command) error {
+	reserved, err := svc.Reserve(hme, label, tagList, note)
 	if err != nil {
 		return err
 	}
@@ -118,7 +116,7 @@ func reserve(client *api.Client, hme, label, noteField string, jsonFlag bool, cm
 	return nil
 }
 
-func interactive(client *api.Client, candidates []string, label, noteField string, cmd *cobra.Command) error {
+func interactive(svc *app.Service, candidates []string, label string, tagList []string, note string, cmd *cobra.Command) error {
 	fmt.Println()
 	for i, c := range candidates {
 		fmt.Printf("  [%d] %s\n", i+1, c)
@@ -141,28 +139,5 @@ func interactive(client *api.Client, candidates []string, label, noteField strin
 		return fmt.Errorf("invalid choice — enter 1-%d or c", len(candidates))
 	}
 
-	return reserve(client, candidates[idx-1], label, noteField, false, cmd)
-}
-
-func generateN(client *api.Client, n int) ([]string, error) {
-	seen := make(map[string]bool)
-	var candidates []string
-	dupeStreak := 0
-	for dupeStreak < 3 && len(candidates) < n {
-		hme, err := client.GenerateHme()
-		if err != nil {
-			if len(candidates) > 0 {
-				break
-			}
-			return nil, err
-		}
-		if seen[hme] {
-			dupeStreak++
-			continue
-		}
-		seen[hme] = true
-		dupeStreak = 0
-		candidates = append(candidates, hme)
-	}
-	return candidates, nil
+	return reserve(svc, candidates[idx-1], label, tagList, note, false, cmd)
 }

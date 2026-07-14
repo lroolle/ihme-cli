@@ -3,9 +3,8 @@ package edit
 import (
 	"fmt"
 
+	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
-	"github.com/lroolle/ihme-cli/pkg/resolver"
-	"github.com/lroolle/ihme-cli/pkg/tags"
 	"github.com/spf13/cobra"
 )
 
@@ -26,42 +25,26 @@ Tags replace all existing tags (not additive).`,
 		Example: `  ihme edit github.com --label GitHub
   ihme edit github.com --tag dev,work --note "main"
   ihme edit github.com --tag ""`,
-		Args:    cmdutil.ExactRefArg("ihme edit <ref>", "ihme edit github.com --label GitHub"),
+		Args: cmdutil.ExactRefArg("ihme edit <ref>", "ihme edit github.com --label GitHub"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
 			}
 
-			result, err := client.ListHme()
-			if err != nil {
-				return err
-			}
-
-			hme, err := resolver.Resolve(args[0], result.HmeEmails)
-			if err != nil {
-				return err
-			}
-
-			newLabel := hme.Label
+			var patch app.MetaPatch
 			if cmd.Flags().Changed("label") {
-				newLabel = label
+				patch.Label = &label
 			}
-
-			parsed := tags.Parse(hme.Note)
-			newNote := parsed.Note
 			if cmd.Flags().Changed("note") {
-				newNote = note
+				patch.Note = &note
 			}
-
-			newTags := parsed.Tags
 			if cmd.Flags().Changed("tag") {
-				newTags = tagList
+				patch.Tags = &tagList
 			}
 
-			noteField := tags.Serialize(newTags, newNote)
-
-			if err := client.UpdateHmeMetadata(hme.AnonymousID, newLabel, noteField); err != nil {
+			hme, err := app.New(client).UpdateMeta(args[0], patch)
+			if err != nil {
 				return err
 			}
 
