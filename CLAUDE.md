@@ -37,13 +37,40 @@ api/
 internal/
   srp/                   SRP-6a (NG_2048, SHA-256, NoUserNameInX)
   cmdutil/               GetClient, OutputResult, ExactRefArg
+  app/                   Application service: the six HME operations
+                         shared by Cobra commands and agent tools
+                         (both are adapters over it)
+  agent/                 Embedded-agent adapter: BYOK config, six
+                         in-process tools, scoped-consent gate,
+                         renderer (see `ihme new --agent`)
 
 pkg/
   output/                Table, JSON, CSV, detail formatters
   filter/                --active/--inactive/--tag/--search/--sort
   tags/                  Parse/serialize #tag convention
   resolver/              Universal ref resolver (ID, email, label fuzzy)
+  agentkit/              Embeddable agent kernel (stdlib-only, never
+                         imports ihme packages — see its README)
+
+skill/
+  SKILL.md               Operational procedure shared by external
+                         agents (shell) and the embedded agent
+                         (go:embed, invoked as a task turn)
+
+examples/
+  toyagent/              Minimal agentkit consumer (live smoke)
 ```
+
+## Embedded agent
+
+`ihme new <label> --agent [--grant ask|auto]` runs the SKILL.md
+procedure with in-process tools. BYOK: ~/.config/ihme/agent.json
+{model, baseUrl, apiKeyEnv} + ~/.config/ihme/.env (or OPENAI_MODEL/
+OPENAI_BASE_URL/OPENAI_API_KEY). Scoped consent: the run pre-grants
+one reservation for its label and touching only addresses it
+created; everything else prompts (ask) or is allowed (auto).
+Rotation is capped at 3 generation rounds in the tool. Kernel
+invariants and design: pkg/agentkit/README.md.
 
 ## Auth flow
 
