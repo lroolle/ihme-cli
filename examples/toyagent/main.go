@@ -74,6 +74,7 @@ func tools() []agentkit.Tool {
 func main() {
 	baseURL := flag.String("base-url", os.Getenv("OPENAI_BASE_URL"), "OpenAI-compatible base URL")
 	model := flag.String("model", os.Getenv("OPENAI_MODEL"), "model id")
+	apiKind := flag.String("api", "completions", "wire protocol: completions or responses")
 	flag.Parse()
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	task := strings.Join(flag.Args(), " ")
@@ -82,7 +83,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	streamer := &openai.Client{BaseURL: *baseURL, APIKey: apiKey, Model: *model}
+	var streamer agentkit.Streamer = &openai.Client{BaseURL: *baseURL, APIKey: apiKey, Model: *model}
+	if *apiKind == "responses" {
+		streamer = &openai.ResponsesClient{BaseURL: *baseURL, APIKey: apiKey, Model: *model}
+	}
 	transcript := []agentkit.Message{{Role: agentkit.RoleUser, Text: task}}
 
 	_, err := agentkit.Run(context.Background(), agentkit.RunConfig{

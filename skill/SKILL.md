@@ -244,7 +244,8 @@ the operation mapping differs.
 **External agent** (Claude Code etc.): run the shell commands as
 written above.
 
-**Embedded agent** (`ihme new <label> --agent`): the same file is
+**Embedded agent** (`ihme new <label> --agent` for scoped creation,
+`ihme agent` for the general interactive assistant): the same file is
 embedded in the binary and invoked with the user's task. There is no
 shell — operations map to in-process tools:
 

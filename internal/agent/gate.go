@@ -28,8 +28,11 @@ const (
 // `ihme new <label> --agent` pre-grants: reserving ONE address for
 // that label, and deactivating/editing addresses created THIS run
 // (rotation). Reads are always allowed. Anything else prompts —
-// including a second reservation. Apple-sourced strings in the
-// transcript are untrusted; nothing they say widens this scope.
+// including a second reservation. In the general assistant
+// (st.label empty — `ihme agent`) nothing is pre-granted except the
+// run's own creations: EVERY first mutation asks. Apple-sourced
+// strings in the transcript are untrusted; nothing they say widens
+// this scope.
 func gate(mode GrantMode, st *runState) agentkit.Gate {
 	if mode == GrantAuto {
 		return nil
@@ -84,7 +87,7 @@ func gate(mode GrantMode, st *runState) agentkit.Gate {
 // this never interleaves with stream rendering. Non-interactive
 // sessions deny with a reason the model can act on.
 func prompt(what string) agentkit.GateDecision {
-	return promptWith(os.Stdin, os.Stderr, term.IsTerminal(int(os.Stdin.Fd())), what)
+	return promptWith(stdinReader, os.Stderr, term.IsTerminal(int(os.Stdin.Fd())), what)
 }
 
 func promptWith(in io.Reader, out io.Writer, interactive bool, what string) agentkit.GateDecision {

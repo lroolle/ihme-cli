@@ -16,8 +16,10 @@ belong to the embedding application. The first consumer is
 pkg/agentkit            the kernel: loop, tools, gate, limits,
                         events, skill invocation, transcript types
 pkg/agentkit/schema     fluent JSON-schema builder (map[string]any)
-pkg/agentkit/ai/openai  Streamer over any OpenAI-compatible
-                        /chat/completions endpoint (SSE)
+pkg/agentkit/ai/openai  two Streamers: Client (/chat/completions,
+                        the OpenAI-compat lingua franca) and
+                        ResponsesClient (/responses, required by
+                        reasoning models for function tools)
 ```
 
 Essential contracts:

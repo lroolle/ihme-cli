@@ -63,12 +63,20 @@ examples/
 
 ## Embedded agent
 
-`ihme new <label> --agent [--grant ask|auto]` runs the SKILL.md
-procedure with in-process tools. BYOK: ~/.config/ihme/agent.json
-{model, baseUrl, apiKeyEnv} + ~/.config/ihme/.env (or OPENAI_MODEL/
-OPENAI_BASE_URL/OPENAI_API_KEY). Scoped consent: the run pre-grants
-one reservation for its label and touching only addresses it
-created; everything else prompts (ask) or is allowed (auto).
+Two entry points, one adapter (internal/agent):
+
+- `ihme new <label> --agent [--grant ask|auto]` — scoped: runs the
+  SKILL.md procedure; pre-grants ONE reservation for the label and
+  touching only addresses created this run; everything else prompts.
+- `ihme agent [task]` (alias `ihme --agent`) — general: interactive
+  REPL without args, one-shot with a task. NOTHING is pre-granted:
+  every mutation (reserve/deactivate/edit) asks unless --grant auto.
+
+BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
+effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/
+OPENAI_API_KEY). api selects the wire protocol: "completions"
+(default) or "responses" — reasoning models (o-series, gpt-5.x)
+reject function tools on /chat/completions and need "responses".
 Rotation is capped at 3 generation rounds in the tool. Kernel
 invariants and design: pkg/agentkit/README.md.
 

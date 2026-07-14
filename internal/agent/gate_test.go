@@ -111,3 +111,18 @@ func TestPromptParsing(t *testing.T) {
 		t.Fatal("non-interactive must deny regardless of stdin content")
 	}
 }
+
+// General assistant scope (empty label): nothing is pre-granted —
+// even the first reservation asks.
+func TestGeneralScopeFirstReserveAsks(t *testing.T) {
+	st := newRunState("")
+	d := decide(t, st, "reserve_address", `{"address":"a@icloud.com","label":"github"}`)
+	if d.Allowed {
+		t.Fatal("general scope must not pre-grant reservations")
+	}
+	// But its own creations remain touchable.
+	st.recordReservation(&api.HmeEmail{Hme: "a@icloud.com", AnonymousID: "id1"})
+	if d := decide(t, st, "edit_note", `{"ref":"a@icloud.com"}`); !d.Allowed {
+		t.Fatalf("editing own creation denied: %s", d.Reason)
+	}
+}

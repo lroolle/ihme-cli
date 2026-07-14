@@ -3,6 +3,7 @@ package root
 import (
 	"fmt"
 
+	"github.com/lroolle/ihme-cli/cmd/agentcmd"
 	"github.com/lroolle/ihme-cli/cmd/auth"
 	copycmd "github.com/lroolle/ihme-cli/cmd/copy"
 	"github.com/lroolle/ihme-cli/cmd/edit"
@@ -22,12 +23,27 @@ func NewCmdRoot(version string) *cobra.Command {
 		Long:          "Manage iCloud Hide My Email addresses from the command line.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// `ihme --agent` opens the interactive assistant; bare
+		// `ihme` keeps printing help.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if agentFlag, _ := cmd.Flags().GetBool("agent"); agentFlag {
+				agent := agentcmd.NewCmdAgent()
+				agent.SetContext(cmd.Context())
+				// Inherit the persistent flags agent expects.
+				agent.Flags().AddFlagSet(cmd.PersistentFlags())
+				return agent.RunE(agent, args)
+			}
+			return cmd.Help()
+		},
 	}
+
+	cmd.Flags().Bool("agent", false, "Open the interactive assistant (same as 'ihme agent')")
 
 	cmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	cmd.PersistentFlags().String("jq", "", "Filter JSON output with a jq expression")
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Show request/response details")
 
+	cmd.AddCommand(agentcmd.NewCmdAgent())
 	cmd.AddCommand(auth.NewCmdAuth())
 	cmd.AddCommand(list.NewCmdList())
 	cmd.AddCommand(newcmd.NewCmdNew())
