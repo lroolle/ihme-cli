@@ -69,6 +69,11 @@ func (c *Client) ResumeSession() error {
 }
 
 func (c *Client) ValidateSession() error {
+	_, _, err := c.ValidateSessionInfo()
+	return err
+}
+
+func (c *Client) ValidateSessionInfo() (*AccountInfoResponse, json.RawMessage, error) {
 	url := c.setupURL() + "/validate"
 	body, err := c.doServiceRequest("POST", url, nil)
 
@@ -86,18 +91,21 @@ func (c *Client) ValidateSession() error {
 				if c.Verbose {
 					fmt.Fprintf(os.Stderr, "[svc] 421 redirect: switching to CN endpoint\n")
 				}
-				return c.ValidateSession()
+				return c.ValidateSessionInfo()
 			}
 		}
-		return fmt.Errorf("validate session: %w", err)
+		return nil, nil, fmt.Errorf("validate session: %w", err)
 	}
 	if err != nil {
-		return fmt.Errorf("validate session: %w", err)
+		return nil, nil, fmt.Errorf("validate session: %w", err)
 	}
 
-	var resp AccountLoginResponse
+	var resp AccountInfoResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return fmt.Errorf("parsing validate response: %w", err)
+		return nil, nil, fmt.Errorf("parsing validate response: %w", err)
+	}
+	if resp.Success != nil && !*resp.Success && resp.DsInfo.Dsid == "" && len(resp.Webservices) == 0 {
+		return nil, json.RawMessage(body), fmt.Errorf("validate session: response success=false")
 	}
 
 	if resp.DsInfo.Dsid != "" {
@@ -106,7 +114,7 @@ func (c *Client) ValidateSession() error {
 	if len(resp.Webservices) > 0 {
 		c.session.Webservices = resp.Webservices
 	}
-	return nil
+	return &resp, json.RawMessage(body), nil
 }
 
 func (c *Client) authStart() error {

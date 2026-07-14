@@ -118,49 +118,127 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 }
 
 func newCmdStatus() *cobra.Command {
-	return &cobra.Command{
+	var localOnly bool
+
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show current auth status",
 		Long: `Show current authentication status.
 
 JSON output (--json):
-  {"loggedIn":true,"appleId":"...","savedAt":"...","expired":false,"hint":"ihme list --json"}`,
+  {"loggedIn":true,"appleId":"...","savedAt":"...","expired":false,"canAccessICloud":true,"hint":"ihme list --json"}`,
 		Example: `  ihme auth status
-  ihme auth status --json`,
+  ihme auth status --json
+  ihme auth status --local --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
 			sess, err := api.LoadSession(sessPath)
 			if err != nil {
 				return err
 			}
+			jsonFlag, _ := cmd.Flags().GetBool("json")
 			if sess == nil {
-				fmt.Println("Not logged in.")
+				if jsonFlag {
+					out := map[string]any{
+						"loggedIn":        false,
+						"expired":         true,
+						"canAccessICloud": false,
+						"check":           "none",
+						"hint":            "ihme auth login",
+					}
+					enc := json.NewEncoder(os.Stdout)
+					enc.SetIndent("", "  ")
+					enc.SetEscapeHTML(false)
+					_ = enc.Encode(out)
+				} else {
+					fmt.Println("Not logged in.")
+				}
 				os.Exit(2)
 			}
 
-			jsonFlag, _ := cmd.Flags().GetBool("json")
-			if jsonFlag {
-				out := map[string]any{
-					"loggedIn": true,
-					"appleId":  sess.AppleID,
-					"savedAt":  sess.SavedAt.Format("2006-01-02T15:04:05Z07:00"),
-					"expired":  sess.IsExpired(),
-					"hint":     "ihme list --json",
+			localExpired := sess.IsExpired()
+			out := map[string]any{
+				"loggedIn":        true,
+				"appleId":         sess.AppleID,
+				"expired":         localExpired,
+				"localExpired":    localExpired,
+				"canAccessICloud": false,
+				"check":           "local",
+				"hint":            "ihme auth status --json",
+			}
+			if !sess.SavedAt.IsZero() {
+				out["savedAt"] = sess.SavedAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+
+			if !localOnly {
+				client, err := api.NewClientWithSession(sess)
+				if err != nil {
+					return err
 				}
+				client.Verbose, _ = cmd.Flags().GetBool("verbose")
+
+				_, rawResponse, err := client.ValidateSessionInfo()
+				if err != nil {
+					out["loggedIn"] = false
+					out["expired"] = true
+					out["canAccessICloud"] = false
+					out["check"] = "icloud"
+					out["error"] = err.Error()
+					out["hint"] = "ihme auth login"
+
+					if jsonFlag {
+						enc := json.NewEncoder(os.Stdout)
+						enc.SetIndent("", "  ")
+						enc.SetEscapeHTML(false)
+						_ = enc.Encode(out)
+					} else {
+						fmt.Printf("Stored session for %s\n", sess.AppleID)
+						fmt.Printf("Session saved: %s\n", sess.SavedAt.Format("2006-01-02 15:04"))
+						if localExpired {
+							fmt.Println("Local session may be expired.")
+						}
+						fmt.Printf("iCloud access check failed: %s\n", err)
+						fmt.Println("Run 'ihme auth login' to refresh.")
+					}
+					os.Exit(2)
+				}
+
+				if err := api.SaveSession(sessPath, client.Session()); err != nil {
+					return fmt.Errorf("saving session: %w", err)
+				}
+				sess = client.Session()
+				out["loggedIn"] = true
+				out["expired"] = false
+				out["canAccessICloud"] = true
+				out["check"] = "icloud"
+				out["hint"] = "ihme list --json"
+				out["savedAt"] = sess.SavedAt.Format("2006-01-02T15:04:05Z07:00")
+				if jsonFlag && len(rawResponse) > 0 {
+					out["rawResponse"] = rawResponse
+				}
+			}
+
+			if jsonFlag {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				enc.SetEscapeHTML(false)
 				return enc.Encode(out)
 			}
 
-			fmt.Printf("Logged in as %s\n", sess.AppleID)
+			if !localOnly {
+				fmt.Printf("Authenticated as %s\n", sess.AppleID)
+			} else {
+				fmt.Printf("Stored session for %s\n", sess.AppleID)
+			}
 			fmt.Printf("Session saved: %s\n", sess.SavedAt.Format("2006-01-02 15:04"))
-			if sess.IsExpired() {
+			if localExpired && localOnly {
 				fmt.Println("Session may be expired — run 'ihme auth login' to refresh.")
 			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&localOnly, "local", false, "Only inspect the local session file; skip live validation")
+	return cmd
 }
 
 func newCmdLogout() *cobra.Command {

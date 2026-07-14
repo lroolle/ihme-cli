@@ -69,17 +69,24 @@ type AccountLoginRequest struct {
 	TrustToken         string `json:"trustToken"`
 }
 
-type AccountLoginResponse struct {
-	DsInfo      DsInfo                       `json:"dsInfo"`
+type AccountInfoResponse struct {
+	DsInfo      DsInfo                        `json:"dsInfo"`
 	Webservices map[string]WebserviceEndpoint `json:"webservices"`
-	Success     bool                         `json:"success"`
+	Success     *bool                         `json:"success,omitempty"`
 }
 
+type AccountLoginResponse = AccountInfoResponse
+
 type DsInfo struct {
-	Dsid       string `json:"dsid"`
-	LastName   string `json:"lastName"`
-	FirstName  string `json:"firstName"`
-	PrimaryEmail string `json:"appleId"`
+	Dsid              string `json:"dsid"`
+	LastName          string `json:"lastName"`
+	FirstName         string `json:"firstName"`
+	PrimaryEmail      string `json:"appleId"`
+	CountryCode       string `json:"countryCode"`
+	HsaVersion        int    `json:"hsaVersion"`
+	StatusCode        int    `json:"statusCode"`
+	ManagedAppleID    bool   `json:"isManagedAppleID"`
+	HideMyEmailActive bool   `json:"isHideMyEmailSubscriptionActive"`
 }
 
 type WebserviceEndpoint struct {
@@ -112,16 +119,16 @@ type TrustedDevice struct {
 }
 
 type SessionData struct {
-	AppleID        string                       `json:"appleId"`
-	SessionToken   string                       `json:"sessionToken"`
-	TrustToken     string                       `json:"trustToken"`
-	Scnt           string                       `json:"scnt"`
-	SessionID      string                       `json:"sessionId"`
-	AccountCountry string                       `json:"accountCountry"`
-	Dsid           string                       `json:"dsid"`
+	AppleID        string                        `json:"appleId"`
+	SessionToken   string                        `json:"sessionToken"`
+	TrustToken     string                        `json:"trustToken"`
+	Scnt           string                        `json:"scnt"`
+	SessionID      string                        `json:"sessionId"`
+	AccountCountry string                        `json:"accountCountry"`
+	Dsid           string                        `json:"dsid"`
 	Webservices    map[string]WebserviceEndpoint `json:"webservices"`
-	Cookies        []SavedCookie                `json:"cookies,omitempty"`
-	SavedAt        time.Time                    `json:"savedAt"`
+	Cookies        []SavedCookie                 `json:"cookies,omitempty"`
+	SavedAt        time.Time                     `json:"savedAt"`
 }
 
 type SavedCookie struct {
