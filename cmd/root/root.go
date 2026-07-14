@@ -17,9 +17,9 @@ import (
 
 func NewCmdRoot(version string) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "ihme",
-		Short: "iCloud Hide My Email CLI",
-		Long:  "Manage iCloud Hide My Email addresses from the command line.",
+		Use:           "ihme",
+		Short:         "iCloud Hide My Email CLI",
+		Long:          "Manage iCloud Hide My Email addresses from the command line.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

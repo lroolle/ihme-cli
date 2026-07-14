@@ -14,8 +14,8 @@ import (
 
 func NewCmdCopy() *cobra.Command {
 	return &cobra.Command{
-		Use:   "copy <ref>",
-		Short: "Copy a Hide My Email address to clipboard",
+		Use:     "copy <ref>",
+		Short:   "Copy a Hide My Email address to clipboard",
 		Aliases: []string{"cp"},
 		Example: "  ihme copy github.com",
 		Args:    cmdutil.ExactRefArg("ihme copy <ref>", "ihme copy github.com"),

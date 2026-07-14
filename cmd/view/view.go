@@ -24,7 +24,7 @@ JSON output (--json):
 		Example: `  ihme view github.com
   ihme view github.com --json
   ihme view github.com --json --jq '.result.hme'`,
-		Args:    cmdutil.ExactRefArg("ihme view <ref>", "ihme view github.com"),
+		Args: cmdutil.ExactRefArg("ihme view <ref>", "ihme view github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
