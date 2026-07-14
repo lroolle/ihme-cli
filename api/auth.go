@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lroolle/ihme-cli/internal/srp"
@@ -54,18 +55,44 @@ func (c *Client) ResumeSession() error {
 		return fmt.Errorf("no session data")
 	}
 
-	// Try validate first (uses persisted cookies, no sign-in alert)
+	// Try validate first (uses persisted cookies, no sign-in alert).
+	// Only a definitive rejection justifies the accountLogin
+	// fallback: transport trouble (timeouts, 5xx, proxy flaps, 421
+	// routing hiccups) gets one quiet retry and then surfaces as
+	// transient — the session is very likely still valid, and
+	// accountLogin would spam sign-in alerts and mislabel the
+	// failure as expiry.
 	if len(c.session.Cookies) > 0 {
-		if err := c.ValidateSession(); err == nil {
+		err := c.ValidateSession()
+		if err == nil {
 			return nil
 		}
+		if !isAuthRejection(err) {
+			if c.Verbose {
+				fmt.Fprintf(os.Stderr, "[svc] validate failed transiently, retrying once: %v\n", err)
+			}
+			time.Sleep(1500 * time.Millisecond)
+			err = c.ValidateSession()
+			if err == nil {
+				return nil
+			}
+			if !isAuthRejection(err) {
+				return &TransientError{Err: fmt.Errorf("validating session: %w", err)}
+			}
+		}
 		if c.Verbose {
-			fmt.Fprintf(os.Stderr, "[svc] validate failed, falling back to accountLogin\n")
+			fmt.Fprintf(os.Stderr, "[svc] session rejected, falling back to accountLogin\n")
 		}
 	}
 
-	// Fall back to accountLogin (triggers Apple sign-in email)
-	return c.accountLogin()
+	// Fall back to accountLogin (triggers Apple sign-in email).
+	if err := c.accountLogin(); err != nil {
+		if !isAuthRejection(err) {
+			return &TransientError{Err: fmt.Errorf("account login: %w", err)}
+		}
+		return err
+	}
+	return nil
 }
 
 func (c *Client) ValidateSession() error {
@@ -105,7 +132,7 @@ func (c *Client) ValidateSessionInfo() (*AccountInfoResponse, json.RawMessage, e
 		return nil, nil, fmt.Errorf("parsing validate response: %w", err)
 	}
 	if resp.Success != nil && !*resp.Success && resp.DsInfo.Dsid == "" && len(resp.Webservices) == 0 {
-		return nil, json.RawMessage(body), fmt.Errorf("validate session: response success=false")
+		return nil, json.RawMessage(body), fmt.Errorf("validate session: %w", ErrSessionInvalid)
 	}
 
 	if resp.DsInfo.Dsid != "" {
@@ -114,6 +141,7 @@ func (c *Client) ValidateSessionInfo() (*AccountInfoResponse, json.RawMessage, e
 	if len(resp.Webservices) > 0 {
 		c.session.Webservices = resp.Webservices
 	}
+	c.session.ValidatedAt = time.Now()
 	return &resp, json.RawMessage(body), nil
 }
 
@@ -398,6 +426,7 @@ func (c *Client) accountLogin() error {
 
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
+	c.session.ValidatedAt = time.Now()
 	return nil
 }
 

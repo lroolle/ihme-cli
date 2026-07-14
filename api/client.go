@@ -241,7 +241,7 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 	c.mergeCookies(resp.Cookies())
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return respBody, fmt.Errorf("HTTP %d from %s: %s", resp.StatusCode, url, truncate(string(respBody), 200))
+		return respBody, &HTTPError{Status: resp.StatusCode, URL: url, Body: truncate(string(respBody), 200)}
 	}
 
 	return respBody, nil

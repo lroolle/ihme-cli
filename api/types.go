@@ -129,6 +129,10 @@ type SessionData struct {
 	Webservices    map[string]WebserviceEndpoint `json:"webservices"`
 	Cookies        []SavedCookie                 `json:"cookies,omitempty"`
 	SavedAt        time.Time                     `json:"savedAt"`
+	// ValidatedAt is the last time Apple confirmed this session
+	// (successful validate or accountLogin). Fresh sessions skip
+	// the per-command validate round trip.
+	ValidatedAt time.Time `json:"validatedAt,omitempty"`
 }
 
 type SavedCookie struct {

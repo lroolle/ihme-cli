@@ -3,11 +3,19 @@ package cmdutil
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/pkg/output"
 	"github.com/spf13/cobra"
 )
+
+// validateTTL is how long a confirmed session is trusted without a
+// fresh validate round trip. Within the window commands start
+// immediately on saved cookies; past it, the session is revalidated
+// (transiently-failing validates surface as "try again", not
+// "re-login").
+const validateTTL = 15 * time.Minute
 
 func GetClient(cmd *cobra.Command) (*api.Client, error) {
 	sessPath := api.DefaultSessionPath()
@@ -25,11 +33,19 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 	}
 	client.Verbose, _ = cmd.Flags().GetBool("verbose")
 
+	// Recently confirmed sessions skip the validate round trip.
+	if time.Since(sess.ValidatedAt) < validateTTL {
+		return client, nil
+	}
+
 	if err := client.ResumeSession(); err != nil {
+		if api.IsTransient(err) {
+			return nil, fmt.Errorf("iCloud is temporarily unreachable — your session is probably still valid, try again shortly: %w", err)
+		}
 		return nil, fmt.Errorf("session expired — run 'ihme auth login' to re-authenticate: %w", err)
 	}
 
-	// Save updated session (cookies may have been refreshed)
+	// Save updated session (cookies + validation timestamp refreshed)
 	api.SaveSession(sessPath, client.Session())
 
 	return client, nil

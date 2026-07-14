@@ -101,9 +101,19 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 ## Session resume
 
 1. Load session + cookies from disk
-2. Try validate (uses persisted cookies, no Apple sign-in email)
-3. If validate fails, fall back to accountLogin (triggers sign-in email)
-4. Save updated session after resume
+2. If validatedAt is fresh (< 15 min), skip validation entirely —
+   commands start straight on saved cookies
+3. Otherwise validate (uses persisted cookies, no sign-in email).
+   Failures are CLASSIFIED: only a definitive rejection (401/403/450
+   or success=false) falls back to accountLogin; transport trouble
+   (timeouts, 5xx, proxy flaps, 421 routing hiccups) gets one quiet
+   retry, then surfaces as "iCloud temporarily unreachable — your
+   session is probably still valid" WITHOUT touching accountLogin.
+   421 is NOT expiry: Apple returns it for routing/rate pressure on
+   valid sessions (the CN-region case is auto-retried separately).
+4. accountLogin (triggers sign-in email) only on real rejection; its
+   own transient failures also report as unreachable, not expired
+5. Save updated session (cookies + validatedAt) after resume
 
 ## Design rules
 
