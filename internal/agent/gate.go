@@ -39,7 +39,7 @@ func gate(mode GrantMode, st *runState) agentkit.Gate {
 	}
 	return func(ctx context.Context, req agentkit.GateRequest) agentkit.GateDecision {
 		switch req.Call.Name {
-		case "auth_status", "search_addresses", "generate_candidates":
+		case "auth_status", "search_addresses", "generate_candidates", "ask_user":
 			return agentkit.GateDecision{Allowed: true}
 
 		case "reserve_address":
@@ -88,6 +88,18 @@ func gate(mode GrantMode, st *runState) agentkit.Gate {
 // sessions deny with a reason the model can act on.
 func prompt(what string) agentkit.GateDecision {
 	return promptWith(stdinReader, os.Stderr, term.IsTerminal(int(os.Stdin.Fd())), what)
+}
+
+// askUser relays one agent question to the user and returns their
+// typed answer. Same shared stdin reader as the consent prompt; the
+// loop is synchronous so this never interleaves with rendering.
+func askUser(question string) (string, error) {
+	fmt.Fprintf(os.Stderr, "\n? %s\n> ", strings.TrimSpace(question))
+	line, err := stdinReader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("no answer from user: %w", err)
+	}
+	return strings.TrimSpace(line), nil
 }
 
 func promptWith(in io.Reader, out io.Writer, interactive bool, what string) agentkit.GateDecision {

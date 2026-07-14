@@ -184,9 +184,16 @@ Error: <ref> required — an address label, email, or ID
    ihme list --search <search-key> --json
    ```
    `--search` matches label, address, and note by substring, so search the
-   canonical key, then inspect returned labels for the intended service. If an
-   active address already exists for the same service/label, show it and ask
-   before creating a duplicate.
+   canonical key, then inspect returned labels for the intended service.
+   Interpret matches by label, not by search key:
+   - An active address with the SAME canonical label is a duplicate: ask
+     before creating another (embedded interactive runs: `ask_user`). When
+     you cannot ask, an explicit `new <label>` request has already decided
+     creation — proceed, and flag the existing duplicate prominently in the
+     summary.
+   - Addresses for the same service under DIFFERENT labels (older accounts,
+     dated labels, per-team variants) are context, never a blocker: mention
+     them in the note or summary and continue.
 
 4. **Generate and evaluate.** Get candidates and apply the taste test above:
    ```bash
@@ -261,4 +268,7 @@ shell — operations map to in-process tools:
 Embedded runs enforce the rotation cap (3 generation rounds) and
 call budgets in code, and gate mutating actions outside the run's
 granted scope behind user consent (`--grant ask`, the default) or
-allow them unattended (`--grant auto`).
+allow them unattended (`--grant auto`). Interactive embedded runs
+also expose `ask_user` — one short question, answered on the
+terminal, max 3 per run. Non-interactive runs must decide within
+the task scope and record assumptions instead of stalling.

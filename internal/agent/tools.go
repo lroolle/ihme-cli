@@ -18,11 +18,16 @@ import (
 // at 3, this makes it physics.
 const maxGenerateRounds = 3
 
+// maxQuestions caps ask_user per run so a confused model cannot
+// interrogate the user in a loop.
+const maxQuestions = 3
+
 // runState is the per-run scope shared by tools and gate: what this
 // run created is what unattended consent covers.
 type runState struct {
 	label          string
 	generateRounds int
+	questions      int
 	reserves       int
 	// reservedThisRun holds both the hme address and anonymousId of
 	// every reservation made during this run.
@@ -67,10 +72,13 @@ func marshal(v any) (json.RawMessage, error) {
 	return json.RawMessage(b), err
 }
 
-// tools builds the six in-process tools over the application
-// service. authStatus is pre-verified before the agent starts.
-func tools(svc *app.Service, st *runState, appleID string) []agentkit.Tool {
-	return []agentkit.Tool{
+// tools builds the in-process tools over the application service.
+// authStatus is pre-verified before the agent starts. interactive
+// adds ask_user: a real question channel for one-shot runs and the
+// REPL alike — without it the model is told to decide within scope
+// and record assumptions instead of stalling.
+func tools(svc *app.Service, st *runState, appleID string, interactive bool) []agentkit.Tool {
+	base := []agentkit.Tool{
 		agentkit.FuncTool{
 			ToolName: "auth_status",
 			Desc:     "Check iCloud authentication status.",
@@ -214,4 +222,32 @@ func tools(svc *app.Service, st *runState, appleID string) []agentkit.Tool {
 			},
 		},
 	}
+	if interactive {
+		base = append(base, agentkit.FuncTool{
+			ToolName: "ask_user",
+			Desc: fmt.Sprintf("Ask the user ONE short question and wait for their typed answer. Use only when genuinely blocked on a decision the task does not settle. Max %d per run.",
+				maxQuestions),
+			Params: schema.Object(
+				schema.Property("question", schema.String("one short, specific question")).Required(),
+			),
+			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+				if st.questions >= maxQuestions {
+					return nil, fmt.Errorf("question limit reached (%d) — decide with your best judgment within the task and state the assumption in your summary", maxQuestions)
+				}
+				st.questions++
+				var args struct {
+					Question string `json:"question"`
+				}
+				if err := json.Unmarshal(raw, &args); err != nil {
+					return nil, err
+				}
+				answer, err := askUser(args.Question)
+				if err != nil {
+					return nil, err
+				}
+				return marshal(map[string]string{"answer": answer})
+			},
+		})
+	}
+	return base
 }

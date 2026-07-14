@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"strings"
@@ -124,5 +125,47 @@ func TestGeneralScopeFirstReserveAsks(t *testing.T) {
 	st.recordReservation(&api.HmeEmail{Hme: "a@icloud.com", AnonymousID: "id1"})
 	if d := decide(t, st, "edit_note", `{"ref":"a@icloud.com"}`); !d.Allowed {
 		t.Fatalf("editing own creation denied: %s", d.Reason)
+	}
+}
+
+func TestAskUserToolOnlyWhenInteractive(t *testing.T) {
+	st := newRunState("x")
+	names := func(ts []agentkit.Tool) map[string]bool {
+		m := map[string]bool{}
+		for _, tool := range ts {
+			m[tool.Name()] = true
+		}
+		return m
+	}
+	if names(tools(nil, st, "a@b", false))["ask_user"] {
+		t.Fatal("ask_user must not exist in non-interactive runs")
+	}
+	if !names(tools(nil, st, "a@b", true))["ask_user"] {
+		t.Fatal("ask_user missing in interactive runs")
+	}
+	if d := decide(t, st, "ask_user", `{"question":"which?"}`); !d.Allowed {
+		t.Fatalf("gate must allow ask_user: %s", d.Reason)
+	}
+}
+
+func TestAskUserBudgetAndAnswer(t *testing.T) {
+	old := stdinReader
+	stdinReader = bufio.NewReader(strings.NewReader("the pro account\n"))
+	defer func() { stdinReader = old }()
+
+	st := newRunState("x")
+	var ask agentkit.Tool
+	for _, tool := range tools(nil, st, "a@b", true) {
+		if tool.Name() == "ask_user" {
+			ask = tool
+		}
+	}
+	out, err := ask.Execute(context.Background(), json.RawMessage(`{"question":"which account?"}`))
+	if err != nil || !strings.Contains(string(out), "the pro account") {
+		t.Fatalf("out=%s err=%v", out, err)
+	}
+	st.questions = maxQuestions
+	if _, err := ask.Execute(context.Background(), json.RawMessage(`{"question":"again?"}`)); err == nil {
+		t.Fatal("question budget not enforced")
 	}
 }
