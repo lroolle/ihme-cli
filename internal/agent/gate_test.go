@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -16,7 +16,7 @@ import (
 
 func decide(t *testing.T, st *runState, tool, args string) agentkit.GateDecision {
 	t.Helper()
-	g := gate(GrantAsk, st)
+	g := gate(GrantAsk, st, nil) // nil asker = non-interactive
 	return g(context.Background(), agentkit.GateRequest{
 		Turn: 1,
 		Call: agentkit.ToolCall{Name: tool, Args: json.RawMessage(args)},
@@ -86,30 +86,66 @@ func TestUnknownToolDeniedByDefault(t *testing.T) {
 }
 
 func TestAutoModeSkipsGate(t *testing.T) {
-	if g := gate(GrantAuto, newRunState("github")); g != nil {
+	if g := gate(GrantAuto, newRunState("github"), nil); g != nil {
 		t.Fatal("auto mode should return a nil gate (allow all)")
 	}
 }
 
-func TestPromptParsing(t *testing.T) {
+// scriptedAsker returns queued answers in order.
+func scriptedAsker(answers ...string) asker {
+	i := 0
+	return func(prompt string) (string, error) {
+		if i >= len(answers) {
+			return "", io.EOF
+		}
+		a := answers[i]
+		i++
+		return a, nil
+	}
+}
+
+func TestConsentProtocol(t *testing.T) {
 	cases := []struct {
-		in    string
-		allow bool
+		name    string
+		answers []string
+		allow   bool
 	}{
-		{"y\n", true}, {"YES\n", true}, {"n\n", false}, {"\n", false}, {"whatever\n", false},
+		{"yes", []string{"y"}, true},
+		{"YES", []string{"YES"}, true},
+		{"no", []string{"n"}, false},
+		{"anything else declines", []string{"whatever"}, false},
+		{"stale empty lines re-ask, then yes", []string{"", "", "y"}, true},
+		{"only empties gives up as deny", []string{"", "", ""}, false},
 	}
 	for _, tc := range cases {
-		var out strings.Builder
-		d := promptWith(strings.NewReader(tc.in), &out, true, "Reserve x?")
+		st := newRunState("x")
+		d := consent(scriptedAsker(tc.answers...), st, "reserve_address", "Reserve x?")
 		if d.Allowed != tc.allow {
-			t.Fatalf("input %q: allowed = %v, want %v", tc.in, d.Allowed, tc.allow)
-		}
-		if !strings.Contains(out.String(), "[y/N]") {
-			t.Fatal("prompt not written")
+			t.Fatalf("%s: allowed = %v, want %v (%s)", tc.name, d.Allowed, tc.allow, d.Reason)
 		}
 	}
-	if d := promptWith(strings.NewReader("y\n"), &strings.Builder{}, false, "x"); d.Allowed {
-		t.Fatal("non-interactive must deny regardless of stdin content")
+}
+
+func TestConsentAlwaysRemembersPerTool(t *testing.T) {
+	st := newRunState("x")
+	if d := consent(scriptedAsker("a"), st, "deactivate_address", "first?"); !d.Allowed {
+		t.Fatal("'a' must allow")
+	}
+	// Second time: no asker needed at all.
+	if d := consent(nil, st, "deactivate_address", "second?"); !d.Allowed {
+		t.Fatal("allow-all not remembered")
+	}
+	// Other tools are unaffected.
+	if d := consent(nil, st, "edit_note", "other?"); d.Allowed {
+		t.Fatal("allow-all leaked across tools")
+	}
+}
+
+func TestConsentNonInteractiveDenies(t *testing.T) {
+	st := newRunState("x")
+	d := consent(nil, st, "reserve_address", "x?")
+	if d.Allowed || !strings.Contains(d.Reason, "non-interactive") {
+		t.Fatalf("d = %+v", d)
 	}
 }
 
@@ -137,10 +173,10 @@ func TestAskUserToolOnlyWhenInteractive(t *testing.T) {
 		}
 		return m
 	}
-	if names(tools(nil, st, "a@b", false))["ask_user"] {
+	if names(tools(nil, st, "a@b", nil))["ask_user"] {
 		t.Fatal("ask_user must not exist in non-interactive runs")
 	}
-	if !names(tools(nil, st, "a@b", true))["ask_user"] {
+	if !names(tools(nil, st, "a@b", scriptedAsker()))["ask_user"] {
 		t.Fatal("ask_user missing in interactive runs")
 	}
 	if d := decide(t, st, "ask_user", `{"question":"which?"}`); !d.Allowed {
@@ -149,13 +185,9 @@ func TestAskUserToolOnlyWhenInteractive(t *testing.T) {
 }
 
 func TestAskUserBudgetAndAnswer(t *testing.T) {
-	old := stdinReader
-	stdinReader = bufio.NewReader(strings.NewReader("the pro account\n"))
-	defer func() { stdinReader = old }()
-
 	st := newRunState("x")
 	var ask agentkit.Tool
-	for _, tool := range tools(nil, st, "a@b", true) {
+	for _, tool := range tools(nil, st, "a@b", scriptedAsker("the pro account")) {
 		if tool.Name() == "ask_user" {
 			ask = tool
 		}

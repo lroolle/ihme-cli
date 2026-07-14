@@ -72,6 +72,14 @@ Two entry points, one adapter (internal/agent):
   REPL without args, one-shot with a task. NOTHING is pre-granted:
   every mutation (reserve/deactivate/edit) asks unless --grant auto.
 
+Interaction design: one input authority (asker) per session — the
+REPL runs a raw-mode line editor (x/term.Terminal: history, editing;
+type-ahead during model turns becomes visible editable input, never
+a phantom consent answer). One-shot runs stay cooked-mode (Ctrl-C
+aborts) with drain-and-reprompt consent. Consent protocol: y allows
+once, a allows that tool for the rest of the run, empty re-asks
+(stale newlines are not decisions), anything else declines.
+
 BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
 effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/
 OPENAI_API_KEY). api defaults to "auto": guess the wire protocol

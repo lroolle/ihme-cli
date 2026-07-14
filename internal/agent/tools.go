@@ -32,11 +32,13 @@ type runState struct {
 	// reservedThisRun holds both the hme address and anonymousId of
 	// every reservation made during this run.
 	reservedThisRun map[string]bool
-	lastReserved    *api.HmeEmail
+	// allowAll remembers per-tool "always this run" consent answers.
+	allowAll     map[string]bool
+	lastReserved *api.HmeEmail
 }
 
 func newRunState(label string) *runState {
-	return &runState{label: label, reservedThisRun: map[string]bool{}}
+	return &runState{label: label, reservedThisRun: map[string]bool{}, allowAll: map[string]bool{}}
 }
 
 func (st *runState) ownedRef(ref string) bool {
@@ -77,7 +79,7 @@ func marshal(v any) (json.RawMessage, error) {
 // adds ask_user: a real question channel for one-shot runs and the
 // REPL alike — without it the model is told to decide within scope
 // and record assumptions instead of stalling.
-func tools(svc *app.Service, st *runState, appleID string, interactive bool) []agentkit.Tool {
+func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit.Tool {
 	base := []agentkit.Tool{
 		agentkit.FuncTool{
 			ToolName: "auth_status",
@@ -230,7 +232,7 @@ func tools(svc *app.Service, st *runState, appleID string, interactive bool) []a
 			},
 		},
 	}
-	if interactive {
+	if ask != nil {
 		base = append(base, agentkit.FuncTool{
 			ToolName: "ask_user",
 			Desc: fmt.Sprintf("Ask the user ONE short question and wait for their typed answer. Use only when genuinely blocked on a decision the task does not settle. Max %d per run.",
@@ -249,9 +251,9 @@ func tools(svc *app.Service, st *runState, appleID string, interactive bool) []a
 				if err := json.Unmarshal(raw, &args); err != nil {
 					return nil, err
 				}
-				answer, err := askUser(args.Question)
+				answer, err := ask(fmt.Sprintf("\n? %s\n> ", strings.TrimSpace(args.Question)))
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("no answer from user: %w", err)
 				}
 				return marshal(map[string]string{"answer": answer})
 			},

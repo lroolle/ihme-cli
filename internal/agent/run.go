@@ -13,7 +13,6 @@ import (
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 	"github.com/lroolle/ihme-cli/skill"
-	"golang.org/x/term"
 )
 
 // systemPrompt holds the stable executor rules. The operational
@@ -62,7 +61,25 @@ type session struct {
 // newSession builds a session. label scopes the consent policy:
 // non-empty pre-grants one reservation for that label (`new --agent`);
 // empty is the general assistant, where every mutation asks.
-func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort string, textOut io.Writer) (*session, error) {
+// sessionIO is one session's I/O wiring: where assistant text and
+// tool traces go, and the single input authority for questions.
+type sessionIO struct {
+	textOut io.Writer
+	meta    io.Writer
+	ask     asker // nil = cannot ask (non-interactive)
+}
+
+// defaultIO wires a one-shot run: cooked-mode stdin asker (Ctrl-C
+// keeps working), traces on stderr.
+func defaultIO(textToStdout bool) sessionIO {
+	out := io.Writer(os.Stderr)
+	if textToStdout {
+		out = os.Stdout
+	}
+	return sessionIO{textOut: out, meta: os.Stderr, ask: stdinAsker()}
+}
+
+func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort string, sio sessionIO) (*session, error) {
 	cfg, key, err := LoadConfig()
 	if err != nil {
 		return nil, err
@@ -74,14 +91,13 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 		grant = GrantAsk
 	}
 	s := &session{st: newRunState(label)}
-	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 	s.run = agentkit.RunConfig{
 		Streamer: streamer(cfg, key),
 		System:   systemPrompt,
-		Tools:    tools(svc, s.st, appleID, interactive),
-		Gate:     gate(grant, s.st),
+		Tools:    tools(svc, s.st, appleID, sio.ask),
+		Gate:     gate(grant, s.st, sio.ask),
 		Limits:   agentkit.Limits{MaxTurns: 12, MaxRequests: 16, MaxToolCalls: 24},
-		OnEvent:  renderer(textOut, os.Stderr, &s.usage),
+		OnEvent:  renderer(sio.textOut, sio.meta, &s.usage),
 	}
 	return s, nil
 }
@@ -135,7 +151,7 @@ type Result struct {
 // the label-scoped consent policy. All rendering goes to stderr;
 // stdout stays clean for --json.
 func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options) (*Result, error) {
-	s, err := newSession(svc, appleID, opts.Label, opts.Grant, opts.Effort, os.Stderr)
+	s, err := newSession(svc, appleID, opts.Label, opts.Grant, opts.Effort, defaultIO(false))
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +171,7 @@ func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options)
 // RunTask executes one general task ("find my old figma addresses",
 // "deactivate the newsletter alias") with every mutation gated.
 func RunTask(ctx context.Context, svc *app.Service, appleID, task string, grant GrantMode, effort string, jsonOut bool) (*Result, error) {
-	textOut := io.Writer(os.Stdout)
-	if jsonOut {
-		textOut = os.Stderr // keep stdout clean for the JSON result
-	}
-	s, err := newSession(svc, appleID, "", grant, effort, textOut)
+	s, err := newSession(svc, appleID, "", grant, effort, defaultIO(!jsonOut))
 	if err != nil {
 		return nil, err
 	}
