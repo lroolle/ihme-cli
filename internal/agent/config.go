@@ -22,9 +22,9 @@ type Config struct {
 	BaseURL   string `json:"baseUrl"`
 	APIKeyEnv string `json:"apiKeyEnv"`
 
-	// API selects the wire protocol: "completions" (default; the
-	// OpenAI-compatible lingua franca) or "responses" (required by
-	// reasoning models for function tools).
+	// API selects the wire protocol: "auto" (default — guess by
+	// model family, flip on the endpoint's misroute signal, persist
+	// the discovery), or pin "completions"/"responses" explicitly.
 	API string `json:"api"`
 	// Effort sets reasoning effort for the responses API
 	// ("low"/"medium"/"high"); empty omits the parameter.
@@ -63,10 +63,10 @@ func LoadConfig() (Config, string, error) {
 		cfg.API = os.Getenv("OPENAI_API")
 	}
 	if cfg.API == "" {
-		cfg.API = "completions"
+		cfg.API = "auto"
 	}
-	if cfg.API != "completions" && cfg.API != "responses" {
-		return Config{}, "", fmt.Errorf("invalid api %q in agent config — use \"completions\" or \"responses\"", cfg.API)
+	if cfg.API != "auto" && cfg.API != "completions" && cfg.API != "responses" {
+		return Config{}, "", fmt.Errorf("invalid api %q in agent config — use \"auto\", \"completions\", or \"responses\"", cfg.API)
 	}
 
 	key := os.Getenv(cfg.APIKeyEnv)

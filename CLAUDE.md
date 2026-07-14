@@ -74,9 +74,12 @@ Two entry points, one adapter (internal/agent):
 
 BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
 effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/
-OPENAI_API_KEY). api selects the wire protocol: "completions"
-(default) or "responses" — reasoning models (o-series, gpt-5.x)
-reject function tools on /chat/completions and need "responses".
+OPENAI_API_KEY). api defaults to "auto": guess the wire protocol
+from the model family (gpt-5*/o1/o3/o4/codex -> responses, else
+completions), flip automatically on the endpoint's misroute signal,
+and persist the discovery to agent.json — the wrong first call
+happens at most once per model. Pin "completions"/"responses" to
+disable detection.
 Rotation is capped at 3 generation rounds in the tool. Kernel
 invariants and design: pkg/agentkit/README.md.
 

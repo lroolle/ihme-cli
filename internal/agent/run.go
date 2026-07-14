@@ -12,7 +12,6 @@ import (
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
-	"github.com/lroolle/ihme-cli/pkg/agentkit/ai/openai"
 	"github.com/lroolle/ihme-cli/skill"
 )
 
@@ -72,12 +71,10 @@ func (s *session) exec(ctx context.Context, transcript []agentkit.Message) ([]ag
 	return out, hintErr(err)
 }
 
-// streamer selects the wire protocol from config.
+// streamer resolves the wire protocol: auto-detected and persisted
+// unless the config pins it.
 func streamer(cfg Config, key string) agentkit.Streamer {
-	if cfg.API == "responses" {
-		return &openai.ResponsesClient{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model, Effort: cfg.Effort}
-	}
-	return &openai.Client{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}
+	return newAutoStreamer(cfg, key)
 }
 
 // hintErr turns the reasoning-models-need-responses 400 into an
@@ -88,7 +85,9 @@ func hintErr(err error) error {
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "reasoning_effort") && strings.Contains(msg, "responses") {
-		return fmt.Errorf("%w\n\nThis model requires the responses API for tool use. Fix:\n  set \"api\": \"responses\" in %s/agent.json", err, configDir())
+		// Only reachable when the config PINS "api": "completions" —
+		// auto mode flips and persists instead of erroring.
+		return fmt.Errorf("%w\n\nThis model requires the responses API for tool use, but agent.json pins \"api\": \"completions\".\nFix: set \"api\": \"auto\" (or \"responses\") in %s/agent.json", err, configDir())
 	}
 	return err
 }

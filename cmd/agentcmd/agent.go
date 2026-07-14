@@ -29,10 +29,11 @@ asking (use deliberately).
 
 BYOK: configure the model in ~/.config/ihme/agent.json
   {"model":"...","baseUrl":"https://api.example.com/v1",
-   "apiKeyEnv":"OPENAI_API_KEY","api":"completions|responses"}
-and put the key in ~/.config/ihme/.env (or export it). Models that
-require the responses API for tool use (reasoning models) need
-"api": "responses".
+   "apiKeyEnv":"OPENAI_API_KEY"}
+and put the key in ~/.config/ihme/.env (or export it). The wire
+protocol (/chat/completions vs /responses) is detected automatically
+and remembered; pin it with "api": "completions"|"responses" if
+your endpoint misbehaves.
 
 JSON output (--json, one-shot only):
   {"reserved":{...}|null,"summary":"...","transcript":[...],"usage":{...}}`,

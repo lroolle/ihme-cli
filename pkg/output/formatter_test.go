@@ -16,7 +16,7 @@ var testEmails = []api.HmeEmail{
 		Hme:             "test@privaterelay.appleid.com",
 		ForwardToEmail:  "user@icloud.com",
 		IsActive:        true,
-		CreateTimestamp:  1705276800000,
+		CreateTimestamp: 1705276800000,
 		Note:            "#dev | main account",
 	},
 	{
@@ -25,7 +25,7 @@ var testEmails = []api.HmeEmail{
 		Hme:             "test2@privaterelay.appleid.com",
 		ForwardToEmail:  "user@icloud.com",
 		IsActive:        false,
-		CreateTimestamp:  1704067200000,
+		CreateTimestamp: 1704067200000,
 		Note:            "",
 	},
 }

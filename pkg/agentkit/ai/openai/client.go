@@ -320,9 +320,22 @@ func mapFinish(reason string) agentkit.StopReason {
 	}
 }
 
+// APIError is a non-200 response from the endpoint. It is exposed
+// as a type so applications can classify protocol misroutes (e.g.
+// "this model requires /responses") without parsing message text
+// out of a flattened error string.
+type APIError struct {
+	Status int
+	Body   string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("openai: status %d: %s", e.Status, e.Body)
+}
+
 func statusError(status int, body io.Reader) error {
 	excerpt, _ := io.ReadAll(io.LimitReader(body, 2048))
-	err := fmt.Errorf("openai: status %d: %s", status, strings.TrimSpace(string(excerpt)))
+	err := &APIError{Status: status, Body: strings.TrimSpace(string(excerpt))}
 	if status == http.StatusTooManyRequests || status >= 500 {
 		return agentkit.Transient{Err: err}
 	}
