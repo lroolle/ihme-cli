@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/lroolle/ihme-cli/api"
@@ -86,5 +87,27 @@ func TestUnknownToolDeniedByDefault(t *testing.T) {
 func TestAutoModeSkipsGate(t *testing.T) {
 	if g := gate(GrantAuto, newRunState("github")); g != nil {
 		t.Fatal("auto mode should return a nil gate (allow all)")
+	}
+}
+
+func TestPromptParsing(t *testing.T) {
+	cases := []struct {
+		in    string
+		allow bool
+	}{
+		{"y\n", true}, {"YES\n", true}, {"n\n", false}, {"\n", false}, {"whatever\n", false},
+	}
+	for _, tc := range cases {
+		var out strings.Builder
+		d := promptWith(strings.NewReader(tc.in), &out, true, "Reserve x?")
+		if d.Allowed != tc.allow {
+			t.Fatalf("input %q: allowed = %v, want %v", tc.in, d.Allowed, tc.allow)
+		}
+		if !strings.Contains(out.String(), "[y/N]") {
+			t.Fatal("prompt not written")
+		}
+	}
+	if d := promptWith(strings.NewReader("y\n"), &strings.Builder{}, false, "x"); d.Allowed {
+		t.Fatal("non-interactive must deny regardless of stdin content")
 	}
 }

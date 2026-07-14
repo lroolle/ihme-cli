@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -83,14 +84,18 @@ func gate(mode GrantMode, st *runState) agentkit.Gate {
 // this never interleaves with stream rendering. Non-interactive
 // sessions deny with a reason the model can act on.
 func prompt(what string) agentkit.GateDecision {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+	return promptWith(os.Stdin, os.Stderr, term.IsTerminal(int(os.Stdin.Fd())), what)
+}
+
+func promptWith(in io.Reader, out io.Writer, interactive bool, what string) agentkit.GateDecision {
+	if !interactive {
 		return agentkit.GateDecision{
 			Allowed: false,
 			Reason:  "outside this run's granted scope and the session is non-interactive; report instead, or the user can re-run with --grant auto",
 		}
 	}
-	fmt.Fprintf(os.Stderr, "\n%s Allow? [y/N] ", what)
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	fmt.Fprintf(out, "\n%s Allow? [y/N] ", what)
+	line, err := bufio.NewReader(in).ReadString('\n')
 	if err != nil {
 		return agentkit.GateDecision{Allowed: false, Reason: "no answer from user"}
 	}
