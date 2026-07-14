@@ -29,8 +29,8 @@ Actions that change anything ask for your consent first
 
 // RunREPL is the interactive general assistant: one persistent
 // conversation, fresh budgets per turn, every mutation gated.
-func RunREPL(ctx context.Context, svc *app.Service, appleID string, grant GrantMode) error {
-	s, err := newSession(svc, appleID, "", grant, os.Stdout)
+func RunREPL(ctx context.Context, svc *app.Service, appleID string, grant GrantMode, effort string) error {
+	s, err := newSession(svc, appleID, "", grant, effort, os.Stdout)
 	if err != nil {
 		return err
 	}

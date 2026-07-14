@@ -97,7 +97,25 @@ Each is an application concern; adding them here would trade away
 the one property that makes the kernel reusable: you can read all
 of it.
 
-The design rationale, review history, and the survey of prior art
-(pi, agentcore, agent-sdk-golang) live outside this repo; the
-package guard test (`TestImportDirection`) enforces that the kernel
-never imports application packages or third-party modules.
+## Roadmap — from kernel to general agent, deliberately
+
+The kernel grows one proven need at a time; each item below has a
+trigger, not a date. Additions that precede their trigger are scope
+creep by definition.
+
+| Next | Trigger |
+|---|---|
+| anthropic-messages backend | a consumer needs native Claude (caching, thinking blocks) beyond OpenAI-compat |
+| structured final output (schema-forced result turn) | a CLI needs machine-readable outcomes richer than transcript + app state |
+| transcript persistence helpers (save/load, caller-side) | a REPL needs resume across processes |
+| steering (inject a user message mid-run) | an interactive surface wants course-correction without killing the run |
+| parallel execution for read-only tools | measured latency pain, never before |
+| eval harness (scripted tasks + judge) | tuning prompts/skills against regressions |
+
+Already deliberate, not missing: synchronous callbacks over
+channels, sequential tools, learned (not shipped) provider
+metadata, consent as a consumer-owned gate, skills as invoked
+procedures. The design rationale, review history, and the survey of
+prior art (pi, agentcore, agent-sdk-golang) live outside this repo;
+the package guard test (`TestImportDirection`) enforces that the
+kernel never imports application packages or third-party modules.

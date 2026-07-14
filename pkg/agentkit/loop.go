@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // ErrRepeatedDenial terminates a run when the model repeats a tool
@@ -214,6 +215,12 @@ func streamWithRetry(
 			return msg, nil
 		}
 		if IsTransient(err) && !meaningful && attempt < maxAttempts && ctx.Err() == nil {
+			// Linear backoff before the retry; cancellation wins.
+			select {
+			case <-time.After(time.Duration(attempt) * 700 * time.Millisecond):
+			case <-ctx.Done():
+				return AssistantMessage{}, ctx.Err()
+			}
 			continue
 		}
 		return AssistantMessage{}, err

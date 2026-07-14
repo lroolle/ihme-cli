@@ -22,6 +22,7 @@ func NewCmdNew() *cobra.Command {
 		count   int
 		agentic bool
 		grant   string
+		effort  string
 	)
 
 	cmd := &cobra.Command{
@@ -67,7 +68,7 @@ JSON output with --yes or --address (reserved):
 					return fmt.Errorf("invalid --grant %q — use ask or auto", grant)
 				}
 				res, err := agent.RunNew(cmd.Context(), svc, client.Session().AppleID, agent.Options{
-					Label: label, Note: note, Grant: agent.GrantMode(grant), JSON: jsonFlag,
+					Label: label, Note: note, Grant: agent.GrantMode(grant), Effort: effort, JSON: jsonFlag,
 				})
 				if err != nil {
 					return err
@@ -129,6 +130,7 @@ JSON output with --yes or --address (reserved):
 	cmd.Flags().IntVarP(&count, "count", "n", 3, "Number of candidates to generate")
 	cmd.Flags().BoolVar(&agentic, "agent", false, "Run the embedded agent: search, generate, judge, reserve per SKILL.md")
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Agent consent for actions beyond this run's scope: ask or auto")
+	cmd.Flags().StringVar(&effort, "effort", "", "Agent reasoning effort (responses-API models): minimal, low, medium, high")
 	return cmd
 }
 

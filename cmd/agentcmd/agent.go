@@ -14,7 +14,7 @@ import (
 )
 
 func NewCmdAgent() *cobra.Command {
-	var grant string
+	var grant, effort string
 
 	cmd := &cobra.Command{
 		Use:   "agent [task...]",
@@ -53,11 +53,11 @@ JSON output (--json, one-shot only):
 			appleID := client.Session().AppleID
 
 			if len(args) == 0 {
-				return agent.RunREPL(cmd.Context(), svc, appleID, agent.GrantMode(grant))
+				return agent.RunREPL(cmd.Context(), svc, appleID, agent.GrantMode(grant), effort)
 			}
 
 			jsonFlag, _ := cmd.Flags().GetBool("json")
-			res, err := agent.RunTask(cmd.Context(), svc, appleID, strings.Join(args, " "), agent.GrantMode(grant), jsonFlag)
+			res, err := agent.RunTask(cmd.Context(), svc, appleID, strings.Join(args, " "), agent.GrantMode(grant), effort, jsonFlag)
 			if err != nil {
 				return err
 			}
@@ -69,5 +69,6 @@ JSON output (--json, one-shot only):
 	}
 
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Consent for mutating actions: ask or auto")
+	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort for responses-API models: minimal, low, medium, high")
 	return cmd
 }

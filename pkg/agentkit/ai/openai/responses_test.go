@@ -217,3 +217,24 @@ func TestResponsesStatusClassification(t *testing.T) {
 		t.Fatalf("err = %v, want transient 429", err)
 	}
 }
+
+func TestResponsesThinkingSummaries(t *testing.T) {
+	_, events, err := runResp(t, []string{
+		`data: {"type":"response.reasoning_summary_text.delta","delta":"weighing the two candidates"}`,
+		`data: {"type":"response.output_text.delta","delta":"done"}`,
+		`data: {"type":"response.completed","response":{"status":"completed"}}`,
+		`data: [DONE]`,
+	}, agentkit.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thinking := 0
+	for _, ev := range events {
+		if ev.Type == agentkit.StreamThinking && strings.Contains(ev.Text, "weighing") {
+			thinking++
+		}
+	}
+	if thinking != 1 {
+		t.Fatalf("thinking events = %d, want 1", thinking)
+	}
+}

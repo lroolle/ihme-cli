@@ -202,7 +202,12 @@ Error: <ref> required — an address label, email, or ID
    Evaluate each candidate individually — don't let bad neighbors taint a good
    one. A pool with two duds and one strong image is not a "weak pool."
    Reserve the best immediately — don't ask unless no single candidate passes
-   taste ("does it make a picture you'd keep?").
+   taste ("does it make a picture you'd keep?"). When NO candidate passes
+   after rotation: interactively (embedded: `ask_user`), offer your top two
+   with a one-line image each and let the user pick; non-interactively,
+   reserve the least-bad and say plainly it was a compromise. Embedded runs
+   must articulate the verdict: `reserve_address` requires a rationale naming
+   the winner's image and each rejected candidate's failure.
 
 5. **Reserve with a useful note.** `ihme new` supports `--note`; Apple stores it
    in the address metadata, and `ihme list --search` searches it. Keep notes

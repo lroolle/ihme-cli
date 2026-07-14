@@ -42,6 +42,13 @@ Rules:
   why. Adapt or report — never repeat a denied call unchanged.
 - Hard limits on generation rounds and total calls are enforced in
   code. When you hit one, wrap up with what you have.
+- Choosing an address IS the job — take the taste test seriously.
+  Evaluate every candidate against the rubric individually before
+  reserving; reserve_address requires your rationale (the image the
+  winner makes, why each loser lost). If after rotation no candidate
+  clearly passes and ask_user is available, offer the user your top
+  two with one-line images instead of settling silently; without
+  ask_user, pick the least-bad, and say plainly it was a compromise.
 - Finish with a one-line summary: what was done (or not), and why.
   If you compromised, say so.`
 
@@ -55,10 +62,13 @@ type session struct {
 // newSession builds a session. label scopes the consent policy:
 // non-empty pre-grants one reservation for that label (`new --agent`);
 // empty is the general assistant, where every mutation asks.
-func newSession(svc *app.Service, appleID, label string, grant GrantMode, textOut io.Writer) (*session, error) {
+func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort string, textOut io.Writer) (*session, error) {
 	cfg, key, err := LoadConfig()
 	if err != nil {
 		return nil, err
+	}
+	if effort != "" {
+		cfg.Effort = effort
 	}
 	if grant == "" {
 		grant = GrantAsk
@@ -106,10 +116,11 @@ func hintErr(err error) error {
 
 // Options configures one embedded-agent run.
 type Options struct {
-	Label string
-	Note  string // extra context from the user, folded into the task
-	Grant GrantMode
-	JSON  bool
+	Label  string
+	Note   string // extra context from the user, folded into the task
+	Grant  GrantMode
+	Effort string // reasoning effort override (responses API models)
+	JSON   bool
 }
 
 // Result is the structured outcome for --json consumers.
@@ -124,7 +135,7 @@ type Result struct {
 // the label-scoped consent policy. All rendering goes to stderr;
 // stdout stays clean for --json.
 func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options) (*Result, error) {
-	s, err := newSession(svc, appleID, opts.Label, opts.Grant, os.Stderr)
+	s, err := newSession(svc, appleID, opts.Label, opts.Grant, opts.Effort, os.Stderr)
 	if err != nil {
 		return nil, err
 	}
@@ -143,12 +154,12 @@ func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options)
 
 // RunTask executes one general task ("find my old figma addresses",
 // "deactivate the newsletter alias") with every mutation gated.
-func RunTask(ctx context.Context, svc *app.Service, appleID, task string, grant GrantMode, jsonOut bool) (*Result, error) {
+func RunTask(ctx context.Context, svc *app.Service, appleID, task string, grant GrantMode, effort string, jsonOut bool) (*Result, error) {
 	textOut := io.Writer(os.Stdout)
 	if jsonOut {
 		textOut = os.Stderr // keep stdout clean for the JSON result
 	}
-	s, err := newSession(svc, appleID, "", grant, textOut)
+	s, err := newSession(svc, appleID, "", grant, effort, textOut)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +187,14 @@ func renderer(textOut, meta io.Writer, usage *agentkit.Usage) func(agentkit.Even
 	return func(ev agentkit.Event) error {
 		switch e := ev.(type) {
 		case agentkit.ModelEvent:
-			if e.Stream.Type == agentkit.StreamText {
+			switch e.Stream.Type {
+			case agentkit.StreamText:
 				_, err := fmt.Fprint(textOut, e.Stream.Text)
+				return err
+			case agentkit.StreamThinking:
+				// Reasoning summaries, dimmed: the deliberation is
+				// part of the product, not a secret.
+				_, err := fmt.Fprintf(meta, "\x1b[2m%s\x1b[0m", e.Stream.Text)
 				return err
 			}
 		case agentkit.ToolStart:

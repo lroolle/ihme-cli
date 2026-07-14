@@ -25,8 +25,11 @@ type ResponsesClient struct {
 	Model   string
 
 	// Effort sets reasoning effort ("low", "medium", "high").
-	// Empty omits the reasoning parameter entirely.
 	Effort string
+	// Summary requests reasoning summaries ("auto" recommended) so
+	// consumers can render the model's deliberation as thinking
+	// events. Both empty omits the reasoning parameter entirely.
+	Summary string
 
 	HTTPClient *http.Client
 }
@@ -66,7 +69,8 @@ type respRequest struct {
 	Stream       bool       `json:"stream"`
 	Store        bool       `json:"store"`
 	Reasoning    *struct {
-		Effort string `json:"effort"`
+		Effort  string `json:"effort,omitempty"`
+		Summary string `json:"summary,omitempty"`
 	} `json:"reasoning,omitempty"`
 }
 
@@ -139,10 +143,11 @@ func (c *ResponsesClient) Stream(ctx context.Context, req agentkit.Request, emit
 
 func (c *ResponsesClient) buildRequest(req agentkit.Request) respRequest {
 	w := respRequest{Model: c.Model, Instructions: req.System, Stream: true, Store: false}
-	if c.Effort != "" {
+	if c.Effort != "" || c.Summary != "" {
 		w.Reasoning = &struct {
-			Effort string `json:"effort"`
-		}{Effort: c.Effort}
+			Effort  string `json:"effort,omitempty"`
+			Summary string `json:"summary,omitempty"`
+		}{Effort: c.Effort, Summary: c.Summary}
 	}
 	for _, m := range req.Messages {
 		switch m.Role {

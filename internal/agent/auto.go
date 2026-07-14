@@ -32,7 +32,12 @@ func newAutoStreamer(cfg Config, key string) *autoStreamer {
 	a := &autoStreamer{
 		make: func(api string) agentkit.Streamer {
 			if api == "responses" {
-				return &openai.ResponsesClient{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model, Effort: cfg.Effort}
+				// Summaries make the deliberation renderable as
+				// thinking events — part of the product.
+				return &openai.ResponsesClient{
+					BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model,
+					Effort: cfg.Effort, Summary: "auto",
+				}
 			}
 			return &openai.Client{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}
 		},

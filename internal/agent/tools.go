@@ -146,22 +146,30 @@ func tools(svc *app.Service, st *runState, appleID string, interactive bool) []a
 		},
 		agentkit.FuncTool{
 			ToolName: "reserve_address",
-			Desc:     "Reserve one generated candidate under a label, with an optional durable note and tags.",
+			Desc:     "Reserve one generated candidate under a label, with an optional durable note and tags. Requires a taste rationale.",
 			Params: schema.Object(
 				schema.Property("address", schema.String("the candidate address to reserve")).Required(),
 				schema.Property("label", schema.String("service label, bare noun")).Required(),
+				schema.Property("rationale", schema.String("the taste verdict: what picture this address makes and why you would keep it, plus one clause per REJECTED candidate naming its failure (e.g. leading digits, no image, deficit word)")).Required(),
 				schema.Property("note", schema.String("compact durable note: why it exists, signup URL, context. Never secrets.")),
 				schema.Property("tags", schema.Array("tags like dev, work", schema.String("tag"))),
 			),
 			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 				var args struct {
-					Address string   `json:"address"`
-					Label   string   `json:"label"`
-					Note    string   `json:"note"`
-					Tags    []string `json:"tags"`
+					Address   string   `json:"address"`
+					Label     string   `json:"label"`
+					Rationale string   `json:"rationale"`
+					Note      string   `json:"note"`
+					Tags      []string `json:"tags"`
 				}
 				if err := json.Unmarshal(raw, &args); err != nil {
 					return nil, err
+				}
+				// The rationale is the taste test made mandatory: a
+				// reserve without an articulated verdict is refused
+				// before it reaches Apple.
+				if len(strings.TrimSpace(args.Rationale)) < 20 {
+					return nil, fmt.Errorf("rationale required: state the image this address makes, why you'd keep it, and why each rejected candidate lost")
 				}
 				reserved, err := svc.Reserve(args.Address, args.Label, args.Tags, args.Note)
 				if err != nil {
