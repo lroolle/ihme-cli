@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lroolle/ihme-cli/internal/agent"
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/spf13/cobra"
@@ -19,6 +20,8 @@ func NewCmdNew() *cobra.Command {
 		yes     bool
 		address string
 		count   int
+		agentic bool
+		grant   string
 	)
 
 	cmd := &cobra.Command{
@@ -56,6 +59,29 @@ JSON output with --yes or --address (reserved):
 				return err
 			}
 			svc := app.New(client)
+
+			// --agent: run the embedded agent through the SKILL.md
+			// procedure instead of the imperative flow.
+			if agentic {
+				if grant != string(agent.GrantAsk) && grant != string(agent.GrantAuto) {
+					return fmt.Errorf("invalid --grant %q — use ask or auto", grant)
+				}
+				res, err := agent.RunNew(cmd.Context(), svc, client.Session().AppleID, agent.Options{
+					Label: label, Note: note, Grant: agent.GrantMode(grant), JSON: jsonFlag,
+				})
+				if err != nil {
+					return err
+				}
+				if jsonFlag {
+					return cmdutil.OutputResult(cmd, res)
+				}
+				if res.Reserved != nil {
+					fmt.Printf("Reserved: %s (label: %s)\n", res.Reserved.Hme, res.Reserved.Label)
+				} else {
+					fmt.Println("No address reserved.")
+				}
+				return nil
+			}
 
 			// --address: reserve a specific address (agent step 2)
 			if address != "" {
@@ -101,6 +127,8 @@ JSON output with --yes or --address (reserved):
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Reserve the first candidate immediately")
 	cmd.Flags().StringVar(&address, "address", "", "Reserve a specific generated address")
 	cmd.Flags().IntVarP(&count, "count", "n", 3, "Number of candidates to generate")
+	cmd.Flags().BoolVar(&agentic, "agent", false, "Run the embedded agent: search, generate, judge, reserve per SKILL.md")
+	cmd.Flags().StringVar(&grant, "grant", "ask", "Agent consent for actions beyond this run's scope: ask or auto")
 	return cmd
 }
 

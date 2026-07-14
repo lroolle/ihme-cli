@@ -235,3 +235,29 @@ Common tags: `#work`, `#dev`, `#personal`, `#throwaway`, `#team-<name>`.
 
 `ihme list --sort date:asc` to surface old addresses for audit.
 Suggest pruning dead services quarterly.
+
+## Execution adapters
+
+The procedure and taste rules above are shared by two executors; only
+the operation mapping differs.
+
+**External agent** (Claude Code etc.): run the shell commands as
+written above.
+
+**Embedded agent** (`ihme new <label> --agent`): the same file is
+embedded in the binary and invoked with the user's task. There is no
+shell — operations map to in-process tools:
+
+| Shell command | Embedded tool |
+|---|---|
+| `ihme auth status --json` | `auth_status` |
+| `ihme list --search <key> --json` | `search_addresses` |
+| `ihme new <label> --json` (candidates) | `generate_candidates` |
+| `ihme new <label> --address <a> --note <n> --json` | `reserve_address` |
+| `ihme deactivate <ref> --json` | `deactivate_address` |
+| `ihme edit <ref> ...` | `edit_note` |
+
+Embedded runs enforce the rotation cap (3 generation rounds) and
+call budgets in code, and gate mutating actions outside the run's
+granted scope behind user consent (`--grant ask`, the default) or
+allow them unattended (`--grant auto`).
