@@ -49,8 +49,9 @@ func TestTUIConsentIsAChoiceAndDefaultsToDeny(t *testing.T) {
 			Kind:    promptConsent,
 			Title:   "Create this Hide My Email address?",
 			Subject: "calm.river@icloud.com",
-			Detail:  `label "grok"`,
-			Why:     "a calm river bend — kept for the image; rejected turbo3_placard (embedded digit)",
+			Facts:   [][2]string{{"label", "grok"}, {"note", "grok signup 2026-07"}},
+			Why:     "a calm river bend — kept for the image",
+			Passed:  [][2]string{{"turbo3_placard", "embedded digit"}, {"pale_slate", "no image"}},
 		},
 		reply: replies,
 	})
@@ -60,10 +61,12 @@ func TestTUIConsentIsAChoiceAndDefaultsToDeny(t *testing.T) {
 	// Collapse soft line wraps so long phrases match across breaks.
 	view := strings.Join(strings.Fields(m.View().Content), " ")
 	for _, want := range []string{
-		"Allow once", "Deny", "Always this run", "y/n/a shortcut",
+		"Allow once", "Deny", "Always this run",
 		"calm.river@icloud.com", // the subject is on the card
+		"grok signup 2026-07",   // what gets written is on the card
 		"calm river bend",       // the verdict is on the card
-		"embedded digit",        // and so are the losers' failures
+		"turbo3_placard",        // and the candidates it beat,
+		"no image",              // each with its failure
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("consent view missing %q: %q", want, view)
@@ -77,6 +80,62 @@ func TestTUIConsentIsAChoiceAndDefaultsToDeny(t *testing.T) {
 	}
 	if len(m.steps) != 1 || !strings.Contains(m.steps[0].text, "Denied") {
 		t.Fatalf("steps = %+v", m.steps)
+	}
+}
+
+func TestTUIConsentTypedReplyRedirects(t *testing.T) {
+	m := newTUIModel(context.Background(), nil, "person@example.com", GrantAsk)
+	m.phase = phaseRunning
+	replies := make(chan promptReply, 1)
+	m.Update(promptRequestMsg{
+		prompt: userPrompt{Kind: promptConsent, Title: "Create this Hide My Email address?", Subject: "turbo3_placard@icloud.com"},
+		reply:  replies,
+	})
+
+	// Letters go to the reply input — no instant y/n/a firing.
+	if _, handled := m.handleKey(key('n')); handled {
+		t.Fatal("letter keys must not decide consent instantly")
+	}
+	select {
+	case r := <-replies:
+		t.Fatalf("consent decided by a keystroke: %+v", r)
+	default:
+	}
+
+	m.input.SetValue("use the calm river one instead")
+	m.handleKey(key(tea.KeyEnter))
+	reply := <-replies
+	if reply.err != nil || reply.answer != "use the calm river one instead" {
+		t.Fatalf("reply = %+v", reply)
+	}
+	if m.phase != phaseRunning {
+		t.Fatalf("phase after reply = %v", m.phase)
+	}
+	found := false
+	for _, step := range m.steps {
+		found = found || strings.Contains(step.text, "Redirected · use the calm river one instead")
+	}
+	if !found {
+		t.Fatalf("redirect not recorded in steps: %+v", m.steps)
+	}
+}
+
+func TestTUIConsentTypedShortcutsStillMeanButtons(t *testing.T) {
+	m := newTUIModel(context.Background(), nil, "person@example.com", GrantAsk)
+	m.phase = phaseRunning
+	replies := make(chan promptReply, 1)
+	m.Update(promptRequestMsg{
+		prompt: userPrompt{Kind: promptConsent, Title: "Create?"},
+		reply:  replies,
+	})
+	m.input.SetValue("y")
+	m.handleKey(key(tea.KeyEnter))
+	reply := <-replies
+	if reply.answer != "y" {
+		t.Fatalf("typed y should answer y, got %+v", reply)
+	}
+	if len(m.steps) != 1 || !strings.Contains(m.steps[0].text, "Allowed once") {
+		t.Fatalf("typed y must record the button outcome: %+v", m.steps)
 	}
 }
 

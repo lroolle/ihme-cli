@@ -40,9 +40,12 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 
 		case "reserve_address":
 			var args struct {
-				Address   string `json:"address"`
-				Label     string `json:"label"`
-				Rationale string `json:"rationale"`
+				Address   string      `json:"address"`
+				Label     string      `json:"label"`
+				Rationale string      `json:"rationale"`
+				Rejected  []Rejection `json:"rejected"`
+				Note      string      `json:"note"`
+				Tags      []string    `json:"tags"`
 			}
 			_ = json.Unmarshal(req.Call.Args, &args)
 			if st.label != "" && st.reserves == 0 && strings.EqualFold(args.Label, st.label) {
@@ -54,22 +57,36 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			// tool's own length check backstops the GrantAuto path.)
 			if len(strings.TrimSpace(args.Rationale)) < 20 {
 				return agentkit.GateDecision{Allowed: false,
-					Reason: "rationale first: the user decides from your taste verdict on the consent card — state the image this address makes and why each rejected candidate lost, then reserve again"}
+					Reason: "rationale first: the user decides from your taste verdict on the consent card — state the image this address makes and list each rejected candidate with its failure, then reserve again"}
 			}
-			detail := fmt.Sprintf("label %q", args.Label)
+			// The card shows everything the reservation will write.
+			facts := [][2]string{{"label", args.Label}}
+			if args.Note != "" {
+				facts = append(facts, [2]string{"note", args.Note})
+			}
+			if len(args.Tags) > 0 {
+				facts = append(facts, [2]string{"tags", strings.Join(args.Tags, " · ")})
+			}
+			var warn string
 			switch {
 			case st.label == "":
 			case !strings.EqualFold(args.Label, st.label):
-				detail = fmt.Sprintf("label %q — the task label is %q", args.Label, st.label)
+				warn = fmt.Sprintf("the task label is %q", st.label)
 			default:
-				detail = fmt.Sprintf("label %q — second reservation this run", args.Label)
+				warn = "second reservation this run"
+			}
+			passed := make([][2]string, 0, len(args.Rejected))
+			for _, r := range args.Rejected {
+				passed = append(passed, [2]string{r.Address, r.Reason})
 			}
 			return consent(ctx, ask, st, "reserve_address", userPrompt{
 				Kind:    promptConsent,
 				Title:   "Create this Hide My Email address?",
 				Subject: args.Address,
-				Detail:  detail,
+				Facts:   facts,
+				Warn:    warn,
 				Why:     strings.TrimSpace(args.Rationale),
+				Passed:  passed,
 			})
 
 		case "deactivate_address":
@@ -84,7 +101,7 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 				Kind:    promptConsent,
 				Title:   "Deactivate this address?",
 				Subject: args.Ref,
-				Detail:  "not created by this run — new mail to it will be rejected",
+				Warn:    "not created by this run — new mail to it will be rejected",
 			})
 
 		case "edit_note":
@@ -99,7 +116,7 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 				Kind:    promptConsent,
 				Title:   "Update this address?",
 				Subject: args.Ref,
-				Detail:  "not created by this run — label, note, or tags will change",
+				Warn:    "not created by this run — label, note, or tags will change",
 			})
 
 		default:

@@ -24,9 +24,11 @@ const (
 type userPrompt struct {
 	Kind    promptKind
 	Title   string
-	Subject string // the thing being acted on — rendered prominent
-	Detail  string // decision facts (label, scope warnings)
-	Why     string // the agent's stated verdict, in its own words
+	Subject string      // the thing being acted on — rendered prominent
+	Facts   [][2]string // what gets written: label, note, tags — key/value
+	Warn    string      // scope warning (second reservation, foreign address)
+	Why     string      // the agent's verdict on the winner, in its own words
+	Passed  [][2]string // candidate → why it lost, one row per rejected
 }
 
 // asker is the single input authority for one session: every
@@ -70,13 +72,22 @@ func renderCookedPrompt(prompt userPrompt) string {
 		if prompt.Subject != "" {
 			fmt.Fprintf(&b, "  \x1b[1m%s\x1b[0m\n", prompt.Subject)
 		}
-		if prompt.Detail != "" {
-			fmt.Fprintf(&b, "  %s\n", prompt.Detail)
+		for _, fact := range prompt.Facts {
+			fmt.Fprintf(&b, "  %-5s  %s\n", fact[0], fact[1])
+		}
+		if prompt.Warn != "" {
+			fmt.Fprintf(&b, "  ⚠ %s\n", prompt.Warn)
 		}
 		if prompt.Why != "" {
-			fmt.Fprintf(&b, "  why: %s\n", prompt.Why)
+			fmt.Fprintf(&b, "\n  %s\n", prompt.Why)
 		}
-		b.WriteString("  Allow? [y/N/a=always this run] ")
+		if len(prompt.Passed) > 0 {
+			b.WriteString("\n  passed on:\n")
+			for _, p := range prompt.Passed {
+				fmt.Fprintf(&b, "    %s — %s\n", p[0], p[1])
+			}
+		}
+		b.WriteString("\n  Allow? [y/N/a=always, or type a reply to redirect] ")
 		return b.String()
 	default:
 		return fmt.Sprintf("\n? %s\n> ", prompt.Title)
@@ -85,7 +96,8 @@ func renderCookedPrompt(prompt userPrompt) string {
 
 // consent runs the y/N/a protocol. Empty answers re-ask (they are
 // stale newlines or hesitation, never a decision); "a" allows this
-// tool for the rest of the run.
+// tool for the rest of the run. Any other text is the user talking
+// back — it rides the denial reason to the model as direction.
 func consent(ctx context.Context, ask asker, st *runState, tool string, prompt userPrompt) agentkit.GateDecision {
 	if st.allowAll[tool] {
 		return agentkit.GateDecision{Allowed: true}
@@ -101,7 +113,8 @@ func consent(ctx context.Context, ask asker, st *runState, tool string, prompt u
 		if err != nil {
 			return agentkit.GateDecision{Allowed: false, Reason: "no answer from user"}
 		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
+		text := strings.TrimSpace(answer)
+		switch strings.ToLower(text) {
 		case "":
 			continue // not a decision — ask again
 		case "y", "yes":
@@ -109,8 +122,11 @@ func consent(ctx context.Context, ask asker, st *runState, tool string, prompt u
 		case "a", "always":
 			st.allowAll[tool] = true
 			return agentkit.GateDecision{Allowed: true}
-		default:
+		case "n", "no":
 			return agentkit.GateDecision{Allowed: false, Reason: "user declined"}
+		default:
+			return agentkit.GateDecision{Allowed: false,
+				Reason: fmt.Sprintf("user replied instead of approving: %q — this is direction, not rejection of the task: adapt (different candidate, another round, changed metadata) and continue", text)}
 		}
 	}
 	return agentkit.GateDecision{Allowed: false, Reason: "no clear answer from user"}

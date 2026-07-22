@@ -40,6 +40,14 @@ type runState struct {
 	// so runners can surface WHY this address was picked, not just that
 	// it was.
 	lastRationale string
+	lastRejected  []Rejection
+}
+
+// Rejection is one candidate the agent saw and passed on, with its
+// stated failure. Surfaced on the consent card and in --json Results.
+type Rejection struct {
+	Address string `json:"address"`
+	Reason  string `json:"reason"`
 }
 
 func newRunState(label string) *runState {
@@ -157,17 +165,23 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 			Params: schema.Object(
 				schema.Property("address", schema.String("the candidate address to reserve")).Required(),
 				schema.Property("label", schema.String("service label, bare noun")).Required(),
-				schema.Property("rationale", schema.String("the taste verdict: what picture this address makes and why you would keep it, plus one clause per REJECTED candidate naming its failure (e.g. leading digits, no image, deficit word)")).Required(),
+				schema.Property("rationale", schema.String("the winner's taste verdict: the picture this address makes, the inspiration, why it fits this service")).Required(),
+				schema.Property("rejected", schema.Array("one entry per candidate you saw and did NOT pick — the user judges your choice against these",
+					schema.Object(
+						schema.Property("address", schema.String("the candidate")).Required(),
+						schema.Property("reason", schema.String("why it lost, one clause (e.g. leading digits, no image, deficit word)")).Required(),
+					))).Required(),
 				schema.Property("note", schema.String("compact durable note: why it exists, signup URL, context. Never secrets.")),
 				schema.Property("tags", schema.Array("tags like dev, work", schema.String("tag"))),
 			),
 			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 				var args struct {
-					Address   string   `json:"address"`
-					Label     string   `json:"label"`
-					Rationale string   `json:"rationale"`
-					Note      string   `json:"note"`
-					Tags      []string `json:"tags"`
+					Address   string      `json:"address"`
+					Label     string      `json:"label"`
+					Rationale string      `json:"rationale"`
+					Rejected  []Rejection `json:"rejected"`
+					Note      string      `json:"note"`
+					Tags      []string    `json:"tags"`
 				}
 				if err := json.Unmarshal(raw, &args); err != nil {
 					return nil, err
@@ -184,6 +198,7 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 				}
 				st.recordReservation(reserved)
 				st.lastRationale = strings.TrimSpace(args.Rationale)
+				st.lastRejected = args.Rejected
 				// Best-effort convenience: the address lands on the
 				// clipboard (pbcopy/xclip) ready to paste into the
 				// signup form. Failure is not an error — just absent.

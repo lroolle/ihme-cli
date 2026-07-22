@@ -213,9 +213,10 @@ func (m *tuiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyc
 		m.prompt = &msg
 		m.choice = 1 // destructive confirmation defaults to Deny.
 		if msg.prompt.Kind == promptConsent {
+			// The input stays live: consent is a conversation, not
+			// just a switch — typed text redirects the agent.
 			m.phase = phaseConsent
-			m.input.Blur()
-			return m, nil
+			return m, m.input.Focus()
 		}
 		m.phase = phaseQuestion
 		return m, m.input.Focus()
@@ -233,12 +234,9 @@ func (m *tuiModel) Update(message tea.Msg) (tea.Model, tea.Cmd) { //nolint:gocyc
 		}
 	}
 
-	if m.phase != phaseConsent {
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(message)
-		return m, cmd
-	}
-	return m, nil
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(message)
+	return m, cmd
 }
 
 func (m *tuiModel) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) { //nolint:gocyclo
@@ -308,27 +306,62 @@ func (m *tuiModel) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) { //nolint:goc
 		}
 
 	case phaseConsent:
+		// Letters are NOT instant shortcuts here: they belong to the
+		// reply input, so typing "no, use the mule one" can never
+		// half-fire a decision. Everything decides through Enter.
+		hasText := strings.TrimSpace(m.input.Value()) != ""
 		switch key {
 		case "left", "shift+tab":
-			m.choice = (m.choice + 2) % 3
-			return nil, true
+			if !hasText {
+				m.choice = (m.choice + 2) % 3
+				return nil, true
+			}
 		case "right", "tab":
-			m.choice = (m.choice + 1) % 3
-			return nil, true
-		case "y":
-			m.choice = 0
-			return m.confirmChoice(), true
-		case "n", "esc":
+			if !hasText {
+				m.choice = (m.choice + 1) % 3
+				return nil, true
+			}
+		case "esc":
+			if hasText {
+				m.input.Reset() // clear the reply first; esc again denies
+				return nil, true
+			}
 			m.choice = 1
 			return m.confirmChoice(), true
-		case "a":
-			m.choice = 2
-			return m.confirmChoice(), true
 		case "enter":
+			if hasText {
+				return m.replyToConsent(), true
+			}
 			return m.confirmChoice(), true
 		}
 	}
 	return nil, false
+}
+
+// replyToConsent sends the typed text as the consent answer. The
+// y/n/a words still mean their buttons; anything else rides the
+// denial back to the model as the user's direction.
+func (m *tuiModel) replyToConsent() tea.Cmd {
+	text := strings.TrimSpace(m.input.Value())
+	m.input.Reset()
+	switch strings.ToLower(text) {
+	case "y", "yes":
+		m.choice = 0
+		return m.confirmChoice()
+	case "n", "no":
+		m.choice = 1
+		return m.confirmChoice()
+	case "a", "always":
+		m.choice = 2
+		return m.confirmChoice()
+	}
+	m.steps = append(m.steps, tuiStep{
+		key:   fmt.Sprintf("consent:%d", len(m.steps)),
+		text:  "Redirected · " + text,
+		level: stepInfo,
+	})
+	m.answerPrompt(text, nil)
+	return m.resumeAfterPrompt()
 }
 
 func (m *tuiModel) submit() tea.Cmd {
@@ -831,10 +864,10 @@ func (m *tuiModel) renderQuestion(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(title + "\n" + m.input.View() + "\n" + m.styles.muted.Render("enter answer · esc skip"))
 }
 
-// renderConsent is the decision surface: the subject is prominent,
-// the facts are quiet, and the agent's verdict — WHY this one — is
-// the body. A consent card that hides the why is a card the user
-// cannot actually decide on.
+// renderConsent is the decision surface: the subject prominent, the
+// facts it will write quiet below it, the agent's verdict as the
+// body, and the candidates it passed on — so the user judges the
+// pick against what it beat, and can type a reply to redirect.
 func (m *tuiModel) renderConsent(width int) string {
 	if m.prompt == nil {
 		return ""
@@ -844,11 +877,24 @@ func (m *tuiModel) renderConsent(width int) string {
 	if prompt.Subject != "" {
 		lines = append(lines, "  "+m.styles.accent.Bold(true).Render(safeText(prompt.Subject)))
 	}
-	if prompt.Detail != "" {
-		lines = append(lines, "  "+m.styles.muted.Render(safeText(prompt.Detail)))
+	for _, fact := range prompt.Facts {
+		lines = append(lines, "  "+m.styles.muted.Render(fmt.Sprintf("%-5s", fact[0]))+"  "+safeText(fact[1]))
+	}
+	if prompt.Warn != "" {
+		lines = append(lines, "  "+m.styles.warning.Render("⚠ "+safeText(prompt.Warn)))
 	}
 	if prompt.Why != "" {
 		lines = append(lines, "", "  "+renderInline(prompt.Why, m.styles))
+	}
+	if len(prompt.Passed) > 0 {
+		lines = append(lines, "", "  "+m.styles.muted.Render("passed on"))
+		pad := 0
+		for _, p := range prompt.Passed {
+			pad = max(pad, len([]rune(p[0])))
+		}
+		for _, p := range prompt.Passed {
+			lines = append(lines, fmt.Sprintf("    %-*s  ", pad, safeText(p[0]))+m.styles.muted.Render(safeText(p[1])))
+		}
 	}
 	labels := []string{"Allow once", "Deny", "Always this run"}
 	buttons := make([]string, len(labels))
@@ -859,8 +905,11 @@ func (m *tuiModel) renderConsent(width int) string {
 			buttons[i] = m.styles.button.Render(label)
 		}
 	}
-	help := m.styles.muted.Render("←/→ choose · enter confirm · y/n/a shortcut")
-	lines = append(lines, "", strings.Join(buttons, "  "), help)
+	m.input.Prompt = "› "
+	m.input.Placeholder = "Reply to redirect the agent…"
+	m.input.SetWidth(max(12, width-2))
+	help := m.styles.muted.Render("enter confirm · ←/→ choose · or type a reply")
+	lines = append(lines, "", m.input.View(), strings.Join(buttons, "  "), help)
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 

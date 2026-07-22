@@ -89,7 +89,18 @@ characters) in both the TUI and TTY one-shot output. A successful
 reservation is loud: address + label + the taste rationale from the
 tool args, and the address is auto-copied to the clipboard
 (internal/clip: pbcopy/xclip, best-effort — shared with `ihme copy`).
---json Results carry the rationale field.
+--json Results carry rationale + rejected.
+
+The consent card is a decision surface: subject prominent, the facts
+the call will write (label/note/tags) as quiet key-values, warnings
+styled as warnings, the agent's verdict as the body, and a passed-on
+list (reserve_address requires a structured rejected[] — one entry
+per candidate seen and not picked). A rationale-less reserve bounces
+back to the model without prompting the user. Consent accepts a
+typed reply as a fourth answer: it rides the denial reason to the
+model as direction (no instant single-key y/n/a in the TUI — letters
+belong to the reply input; everything decides through Enter, empty
+input confirms the selected button, default Deny).
 
 BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
 effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/

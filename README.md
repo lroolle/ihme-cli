@@ -179,8 +179,8 @@ ihme agent "tag my linear address as work"   # one-shot task
 
 What you get, and what it must earn:
 
-- **The verdict is spoken.** Reserving requires a taste rationale — the image the winner makes and why each rejected candidate lost. It's shown in the transcript, in the `✓ reserved` banner, and in `--json` output (`rationale`); the reserved address lands on your clipboard (macOS/Linux).
-- **Consent by default.** `ihme new <label> --agent` pre-grants exactly one reservation for that label; `ihme agent` pre-grants *nothing* — every mutation asks (allow once / deny / always this run). `--grant auto` opts out per run.
+- **The verdict is spoken.** Reserving requires the winner's taste rationale plus one entry per rejected candidate with its failure. The consent card shows all of it — the address, the label/note/tags it will write, the why, and what it passed on — and it lands in the `✓ reserved` banner and `--json` output (`rationale`, `rejected`); the reserved address lands on your clipboard (macOS/Linux).
+- **Consent is a conversation.** `ihme new <label> --agent` pre-grants exactly one reservation for that label; `ihme agent` pre-grants *nothing* — every mutation asks: allow once, deny, always this run, **or type a reply** ("use the calm one, tag it work") and the agent adapts and re-asks. `--grant auto` opts out per run.
 - **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
 - **Wire protocol is auto-detected** per model family (`gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`.
 

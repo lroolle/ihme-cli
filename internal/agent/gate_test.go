@@ -181,7 +181,7 @@ func TestReserveConsentCarriesTheVerdict(t *testing.T) {
 	g := gate(GrantAsk, st, ask)
 	d := g(context.Background(), agentkit.GateRequest{
 		Call: agentkit.ToolCall{Name: "reserve_address",
-			Args: json.RawMessage(`{"address":"calm.river@icloud.com","label":"grok","rationale":"a calm river bend over gravel — kept for the image; rejected turbo3_placard (embedded digit)"}`)},
+			Args: json.RawMessage(`{"address":"calm.river@icloud.com","label":"grok","note":"grok signup","tags":["ai"],"rationale":"a calm river bend over gravel — kept for the image","rejected":[{"address":"turbo3_placard","reason":"embedded digit"},{"address":"pale_slate","reason":"no image"}]}`)},
 	})
 	if !d.Allowed {
 		t.Fatalf("consented reserve denied: %s", d.Reason)
@@ -189,11 +189,33 @@ func TestReserveConsentCarriesTheVerdict(t *testing.T) {
 	if got.Subject != "calm.river@icloud.com" {
 		t.Fatalf("subject = %q", got.Subject)
 	}
-	if !strings.Contains(got.Why, "river bend") || !strings.Contains(got.Why, "embedded digit") {
+	if !strings.Contains(got.Why, "river bend") {
 		t.Fatalf("verdict missing from consent prompt: %q", got.Why)
 	}
-	if strings.Contains(got.Detail, "creates a new address") {
-		t.Fatalf("boilerplate crept back into the card: %q", got.Detail)
+	wantFacts := map[string]string{"label": "grok", "note": "grok signup", "tags": "ai"}
+	for _, fact := range got.Facts {
+		if wantFacts[fact[0]] != fact[1] {
+			t.Fatalf("fact %q = %q, want %q", fact[0], fact[1], wantFacts[fact[0]])
+		}
+		delete(wantFacts, fact[0])
+	}
+	if len(wantFacts) > 0 {
+		t.Fatalf("facts missing from the card: %v (got %v)", wantFacts, got.Facts)
+	}
+	if len(got.Passed) != 2 || got.Passed[0][0] != "turbo3_placard" || got.Passed[1][1] != "no image" {
+		t.Fatalf("passed-on list wrong: %v", got.Passed)
+	}
+}
+
+func TestConsentReplyBecomesGuidance(t *testing.T) {
+	st := newRunState("x")
+	d := consent(context.Background(), scriptedAsker("use calm_mule instead, and tag it work"), st,
+		"reserve_address", userPrompt{Kind: promptConsent, Title: "Create?"})
+	if d.Allowed {
+		t.Fatal("a reply is not an approval")
+	}
+	if !strings.Contains(d.Reason, "calm_mule instead, and tag it work") || !strings.Contains(d.Reason, "direction") {
+		t.Fatalf("user's words must reach the model as direction: %q", d.Reason)
 	}
 }
 

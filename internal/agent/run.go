@@ -44,16 +44,22 @@ Rules:
   assumption in your summary — never stall waiting for an answer you
   cannot receive.
 - Some actions require user consent; a denied tool call tells you
-  why. Adapt or report — never repeat a denied call unchanged.
+  why. Adapt or report — never repeat a denied call unchanged. When
+  the denial carries the user's own reply, that is DIRECTION, not
+  rejection of the task: follow it (their preferred candidate, a new
+  round, changed metadata) and continue within scope.
 - Hard limits on generation rounds and total calls are enforced in
   code. When you hit one, wrap up with what you have.
 - Choosing an address IS the job — take the taste test seriously.
   Evaluate every candidate against the rubric individually before
-  reserving; reserve_address requires your rationale (the image the
-  winner makes, why each loser lost). If after rotation no candidate
-  clearly passes and ask_user is available, offer the user your top
-  two with one-line images instead of settling silently; without
-  ask_user, pick the least-bad, and say plainly it was a compromise.
+  reserving; reserve_address requires the winner's rationale (the
+  image it makes, the inspiration) AND one rejected entry per
+  candidate you passed on, each with its failure — the user judges
+  your pick against these on the consent card. If after rotation no
+  candidate clearly passes and ask_user is available, offer the user
+  your top two with one-line images instead of settling silently;
+  without ask_user, pick the least-bad, and say plainly it was a
+  compromise.
 - Finish with a short summary the user can act on: what happened,
   the reserved address verbatim in **bold**, the image that made it
   win, one clause each on why the rejected candidates lost, and any
@@ -165,8 +171,9 @@ type Options struct {
 type Result struct {
 	Reserved *api.HmeEmail `json:"reserved"`
 	// Rationale is the taste verdict the model attached to the
-	// reservation: why this address won and the others lost.
+	// reservation; Rejected lists the candidates it passed on and why.
 	Rationale  string             `json:"rationale,omitempty"`
+	Rejected   []Rejection        `json:"rejected,omitempty"`
 	Summary    string             `json:"summary"`
 	Transcript []agentkit.Message `json:"transcript"`
 	Usage      agentkit.Usage     `json:"usage"`
@@ -213,6 +220,7 @@ func result(s *session, transcript []agentkit.Message) *Result {
 	return &Result{
 		Reserved:   s.st.lastReserved,
 		Rationale:  s.st.lastRationale,
+		Rejected:   s.st.lastRejected,
 		Summary:    finalText(transcript),
 		Transcript: transcript,
 		Usage:      s.usage,
@@ -271,7 +279,8 @@ func renderer(textOut, meta io.Writer, usage *agentkit.Usage) func(agentkit.Even
 // product — it never hides in tool-trace JSON.
 func reservedBanner(e agentkit.ToolEnd) string {
 	var args struct {
-		Rationale string `json:"rationale"`
+		Rationale string      `json:"rationale"`
+		Rejected  []Rejection `json:"rejected"`
 	}
 	var result struct {
 		Address addressView `json:"address"`
@@ -284,6 +293,9 @@ func reservedBanner(e agentkit.ToolEnd) string {
 	fmt.Fprintf(&b, "\n\x1b[1m✓ reserved %s\x1b[0m — %s\n", result.Address.Hme, result.Address.Label)
 	if why := strings.TrimSpace(args.Rationale); why != "" {
 		fmt.Fprintf(&b, "  why: %s\n", why)
+	}
+	for _, r := range args.Rejected {
+		fmt.Fprintf(&b, "  passed: %s — %s\n", r.Address, r.Reason)
 	}
 	if result.Copied {
 		b.WriteString("  (copied to clipboard)\n")
