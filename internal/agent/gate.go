@@ -55,7 +55,7 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			// user can make — never ask them to approve a verdict-less
 			// reservation. Bounce it back to the model instead. (The
 			// tool's own length check backstops the GrantAuto path.)
-			if len(strings.TrimSpace(args.Rationale)) < 20 {
+			if len(strings.TrimSpace(args.Rationale)) < minRationale {
 				return agentkit.GateDecision{Allowed: false,
 					Reason: "rationale first: the user decides from your taste verdict on the consent card — state the image this address makes and list each rejected candidate with its failure, then reserve again"}
 			}

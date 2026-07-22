@@ -23,6 +23,12 @@ const maxGenerateRounds = 3
 // interrogate the user in a loop.
 const maxQuestions = 3
 
+// minRationale is the shortest reserve rationale accepted anywhere:
+// the gate refuses to put a verdict-less reservation in front of the
+// user, and the tool enforces the same floor on the GrantAuto path
+// where no gate runs.
+const minRationale = 20
+
 // runState is the per-run scope shared by tools and gate: what this
 // run created is what unattended consent covers.
 type runState struct {
@@ -189,7 +195,7 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 				// The rationale is the taste test made mandatory: a
 				// reserve without an articulated verdict is refused
 				// before it reaches Apple.
-				if len(strings.TrimSpace(args.Rationale)) < 20 {
+				if len(strings.TrimSpace(args.Rationale)) < minRationale {
 					return nil, fmt.Errorf("rationale required: state the image this address makes, why you'd keep it, and why each rejected candidate lost")
 				}
 				reserved, err := svc.Reserve(args.Address, args.Label, args.Tags, args.Note)

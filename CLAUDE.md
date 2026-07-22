@@ -66,52 +66,32 @@ examples/
 Two entry points, one adapter (internal/agent):
 
 - `ihme new <label> --agent [--grant ask|auto]` — scoped: runs the
-  SKILL.md procedure; pre-grants ONE reservation for the label and
+  SKILL.md procedure; pre-grants ONE reservation for that label and
   touching only addresses created this run; everything else prompts.
 - `ihme agent [task]` (alias `ihme --agent`) — general: interactive
-  REPL without args, one-shot with a task. NOTHING is pre-granted:
-  every mutation (reserve/deactivate/edit) asks unless --grant auto.
+  TUI without args, one-shot with a task; nothing is pre-granted.
 
-Interaction design: one input authority (asker) per session. The
-interactive REPL is an inline Bubble Tea UI with Bubbles text input:
-streamed work is summarized as status rows, raw tool JSON stays out
-of the transcript, questions get a dedicated input, and consent is
-a three-choice control (allow once / deny / always this run). Drafts
-typed while the model works are preserved for the next turn and never
-become phantom prompt answers. One-shot runs retain a cooked-mode text
-fallback with drain-and-reprompt consent.
+Code is the source of truth for the behavior; the load-bearing
+comments live where the behavior lives:
 
-Presentation: the status line carries a live tail of the model's
-reasoning summary while it works (the finished transcript never
-includes it); assistant prose renders inline markdown (**bold**,
-*italic*, `code` — underscores stay literal, they are address
-characters) in both the TUI and TTY one-shot output. A successful
-reservation is loud: address + label + the taste rationale from the
-tool args, and the address is auto-copied to the clipboard
-(internal/clip: pbcopy/xclip, best-effort — shared with `ihme copy`).
---json Results carry rationale + rejected.
+- internal/agent/tui.go — interactive session: input authority,
+  consent card, typed-reply redirect, reasoning status line
+- internal/agent/gate.go — the scoped-consent policy
+- internal/agent/interact.go — consent protocol (y/N/a/reply)
+- internal/agent/config.go, auto.go — BYOK config keys and
+  wire-protocol auto-detection
+- internal/agent/run.go — system prompt, renderer, one-shot runs
+- skill/SKILL.md — the operational procedure. RUNTIME PROMPT
+  CONTENT (go:embed, invoked as a task turn): whenever tool schemas
+  in tools.go change, its embedded-agent section must change with
+  them, or the model reads two contracts.
+- pkg/agentkit/README.md — kernel contract and invariants
 
-The consent card is a decision surface: subject prominent, the facts
-the call will write (label/note/tags) as quiet key-values, warnings
-styled as warnings, the agent's verdict as the body, and a passed-on
-list (reserve_address requires a structured rejected[] — one entry
-per candidate seen and not picked). A rationale-less reserve bounces
-back to the model without prompting the user. Consent accepts a
-typed reply as a fourth answer: it rides the denial reason to the
-model as direction (no instant single-key y/n/a in the TUI — letters
-belong to the reply input; everything decides through Enter, empty
-input confirms the selected button, default Deny).
-
-BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
-effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/
-OPENAI_API_KEY). api defaults to "auto": guess the wire protocol
-from the model family (gpt-5*/o1/o3/o4/codex -> responses, else
-completions), flip automatically on the endpoint's misroute signal,
-and persist the discovery to agent.json — the wrong first call
-happens at most once per model. Pin "completions"/"responses" to
-disable detection.
-Rotation is capped at 3 generation rounds in the tool. Kernel
-invariants and design: pkg/agentkit/README.md.
+Design rejections and their reasons: TASTE.md. When something needs
+explaining, prefer (in order) a code comment at the behavior, a scar
+in TASTE.md, or a where-to-look line here. Do not re-grow prose that
+restates tui.go — it drifted within hours the last time; this
+section has been composted once already.
 
 ## Auth flow
 

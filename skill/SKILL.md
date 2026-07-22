@@ -206,8 +206,10 @@ Error: <ref> required — an address label, email, or ID
    after rotation: interactively (embedded: `ask_user`), offer your top two
    with a one-line image each and let the user pick; non-interactively,
    reserve the least-bad and say plainly it was a compromise. Embedded runs
-   must articulate the verdict: `reserve_address` requires a rationale naming
-   the winner's image and each rejected candidate's failure.
+   must articulate the verdict: `reserve_address` requires `rationale` (the
+   winner's image and why it fits) plus one `rejected` entry per candidate
+   you passed on, each naming its failure — the user judges your pick
+   against these on the consent card.
 
 5. **Reserve with a useful note.** `ihme new` supports `--note`; Apple stores it
    in the address metadata, and `ihme list --search` searches it. Keep notes
