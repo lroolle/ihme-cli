@@ -2,10 +2,8 @@ package copy
 
 import (
 	"fmt"
-	"os/exec"
-	"runtime"
-	"strings"
 
+	"github.com/lroolle/ihme-cli/internal/clip"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/pkg/resolver"
 
@@ -35,7 +33,7 @@ func NewCmdCopy() *cobra.Command {
 				return err
 			}
 
-			if err := toClipboard(hme.Hme); err != nil {
+			if err := clip.Copy(hme.Hme); err != nil {
 				fmt.Println(hme.Hme)
 				return nil
 			}
@@ -44,18 +42,4 @@ func NewCmdCopy() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func toClipboard(text string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	default:
-		return fmt.Errorf("clipboard not supported on %s", runtime.GOOS)
-	}
-	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
 }

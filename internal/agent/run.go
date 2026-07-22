@@ -13,6 +13,7 @@ import (
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 	"github.com/lroolle/ihme-cli/skill"
+	"golang.org/x/term"
 )
 
 // systemPrompt holds the stable executor rules. The operational
@@ -53,8 +54,13 @@ Rules:
   clearly passes and ask_user is available, offer the user your top
   two with one-line images instead of settling silently; without
   ask_user, pick the least-bad, and say plainly it was a compromise.
-- Finish with a one-line summary: what was done (or not), and why.
-  If you compromised, say so.`
+- Finish with a short summary the user can act on: what happened,
+  the reserved address verbatim in **bold**, the image that made it
+  win, one clause each on why the rejected candidates lost, and any
+  note or tags you wrote. If you compromised or assumed something,
+  say so plainly.
+- Style sparingly with **bold**, *italic*, and ` + "`code`" + ` — the
+  UI renders them. Bold is for the address the user keeps.`
 
 // session wires one agent run: kernel config over the app service.
 type session struct {
@@ -157,7 +163,10 @@ type Options struct {
 
 // Result is the structured outcome for --json consumers.
 type Result struct {
-	Reserved   *api.HmeEmail      `json:"reserved"`
+	Reserved *api.HmeEmail `json:"reserved"`
+	// Rationale is the taste verdict the model attached to the
+	// reservation: why this address won and the others lost.
+	Rationale  string             `json:"rationale,omitempty"`
 	Summary    string             `json:"summary"`
 	Transcript []agentkit.Message `json:"transcript"`
 	Usage      agentkit.Usage     `json:"usage"`
@@ -203,6 +212,7 @@ func invocation(task string) agentkit.Message {
 func result(s *session, transcript []agentkit.Message) *Result {
 	return &Result{
 		Reserved:   s.st.lastReserved,
+		Rationale:  s.st.lastRationale,
 		Summary:    finalText(transcript),
 		Transcript: transcript,
 		Usage:      s.usage,
@@ -210,15 +220,19 @@ func result(s *session, transcript []agentkit.Message) *Result {
 }
 
 // renderer prints assistant text to textOut and tool lifecycle
-// lines to meta.
+// lines to meta. Assistant prose flows through the markdown styler
+// when textOut is a terminal; pipes get the raw text.
 func renderer(textOut, meta io.Writer, usage *agentkit.Usage) func(agentkit.Event) error {
+	var text mdWriter = mdPassthrough{w: textOut}
+	if f, ok := textOut.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		text = newMDANSI(textOut)
+	}
 	return func(ev agentkit.Event) error {
 		switch e := ev.(type) {
 		case agentkit.ModelEvent:
 			switch e.Stream.Type {
 			case agentkit.StreamText:
-				_, err := fmt.Fprint(textOut, e.Stream.Text)
-				return err
+				return text.WriteText(e.Stream.Text)
 			case agentkit.StreamThinking:
 				// Reasoning summaries, dimmed: the deliberation is
 				// part of the product, not a secret.
@@ -233,15 +247,48 @@ func renderer(textOut, meta io.Writer, usage *agentkit.Usage) func(agentkit.Even
 				_, err := fmt.Fprintf(meta, "<- %s: %s\n", e.Call.Name, e.Err)
 				return err
 			}
+			if e.Call.Name == "reserve_address" && !e.Denied {
+				_, err := fmt.Fprint(meta, reservedBanner(e))
+				return err
+			}
 			_, err := fmt.Fprintf(meta, "<- %s %s\n", e.Call.Name, compact(e.Result))
 			return err
 		case agentkit.RunEnd:
 			*usage = e.Usage
+			if err := text.Close(); err != nil {
+				return err
+			}
 			_, err := fmt.Fprintf(meta, "\n[%s | tokens in=%d out=%d]\n", e.Reason, e.Usage.InputTokens, e.Usage.OutputTokens)
 			return err
 		}
 		return nil
 	}
+}
+
+// reservedBanner renders a successful reservation loudly: the
+// address, its label, the taste rationale that picked it, and
+// whether it already sits on the clipboard. The verdict is the
+// product — it never hides in tool-trace JSON.
+func reservedBanner(e agentkit.ToolEnd) string {
+	var args struct {
+		Rationale string `json:"rationale"`
+	}
+	var result struct {
+		Address addressView `json:"address"`
+		Copied  bool        `json:"copiedToClipboard"`
+	}
+	_ = json.Unmarshal(e.Call.Args, &args)
+	_ = json.Unmarshal(e.Result, &result)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n\x1b[1m✓ reserved %s\x1b[0m — %s\n", result.Address.Hme, result.Address.Label)
+	if why := strings.TrimSpace(args.Rationale); why != "" {
+		fmt.Fprintf(&b, "  why: %s\n", why)
+	}
+	if result.Copied {
+		b.WriteString("  (copied to clipboard)\n")
+	}
+	return b.String()
 }
 
 func finalText(transcript []agentkit.Message) string {

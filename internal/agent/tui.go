@@ -135,6 +135,7 @@ type tuiModel struct {
 	assistant   string
 	textTurn    int
 	activity    string
+	reason      string
 
 	prompt     *promptRequestMsg
 	choice     int
@@ -350,6 +351,7 @@ func (m *tuiModel) submit() tea.Cmd {
 	m.steps = nil
 	m.assistant = ""
 	m.textTurn = 0
+	m.reason = ""
 	m.activity = "Thinking"
 	m.welcome = false
 	m.phase = phaseRunning
@@ -472,9 +474,12 @@ func (m *tuiModel) handleAgentEvent(event agentkit.Event) {
 	case agentkit.ModelEvent:
 		switch e.Stream.Type {
 		case agentkit.StreamThinking:
-			// Raw reasoning summaries are intentionally not transcript UI.
-			// A stable status conveys progress without dumping model internals.
-			m.activity = "Thinking"
+			// The live status line carries the tail of the model's
+			// reasoning summary — visible progress while it works.
+			// The finished transcript never includes it: finishTurn
+			// clears the activity line before printing the block.
+			m.reason += e.Stream.Text
+			m.activity = thinkingActivity(m.reason)
 		case agentkit.StreamText:
 			if e.Stream.Text != "" {
 				if m.textTurn != 0 && m.textTurn != e.Turn && m.assistant != "" {
@@ -587,12 +592,25 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 		}
 
 	case "reserve_address":
+		var args struct {
+			Rationale string `json:"rationale"`
+		}
 		var result struct {
 			Address addressView `json:"address"`
+			Copied  bool        `json:"copiedToClipboard"`
 		}
+		_ = json.Unmarshal(event.Call.Args, &args)
 		_ = json.Unmarshal(event.Result, &result)
 		step.text = "Reserved " + result.Address.Hme
+		if result.Copied {
+			step.text += " · copied"
+		}
 		step.detail = "Label: " + result.Address.Label
+		// The taste verdict is the product — it belongs in the
+		// transcript, not buried in tool-call JSON.
+		if why := strings.TrimSpace(args.Rationale); why != "" {
+			step.detail += " — " + why
+		}
 
 	case "deactivate_address":
 		var result struct {
@@ -632,6 +650,25 @@ func plural(n int) string {
 		return ""
 	}
 	return "es"
+}
+
+// thinkingActivity turns an accumulated reasoning summary into a
+// one-line status: the most recent line, tail-truncated. Enough to
+// see where the model's head is without dumping the whole stream.
+func thinkingActivity(reason string) string {
+	lines := strings.Split(safeText(reason), "\n")
+	last := ""
+	for i := len(lines) - 1; i >= 0 && last == ""; i-- {
+		last = strings.Join(strings.Fields(lines[i]), " ")
+	}
+	if last == "" {
+		return "Thinking"
+	}
+	const limit = 64
+	if runes := []rune(last); len(runes) > limit {
+		last = "…" + string(runes[len(runes)-limit:])
+	}
+	return "Thinking · " + last
 }
 
 func shortError(err error) string {
@@ -803,23 +840,54 @@ func (m *tuiModel) renderConsent(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(title + "\n" + detail + "\n\n" + strings.Join(buttons, "  ") + "\n" + help)
 }
 
+// renderInline styles the markdown the model is invited to use:
+// **bold**, *italic*, `code`. Underscores stay literal — they are
+// address characters here, not emphasis.
 func renderInline(text string, styles tuiStyles) string {
-	text = safeText(text)
-	boldParts := strings.Split(text, "**")
-	var out strings.Builder
-	for i, part := range boldParts {
-		segments := strings.Split(part, "`")
-		for j, segment := range segments {
-			style := lipgloss.NewStyle()
-			if i%2 == 1 {
-				style = styles.strong
+	runes := []rune(safeText(text))
+	var out, seg strings.Builder
+	var bold, italic, code bool
+	emit := func() {
+		if seg.Len() == 0 {
+			return
+		}
+		style := lipgloss.NewStyle()
+		switch {
+		case code:
+			style = styles.accent
+		default:
+			if bold {
+				style = style.Bold(true)
 			}
-			if j%2 == 1 {
-				style = styles.accent
+			if italic {
+				style = style.Italic(true)
 			}
-			out.WriteString(style.Render(segment))
+		}
+		out.WriteString(style.Render(seg.String()))
+		seg.Reset()
+	}
+	for i := 0; i < len(runes); {
+		r := runes[i]
+		switch {
+		case r == '`':
+			emit()
+			code = !code
+			i++
+		case r == '*' && !code:
+			emit()
+			if i+1 < len(runes) && runes[i+1] == '*' {
+				bold = !bold
+				i += 2
+			} else {
+				italic = !italic
+				i++
+			}
+		default:
+			seg.WriteRune(r)
+			i++
 		}
 	}
+	emit()
 	return out.String()
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/internal/app"
+	"github.com/lroolle/ihme-cli/internal/clip"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 	"github.com/lroolle/ihme-cli/pkg/agentkit/schema"
 	"github.com/lroolle/ihme-cli/pkg/filter"
@@ -35,6 +36,10 @@ type runState struct {
 	// allowAll remembers per-tool "always this run" consent answers.
 	allowAll     map[string]bool
 	lastReserved *api.HmeEmail
+	// lastRationale keeps the taste verdict of the winning reservation
+	// so runners can surface WHY this address was picked, not just that
+	// it was.
+	lastRationale string
 }
 
 func newRunState(label string) *runState {
@@ -178,7 +183,12 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 					return nil, err
 				}
 				st.recordReservation(reserved)
-				return marshal(map[string]any{"status": "reserved", "address": view(*reserved)})
+				st.lastRationale = strings.TrimSpace(args.Rationale)
+				// Best-effort convenience: the address lands on the
+				// clipboard (pbcopy/xclip) ready to paste into the
+				// signup form. Failure is not an error — just absent.
+				copied := clip.Copy(reserved.Hme) == nil
+				return marshal(map[string]any{"status": "reserved", "address": view(*reserved), "copiedToClipboard": copied})
 			},
 		},
 		agentkit.FuncTool{

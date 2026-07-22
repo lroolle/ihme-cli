@@ -74,12 +74,22 @@ Two entry points, one adapter (internal/agent):
 
 Interaction design: one input authority (asker) per session. The
 interactive REPL is an inline Bubble Tea UI with Bubbles text input:
-streamed work is summarized as status rows, reasoning/tool JSON stays
-out of the transcript, questions get a dedicated input, and consent is
+streamed work is summarized as status rows, raw tool JSON stays out
+of the transcript, questions get a dedicated input, and consent is
 a three-choice control (allow once / deny / always this run). Drafts
 typed while the model works are preserved for the next turn and never
 become phantom prompt answers. One-shot runs retain a cooked-mode text
 fallback with drain-and-reprompt consent.
+
+Presentation: the status line carries a live tail of the model's
+reasoning summary while it works (the finished transcript never
+includes it); assistant prose renders inline markdown (**bold**,
+*italic*, `code` — underscores stay literal, they are address
+characters) in both the TUI and TTY one-shot output. A successful
+reservation is loud: address + label + the taste rationale from the
+tool args, and the address is auto-copied to the clipboard
+(internal/clip: pbcopy/xclip, best-effort — shared with `ihme copy`).
+--json Results carry the rationale field.
 
 BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
 effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/
