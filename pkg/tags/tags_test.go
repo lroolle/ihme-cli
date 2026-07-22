@@ -22,7 +22,7 @@ func TestParseTagsAndNote(t *testing.T) {
 
 	for _, tt := range tests {
 		p := Parse(tt.input)
-		if !reflect.DeepEqual(p.Tags, tt.tags) && !(len(p.Tags) == 0 && len(tt.tags) == 0) {
+		if !reflect.DeepEqual(p.Tags, tt.tags) && (len(p.Tags) != 0 || len(tt.tags) != 0) {
 			t.Errorf("Parse(%q).Tags = %v, want %v", tt.input, p.Tags, tt.tags)
 		}
 		if p.Note != tt.note {

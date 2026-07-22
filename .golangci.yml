@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  # Standard set (govet, staticcheck, unused, ineffassign) minus
+  # errcheck: the codebase has ~20 deliberate unchecked errors
+  # (deferred Closes, Fprintf to stdout/tabwriter, best-effort
+  # cleanup) that need per-site triage, not a blanket gate. Adopting
+  # errcheck properly is roadmap review work.
+  disable:
+    - errcheck

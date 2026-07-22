@@ -60,7 +60,7 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 				appleID = strings.TrimSpace(line)
 			}
 			if appleID == "" {
-				return fmt.Errorf("Apple ID required")
+				return fmt.Errorf("missing Apple ID")
 			}
 
 			fmt.Print("Password: ")
