@@ -165,7 +165,7 @@ func newTUIModel(ctx context.Context, s *session, appleID string, grant GrantMod
 		spinner:      spin,
 		phase:        phaseReady,
 		welcome:      true,
-		transcript:   startTranscript(),
+		transcript:   s.startTranscript(),
 		historyIndex: 0,
 	}
 	m.setStyles(true)
@@ -389,6 +389,11 @@ func (m *tuiModel) submit() tea.Cmd {
 	m.welcome = false
 	m.phase = phaseRunning
 	m.stopping = false
+	// A new request is a new task: refresh the per-task rate budgets so
+	// a long session never runs out of generate/refresh room.
+	if m.session != nil {
+		m.session.st.resetTurn()
+	}
 	m.transcript = append(m.transcript, agentkit.Message{Role: agentkit.RoleUser, Text: line})
 
 	turnCtx, cancel := context.WithCancel(m.ctx)
@@ -564,6 +569,8 @@ func toolActivity(call agentkit.ToolCall) string {
 		return "Searching" + quoted("query")
 	case "generate_candidates":
 		return "Generating address ideas"
+	case "refresh_candidates":
+		return "Refreshing the candidate pool"
 	case "reserve_address":
 		return "Reserving" + quoted("address")
 	case "deactivate_address":
@@ -572,6 +579,10 @@ func toolActivity(call agentkit.ToolCall) string {
 		return "Updating" + quoted("ref")
 	case "ask_user":
 		return "Waiting for your answer"
+	case "recall_memory":
+		return "Recalling" + quoted("query")
+	case "remember":
+		return "Noting to memory"
 	default:
 		return "Working"
 	}
@@ -634,6 +645,23 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 			step.detail = strings.Join(locals, " · ")
 		}
 
+	case "refresh_candidates":
+		var result struct {
+			Candidates []string `json:"candidates"`
+		}
+		_ = json.Unmarshal(event.Result, &result)
+		// State the action taken, not the outcome — whether Apple
+		// actually served a fresh pool is judged from the candidates
+		// below, not asserted here.
+		step.text = "Burned a throwaway to fetch new candidates"
+		locals := make([]string, 0, len(result.Candidates))
+		for _, c := range result.Candidates {
+			locals = append(locals, strings.SplitN(c, "@", 2)[0])
+		}
+		if len(locals) > 0 {
+			step.detail = strings.Join(locals, " · ")
+		}
+
 	case "reserve_address":
 		var args struct {
 			Rationale string `json:"rationale"`
@@ -674,6 +702,37 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 		_ = json.Unmarshal(event.Result, &result)
 		step.text = "Updated " + result.Hme
 
+	case "recall_memory":
+		var args struct {
+			Query string `json:"query"`
+		}
+		var result struct {
+			Count int `json:"count"`
+		}
+		_ = json.Unmarshal(event.Call.Args, &args)
+		_ = json.Unmarshal(event.Result, &result)
+		step.level = stepInfo
+		if result.Count == 0 {
+			step.text = fmt.Sprintf("No memory of %q yet", args.Query)
+		} else {
+			step.text = fmt.Sprintf("Recalled %d note%s about %q", result.Count, pluralS(result.Count), args.Query)
+		}
+
+	case "remember":
+		var args struct {
+			Topic string `json:"topic"`
+		}
+		var result struct {
+			AlwaysLoaded bool `json:"alwaysLoaded"`
+		}
+		_ = json.Unmarshal(event.Call.Args, &args)
+		_ = json.Unmarshal(event.Result, &result)
+		step.level = stepInfo
+		step.text = "Remembered · " + args.Topic
+		if result.AlwaysLoaded {
+			step.text += " (loaded every run)"
+		}
+
 	default:
 		step.text = toolName(event.Call.Name) + " complete"
 	}
@@ -693,6 +752,14 @@ func plural(n int) string {
 		return ""
 	}
 	return "es"
+}
+
+// pluralS is the -s plural (note/notes), distinct from plural's -es.
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // thinkingActivity turns an accumulated reasoning summary into a

@@ -38,6 +38,26 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 		case "auth_status", "search_addresses", "generate_candidates", "ask_user":
 			return agentkit.GateDecision{Allowed: true}
 
+		// Memory touches only the user's own local notebook — never
+		// Apple, never the network. Gating it would nag on every recall
+		// and every learning, so it is always allowed. recall reads;
+		// remember appends a durable note the user can see and edit.
+		case "recall_memory", "remember":
+			return agentkit.GateDecision{Allowed: true}
+
+		// refresh_candidates reserves, deactivates, then deletes a
+		// throwaway — net-zero on the common path (nothing is left
+		// behind). Consent gates PERSISTENT keeper state (a real
+		// reservation, a deactivation, an edit the user will see
+		// later); a confirmation here would only add friction and
+		// dilute the one card that matters, while the real abuse bound
+		// is the per-task refresh cap in code. The rare delete failure
+		// leaves one inactive, clearly-labeled throwaway — surfaced to
+		// the user via the tool result, not silent. Allowed, and
+		// rendered loudly in the step log so the churn stays visible.
+		case "refresh_candidates":
+			return agentkit.GateDecision{Allowed: true}
+
 		case "reserve_address":
 			var args struct {
 				Address   string      `json:"address"`

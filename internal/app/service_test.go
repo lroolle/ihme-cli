@@ -15,6 +15,7 @@ type fakeAPI struct {
 	reserved  []string
 	updates   []string // "id|label|note"
 	deactived []string
+	deleted   []string
 }
 
 func (f *fakeAPI) ListHme() (*api.ListHmeResult, error) {
@@ -30,7 +31,7 @@ func (f *fakeAPI) GenerateHme() (string, error) {
 }
 func (f *fakeAPI) ReserveHme(hme, label, note string) (*api.HmeEmail, error) {
 	f.reserved = append(f.reserved, hme+"|"+label+"|"+note)
-	return &api.HmeEmail{Hme: hme, Label: label, Note: note, IsActive: true}, nil
+	return &api.HmeEmail{AnonymousID: "id:" + hme, Hme: hme, Label: label, Note: note, IsActive: true}, nil
 }
 func (f *fakeAPI) UpdateHmeMetadata(id, label, note string) error {
 	f.updates = append(f.updates, id+"|"+label+"|"+note)
@@ -38,6 +39,22 @@ func (f *fakeAPI) UpdateHmeMetadata(id, label, note string) error {
 }
 func (f *fakeAPI) DeactivateHme(id string) error {
 	f.deactived = append(f.deactived, id)
+	return nil
+}
+
+// DeleteHme models Apple's real contract: an ACTIVE address cannot be
+// deleted; it must be deactivated first (see cmd/lifecycle delete).
+func (f *fakeAPI) DeleteHme(id string) error {
+	deactivated := false
+	for _, d := range f.deactived {
+		if d == id {
+			deactivated = true
+		}
+	}
+	if !deactivated {
+		return errors.New("cannot delete an active address — deactivate first")
+	}
+	f.deleted = append(f.deleted, id)
 	return nil
 }
 
@@ -66,6 +83,47 @@ func TestGeneratePartialPoolOnError(t *testing.T) {
 	if _, err := New(f2).Generate(3); err == nil {
 		t.Fatal("want error when nothing was generated")
 	}
+}
+
+func TestRefreshCandidatesBurnsAThrowawayNetZero(t *testing.T) {
+	// First generate is the sacrificial slot; the rest are the fresh pool.
+	f := &fakeAPI{genQueue: []string{"burn@icloud.com", "fresh1@icloud.com", "fresh2@icloud.com", "fresh3@icloud.com"}}
+	got, err := New(f).RefreshCandidates(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Candidates) != 3 || got.Candidates[0] != "fresh1@icloud.com" {
+		t.Fatalf("fresh pool = %v", got.Candidates)
+	}
+	// Net-zero: the throwaway was deactivated THEN deleted (Apple's
+	// required order) and is gone — no leftover.
+	if got.Leftover != "" {
+		t.Fatalf("common path must leave no litter, got leftover %q", got.Leftover)
+	}
+	if len(f.deactived) != 1 || len(f.deleted) != 1 || f.deleted[0] != "id:burn@icloud.com" {
+		t.Fatalf("throwaway must be deactivated then deleted: deactived=%v deleted=%v", f.deactived, f.deleted)
+	}
+}
+
+// When delete fails after deactivate (rare), the throwaway is left
+// deactivated and reported — never silently dropped as litter.
+func TestRefreshCandidatesSurfacesUndeletableLeftover(t *testing.T) {
+	f := &fakeDeleteFailsAPI{fakeAPI: fakeAPI{genQueue: []string{"burn@icloud.com", "fresh1@icloud.com"}}}
+	got, err := New(f).RefreshCandidates(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Leftover != "burn@icloud.com" {
+		t.Fatalf("undeletable throwaway must be surfaced, got %q", got.Leftover)
+	}
+}
+
+// fakeDeleteFailsAPI models a transient delete failure after a
+// successful deactivate.
+type fakeDeleteFailsAPI struct{ fakeAPI }
+
+func (f *fakeDeleteFailsAPI) DeleteHme(id string) error {
+	return errors.New("temporarily unavailable")
 }
 
 func TestReserveSerializesTags(t *testing.T) {

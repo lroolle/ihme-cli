@@ -51,7 +51,7 @@ func runPipedREPL(ctx context.Context, svc *app.Service, appleID string, grant G
 	}
 	fmt.Fprintln(os.Stderr, greeting)
 
-	transcript := startTranscript()
+	transcript := s.startTranscript()
 	for {
 		fmt.Fprint(os.Stderr, "\n"+replPrompt)
 		line, err := stdinReader.ReadString('\n')
@@ -70,8 +70,8 @@ func runPipedREPL(ctx context.Context, svc *app.Service, appleID string, grant G
 	}
 }
 
-func startTranscript() []agentkit.Message {
-	return []agentkit.Message{invocation(
+func (s *session) startTranscript() []agentkit.Message {
+	return []agentkit.Message{s.invocation(
 		"Assist the user with their Hide My Email addresses in an interactive session. " +
 			"Follow the procedure above when creating addresses. Respond to each request " +
 			"conversationally and concisely; ask when a request is ambiguous.")}
@@ -88,6 +88,8 @@ func replTurn(ctx context.Context, s *session, transcript []agentkit.Message, li
 		return transcript, true
 	}
 
+	// A new request is a new task: refresh the per-task rate budgets.
+	s.st.resetTurn()
 	transcript = append(transcript, agentkit.Message{Role: agentkit.RoleUser, Text: line})
 	updated, err := s.exec(ctx, transcript)
 	transcript = updated // keep partial progress even on error

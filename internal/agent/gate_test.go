@@ -85,6 +85,38 @@ func TestUnknownToolDeniedByDefault(t *testing.T) {
 	}
 }
 
+func TestRefreshCandidatesAllowedUnattended(t *testing.T) {
+	st := newRunState("github")
+	// A net-zero transient (reserve + delete leaves nothing): allowed
+	// without consent, even non-interactively. The abuse bound is the
+	// per-task refresh cap in code, not a prompt.
+	if d := decide(t, st, "refresh_candidates", `{}`); !d.Allowed {
+		t.Fatalf("refresh must run without a consent prompt: %s", d.Reason)
+	}
+}
+
+func TestResetTurnClearsRateCapsButKeepsScope(t *testing.T) {
+	st := newRunState("github")
+	st.generateRounds = 3
+	st.questions = 3
+	st.refreshes = 2
+	st.recordReservation(&api.HmeEmail{Hme: "a@icloud.com", AnonymousID: "id1"})
+	st.allowAll["deactivate_address"] = true
+
+	st.resetTurn()
+
+	if st.generateRounds != 0 || st.questions != 0 || st.refreshes != 0 {
+		t.Fatalf("per-task caps not reset: %+v", st)
+	}
+	// Ownership and session consent must survive into the next turn.
+	if !st.ownedRef("a@icloud.com") {
+		t.Fatal("reset dropped ownership — a created address stopped being owned mid-session")
+	}
+	if !st.allowAll["deactivate_address"] {
+		t.Fatal("reset dropped an 'always this run' consent grant")
+	}
+}
+
 func TestAutoModeSkipsGate(t *testing.T) {
 	if g := gate(GrantAuto, newRunState("github"), nil); g != nil {
 		t.Fatal("auto mode should return a nil gate (allow all)")
@@ -243,10 +275,10 @@ func TestAskUserToolOnlyWhenInteractive(t *testing.T) {
 		}
 		return m
 	}
-	if names(tools(nil, st, "a@b", nil))["ask_user"] {
+	if names(tools(nil, st, "a@b", nil, nil))["ask_user"] {
 		t.Fatal("ask_user must not exist in non-interactive runs")
 	}
-	if !names(tools(nil, st, "a@b", scriptedAsker()))["ask_user"] {
+	if !names(tools(nil, st, "a@b", scriptedAsker(), nil))["ask_user"] {
 		t.Fatal("ask_user missing in interactive runs")
 	}
 	if d := decide(t, st, "ask_user", `{"question":"which?"}`); !d.Allowed {
@@ -257,7 +289,7 @@ func TestAskUserToolOnlyWhenInteractive(t *testing.T) {
 func TestAskUserBudgetAndAnswer(t *testing.T) {
 	st := newRunState("x")
 	var ask agentkit.Tool
-	for _, tool := range tools(nil, st, "a@b", scriptedAsker("the pro account")) {
+	for _, tool := range tools(nil, st, "a@b", scriptedAsker("the pro account"), nil) {
 		if tool.Name() == "ask_user" {
 			ask = tool
 		}

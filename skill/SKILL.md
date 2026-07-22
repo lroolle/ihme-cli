@@ -220,15 +220,23 @@ Error: <ref> required — an address label, email, or ID
    ihme new <label> --address <candidate> --note "signup: https://example.com/auth/signup?via=team; workspace: acme" --json
    ```
 
-6. **Rotate if needed (max 3 rounds).** If the pool is weak:
-   - Reserve the least-bad candidate as a placeholder
-   - Generate again (Apple may return a fresh pool)
-   - If a better candidate appears, reserve it and deactivate the placeholder
-   - Stop after 3 total rounds to avoid API abuse detection
-   ```bash
-   ihme new <label> --address <better> --json
-   ihme deactivate <placeholder-id> --json
-   ```
+6. **Refresh the pool if it is weak.** Apple's generate returns a
+   FIXED pending pool that repeats — calling generate again returns
+   the SAME candidates until a slot is consumed. So if no candidate
+   passes taste and the pool stops changing, do not keep generating.
+   Consume a slot to force a fresh pool: reserve a throwaway and
+   immediately delete it, then generate again.
+   - Embedded agent: `refresh_candidates` does the whole maneuver in
+     one call (reserve + delete + regenerate), capped at 2 per task.
+   - Shell: reserve any candidate, delete it, then generate again.
+     ```bash
+     ihme new <label> --address <throwaway> --json   # consume a slot
+     ihme delete <throwaway-id> --yes --json          # clean it up
+     ihme new <label> --json                          # fresh pool
+     ```
+   - If the refreshed pool still has no keeper, stop churning: take
+     the least-bad and say plainly it was a compromise. Never ask the
+     user to restart the session — you get a fresh budget next request.
 
 7. **Show the result.** State what was reserved and one line on why it was
    picked. If a compromise was made (weak pool, no good images), say so.
@@ -250,6 +258,26 @@ Common tags: `#work`, `#dev`, `#personal`, `#throwaway`, `#team-<name>`.
 `ihme list --sort date:asc` to surface old addresses for audit.
 Suggest pruning dead services quarterly.
 
+### Memory
+
+You keep a memory across runs — a plain markdown graph (journals for
+what you did, pages per topic, a flashcards page loaded into every
+run). Use it for continuity:
+
+- **Recall before creating.** Search memory for the service first;
+  you may have reserved for it before, and the past note carries the
+  account context. Shell: `ihme memory search <service>`. Embedded:
+  `recall_memory`.
+- **Reservations journal themselves.** Every reserve is written to
+  memory automatically, linked to its service page. Never hand-record
+  a reservation.
+- **Remember durable learnings, sparingly.** When you learn a lasting
+  preference or a fact about a service worth carrying forward, save
+  one note. Pin it to the `flashcards` topic to have it loaded into
+  every future run; use any other topic for on-demand recall. Never
+  store secrets. Shell: `ihme memory card <note>`. Embedded:
+  `remember`.
+
 ## Execution adapters
 
 The procedure and taste rules above are shared by two executors; only
@@ -268,9 +296,12 @@ shell — operations map to in-process tools:
 | `ihme auth status --json` | `auth_status` |
 | `ihme list --search <key> --json` | `search_addresses` |
 | `ihme new <label> --json` (candidates) | `generate_candidates` |
+| reserve + delete a throwaway, then generate | `refresh_candidates` |
 | `ihme new <label> --address <a> --note <n> --json` | `reserve_address` |
 | `ihme deactivate <ref> --json` | `deactivate_address` |
 | `ihme edit <ref> ...` | `edit_note` |
+| `ihme memory search <query>` | `recall_memory` |
+| `ihme memory card <note>` (or editing a page) | `remember` |
 
 Embedded runs enforce the rotation cap (3 generation rounds) and
 call budgets in code, and gate mutating actions outside the run's

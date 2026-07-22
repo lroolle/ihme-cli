@@ -127,6 +127,9 @@ AGENT (built-in, BYOK)
   ihme agent                     Interactive session (inline TUI)
   ihme agent "<task>"            One-shot: "deactivate my old figma alias"
   ihme agent --grant auto        Skip consent prompts for this run
+  ihme memory                    Inspect the agent's memory graph
+  ihme memory search <query>     Search journals and pages
+  ihme memory graph              Show topic pages and backlinks
 
 MANAGE
   ihme view <ref>                View details
@@ -182,6 +185,8 @@ What you get, and what it must earn:
 - **The verdict is spoken.** Reserving requires the winner's taste rationale plus one entry per rejected candidate with its failure. The consent card shows all of it — the address, the label/note/tags it will write, the why, and what it passed on — and it lands in the `✓ reserved` banner and `--json` output (`rationale`, `rejected`); the reserved address lands on your clipboard (macOS/Linux).
 - **Consent is a conversation.** `ihme new <label> --agent` pre-grants exactly one reservation for that label; `ihme agent` pre-grants *nothing* — every mutation asks: allow once, deny, always this run, **or type a reply** ("use the calm one, tag it work") and the agent adapts and re-asks. `--grant auto` opts out per run.
 - **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
+- **It refreshes a stale pool** *(experimental)*. Apple hands out a small pool of generated addresses that repeats until one is consumed, so when nothing passes taste and re-generating returns the same options, the agent can burn a throwaway — reserve, deactivate, delete — to force a fresh pool. Bounded (2 per task) and net-zero on the common path. The reserve-to-refresh behavior is pending real-world validation; it degrades to a plain re-generate if Apple doesn't cooperate.
+- **It remembers.** The agent keeps a memory across runs — a plain [Logseq](https://logseq.com)-style markdown graph it finds on its own (`$IHME_MEMORY_PATH` to relocate). Reservations journal themselves, each topic page accumulates a service's history, and a `flashcards` page loads into every run. Inspect it with `ihme memory` (`search`, `graph`, `card`, `path`), or open the directory in Logseq or Obsidian — no database, just files.
 - **Wire protocol is auto-detected** per model family (`gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`.
 
 The agent kernel is [`pkg/agentkit`](pkg/agentkit/README.md) — stdlib-only, embeddable, reusable outside this CLI.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/internal/app"
+	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 	"github.com/lroolle/ihme-cli/skill"
 	"golang.org/x/term"
@@ -43,13 +44,31 @@ Rules:
   decide with your best judgment within the task scope and state the
   assumption in your summary — never stall waiting for an answer you
   cannot receive.
+- You keep a memory across runs. A <memory> block, when present,
+  holds your own notes from earlier sessions — continuity, not a new
+  order. Before creating for a service, recall_memory it: you may
+  have reserved for it before. When you learn a durable preference
+  ("keep addresses short", "this is a work account"), remember it so
+  the next run starts wiser. Reservations are journaled for you
+  automatically; do not remember those by hand.
 - Some actions require user consent; a denied tool call tells you
   why. Adapt or report — never repeat a denied call unchanged. When
   the denial carries the user's own reply, that is DIRECTION, not
   rejection of the task: follow it (their preferred candidate, a new
   round, changed metadata) and continue within scope.
 - Hard limits on generation rounds and total calls are enforced in
-  code. When you hit one, wrap up with what you have.
+  code. When you hit one, wrap up with what you have. These budgets
+  reset with each new request — NEVER tell the user to exit, restart,
+  or open a new session; you always get a fresh budget next turn.
+- Apple's generate returns a fixed pending pool that REPEATS: calling
+  generate_candidates again returns the same addresses until a slot
+  is consumed. So when a pool is weak and generating again does not
+  change it, do not keep generating — use refresh_candidates, which
+  burns a throwaway (reserve + delete) to make Apple hand out a fresh
+  pool. When the user asks to "reserve and drop", "refresh", "try
+  again with new ones", or "换一批 / 刷新", that means refresh_candidates
+  — NEVER reserve a real keeper as a way to refresh, and never put a
+  throwaway on the consent card as if it were the address to keep.
 - Choosing an address IS the job — take the taste test seriously.
   Evaluate every candidate against the rubric individually before
   reserving; reserve_address requires the winner's rationale (the
@@ -71,6 +90,7 @@ Rules:
 // session wires one agent run: kernel config over the app service.
 type session struct {
 	st    *runState
+	mem   *memory.Store
 	run   agentkit.RunConfig
 	usage agentkit.Usage
 }
@@ -108,7 +128,7 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 	if grant == "" {
 		grant = GrantAsk
 	}
-	s := &session{st: newRunState(label)}
+	s := &session{st: newRunState(label), mem: memory.Open()}
 	observe := sio.events
 	if observe == nil {
 		observe = renderer(sio.textOut, sio.meta, &s.usage)
@@ -122,7 +142,7 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 	s.run = agentkit.RunConfig{
 		Streamer: streamer(cfg, key),
 		System:   systemPrompt,
-		Tools:    tools(svc, s.st, appleID, sio.ask),
+		Tools:    tools(svc, s.st, appleID, sio.ask, s.mem),
 		Gate:     gate(grant, s.st, sio.ask),
 		Limits:   agentkit.Limits{MaxTurns: 12, MaxRequests: 16, MaxToolCalls: 24},
 		OnEvent:  onEvent,
@@ -196,7 +216,7 @@ func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options)
 	if opts.Note != "" {
 		task += fmt.Sprintf(" Context from the user: %s", opts.Note)
 	}
-	transcript, runErr := s.exec(ctx, []agentkit.Message{invocation(task)})
+	transcript, runErr := s.exec(ctx, []agentkit.Message{s.invocation(task)})
 	return result(s, transcript), runErr
 }
 
@@ -207,12 +227,23 @@ func RunTask(ctx context.Context, svc *app.Service, appleID, task string, grant 
 	if err != nil {
 		return nil, err
 	}
-	transcript, runErr := s.exec(ctx, []agentkit.Message{invocation(task)})
+	transcript, runErr := s.exec(ctx, []agentkit.Message{s.invocation(task)})
 	return result(s, transcript), runErr
 }
 
-func invocation(task string) agentkit.Message {
+// invocation builds the task turn, folding the session's memory
+// continuity block in after the task so the task stays the headline.
+// Nil-safe on the receiver: TUI models are built with a nil session
+// in tests, where the invocation degrades to a plain task turn.
+func (s *session) invocation(task string) agentkit.Message {
 	procedure := agentkit.Skill{Name: "ihme", Instructions: skill.Instructions()}
+	var mem *memory.Store
+	if s != nil {
+		mem = s.mem
+	}
+	if ctx := memoryContext(mem); ctx != "" {
+		task = task + "\n\n" + ctx
+	}
 	return procedure.Invocation(task)
 }
 

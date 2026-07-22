@@ -22,6 +22,7 @@ cmd/
   view/                  View single address by ref
   edit/                  Edit label/note/tags
   copy/                  Copy address to clipboard
+  memorycmd/             Inspect the agent memory graph (path, search, graph, card)
   lifecycle/             deactivate, reactivate, delete (with --yes confirmation)
   export/                CSV/JSON export with filters
   forward/               forward-to management
@@ -40,9 +41,12 @@ internal/
   app/                   Application service: the six HME operations
                          shared by Cobra commands and agent tools
                          (both are adapters over it)
-  agent/                 Embedded-agent adapter: BYOK config, six
+  agent/                 Embedded-agent adapter: BYOK config,
                          in-process tools, scoped-consent gate,
                          renderer (see `ihme new --agent`)
+  memory/                Agent memory: a Logseq-style markdown graph
+                         (journals/, pages/, flashcards). Plain files,
+                         no DB — see its package doc
 
 pkg/
   output/                Table, JSON, CSV, detail formatters
@@ -81,6 +85,11 @@ comments live where the behavior lives:
 - internal/agent/config.go, auto.go — BYOK config keys and
   wire-protocol auto-detection
 - internal/agent/run.go — system prompt, renderer, one-shot runs
+- internal/agent/memtool.go — memory glue: the recall_memory /
+  remember tools, the <memory> continuity block injected at session
+  start, and the journal+page write made at reserve time
+- internal/memory/memory.go — the graph store itself (journals,
+  pages, flashcards, derived link graph); package doc has the design
 - skill/SKILL.md — the operational procedure. RUNTIME PROMPT
   CONTENT (go:embed, invoked as a task turn): whenever tool schemas
   in tools.go change, its embedded-agent section must change with

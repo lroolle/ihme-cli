@@ -1,6 +1,24 @@
 # Roadmap
 
-Current: **v0.2.0** · [MIT](LICENSE)
+Current: **v0.3.0** · [MIT](LICENSE)
+
+## Shipped in v0.3.0 — the agent gets memory and judgment
+
+- **Consent is a conversation.** The consent card carries the
+  agent's taste verdict and the candidates it rejected; you can type
+  a reply to redirect it, not just allow/deny.
+- **Agent memory.** A Logseq-style markdown graph (`ihme memory`)
+  the agent keeps across runs — reservations journal themselves,
+  topic pages accumulate a service's history, a `flashcards` page
+  loads into every run. Plain files, no database.
+- **Candidate refresh** *(experimental)*. When a pool is weak and
+  Apple keeps returning the same options, the agent burns a
+  throwaway (reserve → deactivate → delete) to force a fresh pool.
+  Bounded, net-zero on the common path, pending real-world
+  validation of Apple's pending-pool behavior.
+- **Harness fix.** Per-task rate budgets reset each interactive
+  request, so a long session no longer permanently exhausts its
+  generation budget.
 
 ## Shipped in v0.2.0 — the embedded agent
 
@@ -18,6 +36,10 @@ Not on the original roadmap; it emerged and took the release:
 - From the agent-native list, delivered differently: taste scoring
   became the agent's mandatory reserve rationale instead of a
   `--taste` flag
+- Agent memory (`ihme memory`): a Logseq-style markdown graph the
+  agent keeps across runs — reservations journal themselves, topic
+  pages accumulate a service's history, a flashcards page loads into
+  every run. Plain files, openable in Logseq/Obsidian, no database
 
 ## v0.3 — Fix what the review found
 

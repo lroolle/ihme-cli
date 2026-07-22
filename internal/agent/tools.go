@@ -9,6 +9,7 @@ import (
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/clip"
+	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 	"github.com/lroolle/ihme-cli/pkg/agentkit/schema"
 	"github.com/lroolle/ihme-cli/pkg/filter"
@@ -23,6 +24,11 @@ const maxGenerateRounds = 3
 // interrogate the user in a loop.
 const maxQuestions = 3
 
+// maxRefreshCycles caps how many times one task may burn a throwaway
+// to force a fresh candidate pool. Each cycle is a reserve+delete on
+// Apple, heavier than a plain generate, so the ceiling is low.
+const maxRefreshCycles = 2
+
 // minRationale is the shortest reserve rationale accepted anywhere:
 // the gate refuses to put a verdict-less reservation in front of the
 // user, and the tool enforces the same floor on the GrantAuto path
@@ -35,6 +41,7 @@ type runState struct {
 	label          string
 	generateRounds int
 	questions      int
+	refreshes      int
 	reserves       int
 	// reservedThisRun holds both the hme address and anonymousId of
 	// every reservation made during this run.
@@ -58,6 +65,21 @@ type Rejection struct {
 
 func newRunState(label string) *runState {
 	return &runState{label: label, reservedThisRun: map[string]bool{}, allowAll: map[string]bool{}}
+}
+
+// resetTurn clears the per-task rate caps at the start of a new
+// interactive request. These caps ("stop the model looping generate
+// within ONE task") are per-task, but the interactive session reuses
+// one runState across every message — without this reset a long
+// session permanently exhausts its generate/question/refresh budget
+// on the first request and can never create again. Ownership
+// (reservedThisRun), session consent grants (allowAll), and the last
+// reservation deliberately PERSIST: they are session-scoped, not
+// per-task.
+func (st *runState) resetTurn() {
+	st.generateRounds = 0
+	st.questions = 0
+	st.refreshes = 0
 }
 
 func (st *runState) ownedRef(ref string) bool {
@@ -98,7 +120,7 @@ func marshal(v any) (json.RawMessage, error) {
 // adds ask_user: a real question channel for one-shot runs and the
 // REPL alike — without it the model is told to decide within scope
 // and record assumptions instead of stalling.
-func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit.Tool {
+func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memory.Store) []agentkit.Tool {
 	base := []agentkit.Tool{
 		agentkit.FuncTool{
 			ToolName: "auth_status",
@@ -166,6 +188,41 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 			},
 		},
 		agentkit.FuncTool{
+			ToolName: "refresh_candidates",
+			Desc: fmt.Sprintf("Force a genuinely NEW candidate pool. Apple repeats the same pending addresses every time you call generate_candidates until a slot is consumed — so if the candidates stop changing, generating again is useless. This briefly reserves and deletes a throwaway to make Apple hand out fresh options. Use only when the pool is weak (no candidate passes taste) AND generate_candidates has stopped changing. Hard limit: %d per task.",
+				maxRefreshCycles),
+			Params: schema.Object(
+				schema.Property("count", schema.Int("how many fresh candidates (default 3)")),
+			),
+			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+				if st.refreshes >= maxRefreshCycles {
+					return nil, fmt.Errorf("refresh limit reached (%d) — pick the least-bad candidate and say plainly it was a compromise; do not ask the user to restart", maxRefreshCycles)
+				}
+				st.refreshes++
+				var args struct {
+					Count int `json:"count"`
+				}
+				_ = json.Unmarshal(raw, &args)
+				if args.Count <= 0 || args.Count > 5 {
+					args.Count = 3
+				}
+				res, err := svc.RefreshCandidates(args.Count)
+				if err != nil {
+					return nil, err
+				}
+				out := map[string]any{
+					"candidates":    res.Candidates,
+					"refreshesLeft": maxRefreshCycles - st.refreshes,
+					"note":          "if these match the previous pool, Apple did not refresh — choose the least-bad and note the compromise",
+				}
+				if res.Leftover != "" {
+					out["leftover"] = res.Leftover
+					out["note"] = "a throwaway (" + res.Leftover + ") could not be deleted and is left deactivated on the account — tell the user, plainly, that they can remove it with `ihme delete`"
+				}
+				return marshal(out)
+			},
+		},
+		agentkit.FuncTool{
 			ToolName: "reserve_address",
 			Desc:     "Reserve one generated candidate under a label, with an optional durable note and tags. Requires a taste rationale.",
 			Params: schema.Object(
@@ -205,6 +262,11 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 				st.recordReservation(reserved)
 				st.lastRationale = strings.TrimSpace(args.Rationale)
 				st.lastRejected = args.Rejected
+				// The fact is written to memory the instant Apple
+				// confirms it — the honest record, made here so it
+				// covers every entry point (one-shot, REPL, TUI) alike.
+				// A memory-write failure must never fail the reservation.
+				_ = writeReservation(mem, reserved, args.Rationale, args.Rejected)
 				// Best-effort convenience: the address lands on the
 				// clipboard (pbcopy/xclip) ready to paste into the
 				// signup form. Failure is not an error — just absent.
@@ -293,5 +355,5 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 			},
 		})
 	}
-	return base
+	return append(base, memoryTools(mem)...)
 }

@@ -1,0 +1,34 @@
+# ihme
+
+> A command-line tool for iCloud Hide My Email: list, create, edit, deactivate, and export alias addresses. Built for humans who pick addresses by hand, agents that script them, and an embedded BYOK assistant that runs the whole workflow with a taste rubric and a memory.
+
+`ihme` speaks JSON on every command (`--json`, `--jq`), returns actionable errors with the fix command, and uses exit codes agents can branch on (0 ok, 1 error, 2 auth required). It authenticates to Apple over SRP-6a; the password is never transmitted or stored.
+
+## Start here
+
+- [README](README.md): install, quick start, every command, JSON/jq usage, auth details
+- [SKILL.md](skill/SKILL.md): the operational procedure both external agents (shell) and the embedded agent follow — including the address taste rubric
+- [ROADMAP](ROADMAP.md): what shipped per version and what's planned
+
+## Using it as an agent
+
+- Every command supports `--json` and `--jq`; `--help` documents the response shape
+- Errors go to stderr, data to stdout; `--yes` skips confirmation prompts
+- `<ref>` resolves by anonymousId, email, or label (fuzzy)
+- [AGENTS.md](AGENTS.md): command reference for agents that read agents.md
+
+## The embedded agent (`ihme --agent`)
+
+- Bring your own key (any OpenAI-compatible endpoint); config in `~/.config/ihme/agent.json` + `~/.config/ihme/.env`
+- Consent gates every mutation; the consent card carries the taste verdict and rejected candidates; typed replies redirect it
+- Keeps a Logseq-style markdown memory across runs — inspect with `ihme memory`
+- [pkg/agentkit](pkg/agentkit/README.md): the stdlib-only, embeddable agent kernel it runs on — reusable outside this CLI
+
+## Health
+
+- [LICENSE](LICENSE): MIT
+- [SECURITY.md](SECURITY.md): what's stored, what isn't, how to report an issue
+
+## Note
+
+Unofficial. Uses Apple's undocumented iCloud web API; not affiliated with Apple.

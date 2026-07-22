@@ -19,7 +19,13 @@ type API interface {
 	ReserveHme(hme, label, note string) (*api.HmeEmail, error)
 	UpdateHmeMetadata(anonymousID, label, note string) error
 	DeactivateHme(anonymousID string) error
+	DeleteHme(anonymousID string) error
 }
+
+// refreshLabel marks the throwaway reservation RefreshCandidates
+// burns to force Apple to regenerate its pending pool. It is deleted
+// immediately; the label is only ever seen if that cleanup fails.
+const refreshLabel = "ihme-refresh (safe to delete)"
 
 // Service exposes the HME operations used by both adapters.
 type Service struct {
@@ -71,6 +77,50 @@ func (s *Service) Generate(n int) ([]string, error) {
 		candidates = append(candidates, hme)
 	}
 	return candidates, nil
+}
+
+// RefreshResult is a refreshed candidate pool plus any throwaway that
+// could not be fully removed.
+type RefreshResult struct {
+	Candidates []string
+	// Leftover names a throwaway address that reached the account but
+	// could not be deleted (rare — a delete failure after deactivate).
+	// It is deactivated, so harmless, but present; empty on the common
+	// path where cleanup fully succeeds. Surfaced so the caller can
+	// tell the user rather than leaving silent litter.
+	Leftover string
+}
+
+// RefreshCandidates forces Apple to hand out a genuinely new pool.
+// Apple's generate returns a small pending set that repeats until a
+// slot is consumed, so plain regeneration returns the SAME candidates
+// (three unchanged rounds is the classic symptom). This consumes one
+// slot — reserve a throwaway, deactivate it, then delete it — which
+// makes the next generate return fresh options.
+//
+// The order matters: Apple rejects deleting an ACTIVE address (see
+// cmd/lifecycle delete, which deactivates first), so a reserve then
+// delete would always fail and leave litter. Deactivate-then-delete
+// nets to zero on the common path. If the delete still fails, the
+// throwaway is left deactivated and named in Leftover. If the slot
+// cannot be consumed at all, it degrades to a plain generate.
+func (s *Service) RefreshCandidates(n int) (*RefreshResult, error) {
+	hme, err := s.api.GenerateHme()
+	if err != nil {
+		return nil, err
+	}
+	reserved, err := s.api.ReserveHme(hme, refreshLabel, "")
+	if err != nil {
+		pool, gerr := s.Generate(n)
+		return &RefreshResult{Candidates: pool}, gerr
+	}
+	leftover := ""
+	_ = s.api.DeactivateHme(reserved.AnonymousID)
+	if err := s.api.DeleteHme(reserved.AnonymousID); err != nil {
+		leftover = reserved.Hme
+	}
+	pool, gerr := s.Generate(n)
+	return &RefreshResult{Candidates: pool, Leftover: leftover}, gerr
 }
 
 // Reserve claims a generated candidate under a label, serializing
