@@ -98,6 +98,7 @@ Reserved: copay.jacket-4c@icloud.com (label: github.com)
 | Who | Command | What happens |
 |-----|---------|-------------|
 | Human | `ihme new github.com` | Show ~3 candidates, pick interactively |
+| Built-in agent | `ihme new github.com --agent` | The embedded agent runs the whole procedure: search, generate, taste-test, reserve — and tells you why it picked |
 | Agent | `ihme new github.com --json` then `--address <pick>` | Get candidates, reserve one |
 | Script | `ihme new github.com -y` | Take first, reserve, done |
 
@@ -120,6 +121,12 @@ CREATE
   ihme new <label>               Interactive: pick from ~3 candidates
   ihme new <label> --yes         Script: take first
   ihme new <label> --json        Agent: get candidates without reserving
+  ihme new <label> --agent       Embedded agent runs the full procedure
+
+AGENT (built-in, BYOK)
+  ihme agent                     Interactive session (inline TUI)
+  ihme agent "<task>"            One-shot: "deactivate my old figma alias"
+  ihme agent --grant auto        Skip consent prompts for this run
 
 MANAGE
   ihme view <ref>                View details
@@ -153,6 +160,31 @@ ihme list --json --jq '.count'
 ihme view github.com --json --jq '.result.hme'
 ihme new mysite.com --json | jq '.candidates'
 ```
+
+## Built-in agent
+
+`ihme` ships with an embedded assistant — bring your own model key, and it runs the address workflow end to end:
+
+```bash
+# one-time config (any OpenAI-compatible endpoint)
+mkdir -p ~/.config/ihme && cat > ~/.config/ihme/.env <<'ENV'
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5-mini        # or any /chat/completions | /v1/responses model
+ENV
+
+ihme new "github signup" --agent    # scoped: may reserve ONE address for this label
+ihme agent                          # interactive session (inline TUI)
+ihme agent "tag my linear address as work"   # one-shot task
+```
+
+What you get, and what it must earn:
+
+- **The verdict is spoken.** Reserving requires a taste rationale — the image the winner makes and why each rejected candidate lost. It's shown in the transcript, in the `✓ reserved` banner, and in `--json` output (`rationale`); the reserved address lands on your clipboard (macOS/Linux).
+- **Consent by default.** `ihme new <label> --agent` pre-grants exactly one reservation for that label; `ihme agent` pre-grants *nothing* — every mutation asks (allow once / deny / always this run). `--grant auto` opts out per run.
+- **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
+- **Wire protocol is auto-detected** per model family (`gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`.
+
+The agent kernel is [`pkg/agentkit`](pkg/agentkit/README.md) — stdlib-only, embeddable, reusable outside this CLI.
 
 ## Agent integration
 

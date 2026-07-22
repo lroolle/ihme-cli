@@ -1,8 +1,25 @@
 # Roadmap
 
-Current: **v0.1.3** · 4.1k LOC · 5 deps · [MIT](LICENSE)
+Current: **v0.2.0** · [MIT](LICENSE)
 
-## v0.2 — Fix what the review found
+## Shipped in v0.2.0 — the embedded agent
+
+Not on the original roadmap; it emerged and took the release:
+
+- `ihme new <label> --agent` and `ihme agent` — a built-in BYOK
+  assistant over `pkg/agentkit`, a stdlib-only reusable agent kernel
+- Scoped consent (a task pre-grants exactly its own scope), inline
+  TUI with three-choice consent, live reasoning, loud taste rationale
+- Wire-protocol auto-detection (chat completions vs responses API)
+- From the session-resilience list, delivered early: session-resume
+  failure classification (transient ≠ expired; no more surprise
+  sign-in emails), one quiet retry on transport trouble, 15-min
+  validation freshness window
+- From the agent-native list, delivered differently: taste scoring
+  became the agent's mandatory reserve rationale instead of a
+  `--taste` flag
+
+## v0.3 — Fix what the review found
 
 | Item | Why |
 |------|-----|
@@ -13,26 +30,23 @@ Current: **v0.1.3** · 4.1k LOC · 5 deps · [MIT](LICENSE)
 | `forward set` basic email validation | Server rejects garbage but with a worse message |
 | Generate dupe warning when fewer candidates returned | Silent short-count surprises scripts |
 
-## v0.3 — Session resilience
+## v0.4 — Session resilience (what v0.2.0 didn't cover)
 
 | Item | Why |
 |------|-----|
-| Auto session resume on 401/expired during any command | Currently fails; user must re-run `auth login` |
-| Retry with backoff on 5xx / transient errors (1 retry, 3s) | Apple's API is flaky under load |
-| Session refresh without triggering Apple sign-in email | `accountLogin` sends a "new sign-in" notification every time |
+| Auto session resume on 401/expired mid-command | Resume-at-start is classified now; mid-command 401 still fails |
 | Lock file for concurrent access | Parallel agent invocations corrupt session.json |
 
-## v0.4 — Agent-native features
+## v0.5 — Agent-native features
 
 | Item | Why |
 |------|-----|
 | `ihme audit` — surface old addresses, inactive services, missing tags | 326 addresses, 1 deactivated. Hygiene at scale |
 | `ihme bulk deactivate --tag throwaway --older-than 6m` | Batch lifecycle for agent-driven cleanup |
-| `ihme new --taste` — score candidates by euphony/affect/rhythm | Codify address selection instead of random pick |
 | Structured stderr (JSON errors when `--json` is set) | Agents can't parse human error messages reliably |
 | Shell completions with dynamic ref completion | Tab-complete labels and IDs for humans |
 
-## v0.5 — Distribution
+## v0.6 — Distribution
 
 | Item | Why |
 |------|-----|
