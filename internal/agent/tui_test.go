@@ -46,17 +46,25 @@ func TestTUIConsentIsAChoiceAndDefaultsToDeny(t *testing.T) {
 
 	m.Update(promptRequestMsg{
 		prompt: userPrompt{
-			Kind:   promptConsent,
-			Title:  "Create this Hide My Email address?",
-			Detail: "Reserve calm.river@icloud.com with label \"grok\".",
+			Kind:    promptConsent,
+			Title:   "Create this Hide My Email address?",
+			Subject: "calm.river@icloud.com",
+			Detail:  `label "grok"`,
+			Why:     "a calm river bend — kept for the image; rejected turbo3_placard (embedded digit)",
 		},
 		reply: replies,
 	})
 	if m.phase != phaseConsent || m.choice != 1 {
 		t.Fatalf("phase=%v choice=%d", m.phase, m.choice)
 	}
-	view := m.View().Content
-	for _, want := range []string{"Allow once", "Deny", "Always this run", "y/n/a shortcut"} {
+	// Collapse soft line wraps so long phrases match across breaks.
+	view := strings.Join(strings.Fields(m.View().Content), " ")
+	for _, want := range []string{
+		"Allow once", "Deny", "Always this run", "y/n/a shortcut",
+		"calm.river@icloud.com", // the subject is on the card
+		"calm river bend",       // the verdict is on the card
+		"embedded digit",        // and so are the losers' failures
+	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("consent view missing %q: %q", want, view)
 		}

@@ -581,14 +581,24 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 
 	case "generate_candidates":
 		var result struct {
-			Round      int `json:"round"`
-			RoundsLeft int `json:"roundsLeft"`
+			Candidates []string `json:"candidates"`
+			Round      int      `json:"round"`
+			RoundsLeft int      `json:"roundsLeft"`
 		}
 		_ = json.Unmarshal(event.Result, &result)
 		if result.RoundsLeft == 0 {
 			step.text = fmt.Sprintf("Reviewed %d rounds of address ideas", result.Round)
 		} else {
 			step.text = fmt.Sprintf("Reviewed address ideas · round %d", result.Round)
+		}
+		// The spread is on screen before any consent card arrives:
+		// the user judges the pick against what it beat.
+		locals := make([]string, 0, len(result.Candidates))
+		for _, c := range result.Candidates {
+			locals = append(locals, strings.SplitN(c, "@", 2)[0])
+		}
+		if len(locals) > 0 {
+			step.detail = strings.Join(locals, " · ")
 		}
 
 	case "reserve_address":
@@ -821,12 +831,25 @@ func (m *tuiModel) renderQuestion(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(title + "\n" + m.input.View() + "\n" + m.styles.muted.Render("enter answer · esc skip"))
 }
 
+// renderConsent is the decision surface: the subject is prominent,
+// the facts are quiet, and the agent's verdict — WHY this one — is
+// the body. A consent card that hides the why is a card the user
+// cannot actually decide on.
 func (m *tuiModel) renderConsent(width int) string {
 	if m.prompt == nil {
 		return ""
 	}
-	title := m.styles.warning.Render("!") + " " + m.styles.strong.Render(safeText(m.prompt.prompt.Title))
-	detail := m.styles.muted.Render(safeText(m.prompt.prompt.Detail))
+	prompt := m.prompt.prompt
+	lines := []string{m.styles.warning.Render("!") + " " + m.styles.strong.Render(safeText(prompt.Title))}
+	if prompt.Subject != "" {
+		lines = append(lines, "  "+m.styles.accent.Bold(true).Render(safeText(prompt.Subject)))
+	}
+	if prompt.Detail != "" {
+		lines = append(lines, "  "+m.styles.muted.Render(safeText(prompt.Detail)))
+	}
+	if prompt.Why != "" {
+		lines = append(lines, "", "  "+renderInline(prompt.Why, m.styles))
+	}
 	labels := []string{"Allow once", "Deny", "Always this run"}
 	buttons := make([]string, len(labels))
 	for i, label := range labels {
@@ -837,7 +860,8 @@ func (m *tuiModel) renderConsent(width int) string {
 		}
 	}
 	help := m.styles.muted.Render("←/→ choose · enter confirm · y/n/a shortcut")
-	return lipgloss.NewStyle().Width(width).Render(title + "\n" + detail + "\n\n" + strings.Join(buttons, "  ") + "\n" + help)
+	lines = append(lines, "", strings.Join(buttons, "  "), help)
+	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 
 // renderInline styles the markdown the model is invited to use:

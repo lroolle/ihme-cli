@@ -22,9 +22,11 @@ const (
 // renders consent as a real choice control; cooked-mode one-shot runs
 // retain a compact text fallback.
 type userPrompt struct {
-	Kind   promptKind
-	Title  string
-	Detail string
+	Kind    promptKind
+	Title   string
+	Subject string // the thing being acted on — rendered prominent
+	Detail  string // decision facts (label, scope warnings)
+	Why     string // the agent's stated verdict, in its own words
 }
 
 // asker is the single input authority for one session: every
@@ -63,7 +65,19 @@ func stdinAsker() asker {
 func renderCookedPrompt(prompt userPrompt) string {
 	switch prompt.Kind {
 	case promptConsent:
-		return fmt.Sprintf("\n! %s\n  %s\n  Allow? [y/N/a=always this run] ", prompt.Title, prompt.Detail)
+		var b strings.Builder
+		fmt.Fprintf(&b, "\n! %s\n", prompt.Title)
+		if prompt.Subject != "" {
+			fmt.Fprintf(&b, "  \x1b[1m%s\x1b[0m\n", prompt.Subject)
+		}
+		if prompt.Detail != "" {
+			fmt.Fprintf(&b, "  %s\n", prompt.Detail)
+		}
+		if prompt.Why != "" {
+			fmt.Fprintf(&b, "  why: %s\n", prompt.Why)
+		}
+		b.WriteString("  Allow? [y/N/a=always this run] ")
+		return b.String()
 	default:
 		return fmt.Sprintf("\n? %s\n> ", prompt.Title)
 	}

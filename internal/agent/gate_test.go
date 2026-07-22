@@ -149,6 +149,54 @@ func TestConsentNonInteractiveDenies(t *testing.T) {
 	}
 }
 
+// The consent card is a decision surface: it must carry the verdict,
+// and a verdict-less reservation must never reach the user at all.
+func TestReserveWithoutRationaleNeverReachesTheUser(t *testing.T) {
+	st := newRunState("")
+	asked := false
+	ask := func(context.Context, userPrompt) (string, error) {
+		asked = true
+		return "y", nil
+	}
+	g := gate(GrantAsk, st, ask)
+	d := g(context.Background(), agentkit.GateRequest{
+		Call: agentkit.ToolCall{Name: "reserve_address",
+			Args: json.RawMessage(`{"address":"a@icloud.com","label":"x","rationale":"nice"}`)},
+	})
+	if d.Allowed || asked {
+		t.Fatalf("verdict-less reserve must bounce to the model, not the user (allowed=%v asked=%v)", d.Allowed, asked)
+	}
+	if !strings.Contains(d.Reason, "rationale") {
+		t.Fatalf("denial must tell the model what to fix: %q", d.Reason)
+	}
+}
+
+func TestReserveConsentCarriesTheVerdict(t *testing.T) {
+	st := newRunState("")
+	var got userPrompt
+	ask := func(_ context.Context, p userPrompt) (string, error) {
+		got = p
+		return "y", nil
+	}
+	g := gate(GrantAsk, st, ask)
+	d := g(context.Background(), agentkit.GateRequest{
+		Call: agentkit.ToolCall{Name: "reserve_address",
+			Args: json.RawMessage(`{"address":"calm.river@icloud.com","label":"grok","rationale":"a calm river bend over gravel — kept for the image; rejected turbo3_placard (embedded digit)"}`)},
+	})
+	if !d.Allowed {
+		t.Fatalf("consented reserve denied: %s", d.Reason)
+	}
+	if got.Subject != "calm.river@icloud.com" {
+		t.Fatalf("subject = %q", got.Subject)
+	}
+	if !strings.Contains(got.Why, "river bend") || !strings.Contains(got.Why, "embedded digit") {
+		t.Fatalf("verdict missing from consent prompt: %q", got.Why)
+	}
+	if strings.Contains(got.Detail, "creates a new address") {
+		t.Fatalf("boilerplate crept back into the card: %q", got.Detail)
+	}
+}
+
 // General assistant scope (empty label): nothing is pre-granted —
 // even the first reservation asks.
 func TestGeneralScopeFirstReserveAsks(t *testing.T) {

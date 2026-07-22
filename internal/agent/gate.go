@@ -40,28 +40,36 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 
 		case "reserve_address":
 			var args struct {
-				Address string `json:"address"`
-				Label   string `json:"label"`
+				Address   string `json:"address"`
+				Label     string `json:"label"`
+				Rationale string `json:"rationale"`
 			}
 			_ = json.Unmarshal(req.Call.Args, &args)
 			if st.label != "" && st.reserves == 0 && strings.EqualFold(args.Label, st.label) {
 				return agentkit.GateDecision{Allowed: true}
 			}
-			detail := fmt.Sprintf("Reserve %s with label %q. This creates a new address in your iCloud account.",
-				args.Address, args.Label)
+			// A consent card without the why is not a decision the
+			// user can make — never ask them to approve a verdict-less
+			// reservation. Bounce it back to the model instead. (The
+			// tool's own length check backstops the GrantAuto path.)
+			if len(strings.TrimSpace(args.Rationale)) < 20 {
+				return agentkit.GateDecision{Allowed: false,
+					Reason: "rationale first: the user decides from your taste verdict on the consent card — state the image this address makes and why each rejected candidate lost, then reserve again"}
+			}
+			detail := fmt.Sprintf("label %q", args.Label)
 			switch {
 			case st.label == "":
 			case !strings.EqualFold(args.Label, st.label):
-				detail = fmt.Sprintf("Reserve %s with label %q. The task label is %q.",
-					args.Address, args.Label, st.label)
+				detail = fmt.Sprintf("label %q — the task label is %q", args.Label, st.label)
 			default:
-				detail = fmt.Sprintf("Reserve %s with label %q. This is the second reservation in this run.",
-					args.Address, args.Label)
+				detail = fmt.Sprintf("label %q — second reservation this run", args.Label)
 			}
 			return consent(ctx, ask, st, "reserve_address", userPrompt{
-				Kind:   promptConsent,
-				Title:  "Create this Hide My Email address?",
-				Detail: detail,
+				Kind:    promptConsent,
+				Title:   "Create this Hide My Email address?",
+				Subject: args.Address,
+				Detail:  detail,
+				Why:     strings.TrimSpace(args.Rationale),
 			})
 
 		case "deactivate_address":
@@ -73,9 +81,10 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 				return agentkit.GateDecision{Allowed: true}
 			}
 			return consent(ctx, ask, st, "deactivate_address", userPrompt{
-				Kind:   promptConsent,
-				Title:  "Deactivate this address?",
-				Detail: fmt.Sprintf("%q was not created by this run. New mail to it will be rejected.", args.Ref),
+				Kind:    promptConsent,
+				Title:   "Deactivate this address?",
+				Subject: args.Ref,
+				Detail:  "not created by this run — new mail to it will be rejected",
 			})
 
 		case "edit_note":
@@ -87,9 +96,10 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 				return agentkit.GateDecision{Allowed: true}
 			}
 			return consent(ctx, ask, st, "edit_note", userPrompt{
-				Kind:   promptConsent,
-				Title:  "Update this address?",
-				Detail: fmt.Sprintf("Edit metadata for %q, which was not created by this run.", args.Ref),
+				Kind:    promptConsent,
+				Title:   "Update this address?",
+				Subject: args.Ref,
+				Detail:  "not created by this run — label, note, or tags will change",
 			})
 
 		default:
