@@ -72,13 +72,14 @@ Two entry points, one adapter (internal/agent):
   REPL without args, one-shot with a task. NOTHING is pre-granted:
   every mutation (reserve/deactivate/edit) asks unless --grant auto.
 
-Interaction design: one input authority (asker) per session — the
-REPL runs a raw-mode line editor (x/term.Terminal: history, editing;
-type-ahead during model turns becomes visible editable input, never
-a phantom consent answer). One-shot runs stay cooked-mode (Ctrl-C
-aborts) with drain-and-reprompt consent. Consent protocol: y allows
-once, a allows that tool for the rest of the run, empty re-asks
-(stale newlines are not decisions), anything else declines.
+Interaction design: one input authority (asker) per session. The
+interactive REPL is an inline Bubble Tea UI with Bubbles text input:
+streamed work is summarized as status rows, reasoning/tool JSON stays
+out of the transcript, questions get a dedicated input, and consent is
+a three-choice control (allow once / deny / always this run). Drafts
+typed while the model works are preserved for the next turn and never
+become phantom prompt answers. One-shot runs retain a cooked-mode text
+fallback with drain-and-reprompt consent.
 
 BYOK: ~/.config/ihme/agent.json {model, baseUrl, apiKeyEnv, api,
 effort} + ~/.config/ihme/.env (or OPENAI_MODEL/OPENAI_BASE_URL/

@@ -94,7 +94,7 @@ func TestAutoModeSkipsGate(t *testing.T) {
 // scriptedAsker returns queued answers in order.
 func scriptedAsker(answers ...string) asker {
 	i := 0
-	return func(prompt string) (string, error) {
+	return func(_ context.Context, _ userPrompt) (string, error) {
 		if i >= len(answers) {
 			return "", io.EOF
 		}
@@ -119,7 +119,7 @@ func TestConsentProtocol(t *testing.T) {
 	}
 	for _, tc := range cases {
 		st := newRunState("x")
-		d := consent(scriptedAsker(tc.answers...), st, "reserve_address", "Reserve x?")
+		d := consent(context.Background(), scriptedAsker(tc.answers...), st, "reserve_address", userPrompt{Kind: promptConsent, Title: "Reserve x?"})
 		if d.Allowed != tc.allow {
 			t.Fatalf("%s: allowed = %v, want %v (%s)", tc.name, d.Allowed, tc.allow, d.Reason)
 		}
@@ -128,22 +128,22 @@ func TestConsentProtocol(t *testing.T) {
 
 func TestConsentAlwaysRemembersPerTool(t *testing.T) {
 	st := newRunState("x")
-	if d := consent(scriptedAsker("a"), st, "deactivate_address", "first?"); !d.Allowed {
+	if d := consent(context.Background(), scriptedAsker("a"), st, "deactivate_address", userPrompt{Kind: promptConsent, Title: "first?"}); !d.Allowed {
 		t.Fatal("'a' must allow")
 	}
 	// Second time: no asker needed at all.
-	if d := consent(nil, st, "deactivate_address", "second?"); !d.Allowed {
+	if d := consent(context.Background(), nil, st, "deactivate_address", userPrompt{Kind: promptConsent, Title: "second?"}); !d.Allowed {
 		t.Fatal("allow-all not remembered")
 	}
 	// Other tools are unaffected.
-	if d := consent(nil, st, "edit_note", "other?"); d.Allowed {
+	if d := consent(context.Background(), nil, st, "edit_note", userPrompt{Kind: promptConsent, Title: "other?"}); d.Allowed {
 		t.Fatal("allow-all leaked across tools")
 	}
 }
 
 func TestConsentNonInteractiveDenies(t *testing.T) {
 	st := newRunState("x")
-	d := consent(nil, st, "reserve_address", "x?")
+	d := consent(context.Background(), nil, st, "reserve_address", userPrompt{Kind: promptConsent, Title: "x?"})
 	if d.Allowed || !strings.Contains(d.Reason, "non-interactive") {
 		t.Fatalf("d = %+v", d)
 	}

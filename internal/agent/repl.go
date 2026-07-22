@@ -32,58 +32,14 @@ action for the rest of the run. Up-arrow recalls history. Ctrl-D or
 const replPrompt = "ihme> "
 
 // RunREPL is the interactive general assistant: one persistent
-// conversation, fresh budgets per turn, every mutation gated.
-//
-// On a terminal it runs a raw-mode line editor (x/term.Terminal):
-// history, editing, and — the important part — no phantom answers.
-// Keys typed while the model is working become visible, editable
-// input for the NEXT prompt instead of silently answering a consent
-// question nobody saw (a real field bug with cooked-mode stdin).
+// conversation, fresh budgets per turn, every mutation gated. A TTY
+// gets the Bubble Tea interface; pipes keep the plain line protocol.
 func RunREPL(ctx context.Context, svc *app.Service, appleID string, grant GrantMode, effort string) error {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
 		return runPipedREPL(ctx, svc, appleID, grant, effort)
 	}
-
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return fmt.Errorf("entering raw mode: %w", err)
-	}
-	defer term.Restore(fd, oldState) //nolint:errcheck
-
-	t := term.NewTerminal(stdinStderr{}, replPrompt)
-	// Degenerate PTYs report zero columns; a zero-width terminal
-	// wraps every rune. Keep the editor's 80-column default then.
-	if width, height, err := term.GetSize(fd); err == nil && width > 0 {
-		_ = t.SetSize(width, max(height, 1))
-	}
-	ask := func(prompt string) (string, error) {
-		t.SetPrompt(prompt)
-		defer t.SetPrompt(replPrompt)
-		return t.ReadLine()
-	}
-
-	s, err := newSession(svc, appleID, "", grant, effort, sessionIO{textOut: t, meta: t, ask: ask})
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(t, greeting)
-
-	transcript := startTranscript()
-	for {
-		line, err := t.ReadLine() // io.EOF on Ctrl-C and Ctrl-D
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err
-		}
-		var done bool
-		transcript, done = replTurn(ctx, s, transcript, line, t)
-		if done {
-			return ctx.Err()
-		}
-	}
+	return runTUI(ctx, svc, appleID, grant, effort)
 }
 
 // runPipedREPL serves non-terminal stdin (scripts, tests): plain
@@ -144,11 +100,3 @@ func replTurn(ctx context.Context, s *session, transcript []agentkit.Message, li
 	}
 	return transcript, false
 }
-
-// stdinStderr is the ReadWriter the line editor drives: input from
-// the raw terminal, output (with edit-line coordination and CRLF
-// mapping) to stderr, keeping stdout clean for data.
-type stdinStderr struct{}
-
-func (stdinStderr) Read(p []byte) (int, error)  { return os.Stdin.Read(p) }
-func (stdinStderr) Write(p []byte) (int, error) { return os.Stderr.Write(p) }

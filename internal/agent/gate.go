@@ -47,16 +47,22 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			if st.label != "" && st.reserves == 0 && strings.EqualFold(args.Label, st.label) {
 				return agentkit.GateDecision{Allowed: true}
 			}
-			why := "a reservation"
+			detail := fmt.Sprintf("Reserve %s with label %q. This creates a new address in your iCloud account.",
+				args.Address, args.Label)
 			switch {
 			case st.label == "":
 			case !strings.EqualFold(args.Label, st.label):
-				why = fmt.Sprintf("a reservation under label %q (task label is %q)", args.Label, st.label)
+				detail = fmt.Sprintf("Reserve %s with label %q. The task label is %q.",
+					args.Address, args.Label, st.label)
 			default:
-				why = "a second reservation this run"
+				detail = fmt.Sprintf("Reserve %s with label %q. This is the second reservation in this run.",
+					args.Address, args.Label)
 			}
-			return consent(ask, st, "reserve_address",
-				fmt.Sprintf("Agent wants %s: reserve %s as %q.", why, args.Address, args.Label))
+			return consent(ctx, ask, st, "reserve_address", userPrompt{
+				Kind:   promptConsent,
+				Title:  "Create this Hide My Email address?",
+				Detail: detail,
+			})
 
 		case "deactivate_address":
 			var args struct {
@@ -66,8 +72,11 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			if st.ownedRef(args.Ref) {
 				return agentkit.GateDecision{Allowed: true}
 			}
-			return consent(ask, st, "deactivate_address",
-				fmt.Sprintf("Agent wants to deactivate %q — NOT created by this run.", args.Ref))
+			return consent(ctx, ask, st, "deactivate_address", userPrompt{
+				Kind:   promptConsent,
+				Title:  "Deactivate this address?",
+				Detail: fmt.Sprintf("%q was not created by this run. New mail to it will be rejected.", args.Ref),
+			})
 
 		case "edit_note":
 			var args struct {
@@ -77,8 +86,11 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			if st.ownedRef(args.Ref) {
 				return agentkit.GateDecision{Allowed: true}
 			}
-			return consent(ask, st, "edit_note",
-				fmt.Sprintf("Agent wants to edit %q — NOT created by this run.", args.Ref))
+			return consent(ctx, ask, st, "edit_note", userPrompt{
+				Kind:   promptConsent,
+				Title:  "Update this address?",
+				Detail: fmt.Sprintf("Edit metadata for %q, which was not created by this run.", args.Ref),
+			})
 
 		default:
 			return agentkit.GateDecision{Allowed: false, Reason: "tool not covered by consent policy"}

@@ -251,7 +251,10 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker) []agentkit
 				if err := json.Unmarshal(raw, &args); err != nil {
 					return nil, err
 				}
-				answer, err := ask(fmt.Sprintf("\n? %s\n> ", strings.TrimSpace(args.Question)))
+				answer, err := ask(ctx, userPrompt{
+					Kind:  promptQuestion,
+					Title: strings.TrimSpace(args.Question),
+				})
 				if err != nil {
 					return nil, fmt.Errorf("no answer from user: %w", err)
 				}
