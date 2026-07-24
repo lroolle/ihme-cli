@@ -537,6 +537,9 @@ func (m *tuiModel) handleAgentEvent(event agentkit.Event) {
 		if step, ok := toolStep(e); ok {
 			m.upsertStep(step)
 		}
+		if step, ok := memoryStep(e); ok {
+			m.upsertStep(step)
+		}
 	case agentkit.RunEnd:
 		m.activity = ""
 	}
@@ -711,11 +714,11 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 		}
 		_ = json.Unmarshal(event.Call.Args, &args)
 		_ = json.Unmarshal(event.Result, &result)
-		step.level = stepInfo
 		if result.Count == 0 {
+			step.level = stepInfo
 			step.text = fmt.Sprintf("No memory of %q yet", args.Query)
 		} else {
-			step.text = fmt.Sprintf("Recalled %d note%s about %q", result.Count, pluralS(result.Count), args.Query)
+			step.text = fmt.Sprintf("Reused memory for %q · %d note%s", args.Query, result.Count, pluralS(result.Count))
 		}
 
 	case "remember":
@@ -723,12 +726,14 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 			Topic string `json:"topic"`
 		}
 		var result struct {
-			AlwaysLoaded bool `json:"alwaysLoaded"`
+			Status       string `json:"status"`
+			AlwaysLoaded bool   `json:"alwaysLoaded"`
 		}
 		_ = json.Unmarshal(event.Call.Args, &args)
 		_ = json.Unmarshal(event.Result, &result)
-		step.level = stepInfo
-		step.text = "Remembered · " + args.Topic
+		if step.text = memoryLine(memoryNote{Status: result.Status, Topic: args.Topic}); step.text == "" {
+			step.text = fmt.Sprintf("Memory updated for %q", args.Topic)
+		}
 		if result.AlwaysLoaded {
 			step.text += " (loaded every run)"
 		}
@@ -737,6 +742,29 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 		step.text = toolName(event.Call.Name) + " complete"
 	}
 	return step, true
+}
+
+// memoryStep surfaces the automatic memory write that rides along a
+// reservation as its own status line — the journal and topic page
+// are updated by code, not by a tool the model called, so without
+// this the operation would be invisible.
+func memoryStep(event agentkit.ToolEnd) (tuiStep, bool) {
+	if event.Call.Name != "reserve_address" || event.Denied || event.Err != "" {
+		return tuiStep{}, false
+	}
+	var result struct {
+		Memory memoryNote `json:"memory"`
+	}
+	_ = json.Unmarshal(event.Result, &result)
+	line := memoryLine(result.Memory)
+	if line == "" {
+		return tuiStep{}, false
+	}
+	level := stepOK
+	if result.Memory.Status == "failed" {
+		level = stepWarn
+	}
+	return tuiStep{key: "memory:reserve", text: line, level: level}, true
 }
 
 func toolName(name string) string {
@@ -871,8 +899,12 @@ func (m *tuiModel) renderWelcome(width int) string {
 	}
 	title := m.styles.strong.Render("ihme") + " " + m.styles.accent.Render("agent")
 	meta := m.styles.muted.Render(safeText(m.appleID) + " · " + mode)
+	lines := title + "  " + meta
+	if m.session != nil {
+		lines += "\n" + m.styles.muted.Render(m.session.header())
+	}
 	help := m.styles.muted.Render("Try  “new address for github”   “find netflix”   “tag linear as work”")
-	return lipgloss.NewStyle().Width(width).Render(title + "  " + meta + "\n\n" + help)
+	return lipgloss.NewStyle().Width(width).Render(lines + "\n\n" + help)
 }
 
 func (m *tuiModel) renderTurn() string {

@@ -1,6 +1,21 @@
 # Roadmap
 
-Current: **v0.3.0** · [MIT](LICENSE)
+Current: **v0.4.0** · [MIT](LICENSE)
+
+## Shipped in v0.4.0 — agent polish
+
+- **`--prompt`/`-p`.** Direct one-shot execution: `ihme agent -p
+  "<task>"`, `ihme --agent -p "<task>"`, or just `ihme -p "<task>"` —
+  no interactive prompt first. Positional task words still work;
+  giving both is refused, not guessed at.
+- **Memory operations are visible.** Reservation-time journaling,
+  `remember`, and `recall_memory` each print what actually happened:
+  `Memory created/updated for "x"`, `Reused memory for "x"`, and a
+  failed write says so instead of staying silent.
+- **The run states its configuration.** Every agent run opens with
+  `Model:` and `Thinking effort:` as effectively resolved (config
+  file, env, flags); effort on chat-completions models is reported as
+  not applicable, never echoed as if applied.
 
 ## Shipped in v0.3.0 — the agent gets memory and judgment
 

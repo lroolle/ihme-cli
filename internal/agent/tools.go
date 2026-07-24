@@ -266,12 +266,16 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 				// confirms it — the honest record, made here so it
 				// covers every entry point (one-shot, REPL, TUI) alike.
 				// A memory-write failure must never fail the reservation.
-				_ = writeReservation(mem, reserved, args.Rationale, args.Rejected)
+				memNote := writeReservation(mem, reserved, args.Rationale, args.Rejected)
 				// Best-effort convenience: the address lands on the
 				// clipboard (pbcopy/xclip) ready to paste into the
 				// signup form. Failure is not an error — just absent.
 				copied := clip.Copy(reserved.Hme) == nil
-				return marshal(map[string]any{"status": "reserved", "address": view(*reserved), "copiedToClipboard": copied})
+				out := map[string]any{"status": "reserved", "address": view(*reserved), "copiedToClipboard": copied}
+				if memNote.Status != "" {
+					out["memory"] = memNote
+				}
+				return marshal(out)
 			},
 		},
 		agentkit.FuncTool{

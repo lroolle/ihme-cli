@@ -34,8 +34,20 @@ func TestRememberToolAppendsAndFlagsFlashcards(t *testing.T) {
 	if strings.Contains(string(out), `"alwaysLoaded":true`) {
 		t.Errorf("a normal topic must not be flagged always-loaded: %s", out)
 	}
+	if !strings.Contains(string(out), `"status":"created"`) {
+		t.Errorf("first write to a topic must report created: %s", out)
+	}
 	if page, ok := mem.ReadPage("github"); !ok || !strings.Contains(page, "work account") {
 		t.Errorf("remember did not persist: %q", page)
+	}
+
+	// A second fact on the same topic is an update, not a creation.
+	out, err = remember.Execute(context.Background(), json.RawMessage(`{"topic":"github","fact":"prefers short addresses"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"status":"updated"`) {
+		t.Errorf("second write to a topic must report updated: %s", out)
 	}
 
 	// The flashcards topic IS always-loaded — the model must be told.
@@ -78,8 +90,9 @@ func TestWriteReservationLinksJournalAndPage(t *testing.T) {
 	hme := &api.HmeEmail{Hme: "calm_mule@icloud.com", Label: "github"}
 	rejected := []Rejection{{Address: "turbo3_placard@icloud.com", Reason: "leading noise"}}
 
-	if err := writeReservation(mem, hme, "a calm animal, keeps clean", rejected); err != nil {
-		t.Fatal(err)
+	note := writeReservation(mem, hme, "a calm animal, keeps clean", rejected)
+	if note.Status != "created" || note.Topic != "github" {
+		t.Fatalf("first reservation should create the topic page, got %+v", note)
 	}
 
 	// The journal links the service page so the graph gets an edge.
@@ -97,6 +110,28 @@ func TestWriteReservationLinksJournalAndPage(t *testing.T) {
 	page, ok := mem.ReadPage("github")
 	if !ok || !strings.Contains(page, "calm_mule@icloud.com") {
 		t.Errorf("github page missing the reservation: %q", page)
+	}
+
+	// A second reservation for the same service updates, not creates.
+	note = writeReservation(mem, hme, "still calm", nil)
+	if note.Status != "updated" {
+		t.Errorf("repeat reservation should report updated, got %+v", note)
+	}
+}
+
+func TestMemoryLineStatesTheActualOperation(t *testing.T) {
+	cases := map[memoryNote]string{
+		{Status: "created", Topic: "undetectable"}: `Memory created for "undetectable"`,
+		{Status: "updated", Topic: "github"}:       `Memory updated for "github"`,
+		{}:                                         "",
+	}
+	for note, want := range cases {
+		if got := memoryLine(note); got != want {
+			t.Errorf("memoryLine(%+v) = %q, want %q", note, got, want)
+		}
+	}
+	if got := memoryLine(memoryNote{Status: "failed", Topic: "x"}); !strings.Contains(got, "failed") {
+		t.Errorf("a failed write must say so, got %q", got)
 	}
 }
 
@@ -126,8 +161,8 @@ func TestMemoryContextInjectsFlashcardsAndJournal(t *testing.T) {
 }
 
 func TestWriteReservationIsNilSafe(t *testing.T) {
-	if err := writeReservation(nil, nil, "x", nil); err != nil {
-		t.Errorf("nil store/address must be a no-op, got %v", err)
+	if note := writeReservation(nil, nil, "x", nil); note.Status != "" {
+		t.Errorf("nil store/address must be a no-op, got %+v", note)
 	}
 }
 
