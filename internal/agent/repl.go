@@ -50,6 +50,7 @@ func runPipedREPL(ctx context.Context, svc *app.Service, appleID string, grant G
 		return err
 	}
 	fmt.Fprintln(os.Stderr, greeting)
+	fmt.Fprintln(os.Stderr, "\n"+s.header())
 
 	transcript := s.startTranscript()
 	for {

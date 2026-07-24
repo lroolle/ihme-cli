@@ -75,11 +75,17 @@ func memoryTools(mem *memory.Store) []agentkit.Tool {
 				if err := json.Unmarshal(raw, &args); err != nil {
 					return nil, err
 				}
+				_, existed := mem.ReadPage(args.Topic)
 				if err := mem.PageAppend(args.Topic, args.Fact); err != nil {
 					return nil, fmt.Errorf("could not write memory: %w", err)
 				}
+				status := "created"
+				if existed {
+					status = "updated"
+				}
 				return marshal(map[string]any{
 					"remembered":   args.Topic,
+					"status":       status,
 					"alwaysLoaded": strings.EqualFold(args.Topic, memory.FlashcardsPage),
 				})
 			},
@@ -145,21 +151,45 @@ func lastLinesWithin(text string, budget int) string {
 	return strings.Join(kept, "\n")
 }
 
+// memoryNote reports what a memory write actually did, so the UI can
+// state the real operation instead of a generic success. Status is
+// "created" (the topic page did not exist before), "updated", or
+// "failed"; empty means no store was available and nothing happened.
+type memoryNote struct {
+	Status string `json:"status"`
+	Topic  string `json:"topic,omitempty"`
+}
+
+// memoryLine renders a note as the one status sentence shown to the
+// user. Empty when nothing happened (no store).
+func memoryLine(n memoryNote) string {
+	switch n.Status {
+	case "created":
+		return fmt.Sprintf("Memory created for %q", n.Topic)
+	case "updated":
+		return fmt.Sprintf("Memory updated for %q", n.Topic)
+	case "failed":
+		return fmt.Sprintf("Memory write failed for %q — the reservation itself is safe", n.Topic)
+	}
+	return ""
+}
+
 // writeReservation records a reservation the moment Apple confirms
 // it: a dated journal block linking the service page, and a bullet on
 // the service page itself so a topic accumulates its own history.
-// Best-effort by contract: the error is returned so a caller MAY
-// surface it, but the reserve path deliberately ignores it — a
-// memory-write failure must never fail the reservation that fed it.
-func writeReservation(mem *memory.Store, e *api.HmeEmail, rationale string, rejected []Rejection) error {
+// Best-effort by contract: failure is reported in the note so the UI
+// can say so, but a memory-write failure must never fail the
+// reservation that fed it.
+func writeReservation(mem *memory.Store, e *api.HmeEmail, rationale string, rejected []Rejection) memoryNote {
 	if mem == nil || e == nil {
-		return nil
+		return memoryNote{}
 	}
 	label := strings.TrimSpace(e.Label)
 	if label == "" {
 		label = e.Hme
 	}
 	rationale = strings.TrimSpace(rationale)
+	_, existed := mem.ReadPage(label)
 
 	var block strings.Builder
 	fmt.Fprintf(&block, "- reserved **%s** for [[%s]]", e.Hme, label)
@@ -170,12 +200,18 @@ func writeReservation(mem *memory.Store, e *api.HmeEmail, rationale string, reje
 		fmt.Fprintf(&block, "\n  - passed: %s — %s", r.Address, r.Reason)
 	}
 	if err := mem.JournalAppend(block.String()); err != nil {
-		return err
+		return memoryNote{Status: "failed", Topic: label}
 	}
 
 	bullet := time.Now().Format("2006-01-02") + " reserved " + e.Hme
 	if rationale != "" {
 		bullet += " — " + rationale
 	}
-	return mem.PageAppend(label, bullet)
+	if err := mem.PageAppend(label, bullet); err != nil {
+		return memoryNote{Status: "failed", Topic: label}
+	}
+	if existed {
+		return memoryNote{Status: "updated", Topic: label}
+	}
+	return memoryNote{Status: "created", Topic: label}
 }

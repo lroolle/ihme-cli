@@ -24,14 +24,22 @@ func NewCmdRoot(version string) *cobra.Command {
 		Long:          "Manage iCloud Hide My Email addresses from the command line.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		// `ihme --agent` opens the interactive assistant; bare
-		// `ihme` keeps printing help.
+		// `ihme --agent` opens the interactive assistant; a --prompt
+		// implies the agent (there is nothing else a prompt could
+		// address); bare `ihme` keeps printing help.
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if agentFlag, _ := cmd.Flags().GetBool("agent"); agentFlag {
+			agentFlag, _ := cmd.Flags().GetBool("agent")
+			prompt, _ := cmd.Flags().GetString("prompt")
+			if agentFlag || prompt != "" {
 				agent := agentcmd.NewCmdAgent()
 				agent.SetContext(cmd.Context())
 				// Inherit the persistent flags agent expects.
 				agent.Flags().AddFlagSet(cmd.PersistentFlags())
+				if prompt != "" {
+					if err := agent.Flags().Set("prompt", prompt); err != nil {
+						return err
+					}
+				}
 				return agent.RunE(agent, args)
 			}
 			return cmd.Help()
@@ -39,6 +47,7 @@ func NewCmdRoot(version string) *cobra.Command {
 	}
 
 	cmd.Flags().Bool("agent", false, "Open the interactive assistant (same as 'ihme agent')")
+	cmd.Flags().StringP("prompt", "p", "", "Run one agent task and exit (same as 'ihme agent -p')")
 
 	cmd.PersistentFlags().Bool("json", false, "Output as JSON")
 	cmd.PersistentFlags().String("jq", "", "Filter JSON output with a jq expression")

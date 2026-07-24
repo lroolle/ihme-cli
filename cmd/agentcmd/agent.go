@@ -14,14 +14,15 @@ import (
 )
 
 func NewCmdAgent() *cobra.Command {
-	var grant, effort string
+	var grant, effort, prompt string
 
 	cmd := &cobra.Command{
 		Use:   "agent [task...]",
 		Short: "Talk to the embedded assistant (interactive without arguments)",
 		Long: `Run the embedded assistant over your Hide My Email addresses.
 
-Without arguments: an interactive session. With arguments: one task.
+Without arguments: an interactive session. With arguments (or
+--prompt/-p): one task, run immediately.
 
 Every action that changes anything — reserving, deactivating,
 editing — asks for your consent first. --grant auto skips the
@@ -39,11 +40,16 @@ JSON output (--json, one-shot only):
   {"reserved":{...}|null,"summary":"...","transcript":[...],"usage":{...}}`,
 		Example: `  ihme agent
   ihme agent "new address for github signup"
-  ihme agent "which addresses go to netflix?"
+  ihme agent -p "new address for github signup"
+  ihme agent --prompt "which addresses go to netflix?"
   ihme agent --grant auto "retag every dev address as #work"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if grant != string(agent.GrantAsk) && grant != string(agent.GrantAuto) {
 				return fmt.Errorf("invalid --grant %q — use ask or auto", grant)
+			}
+			task, err := resolveTask(prompt, args)
+			if err != nil {
+				return err
 			}
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -52,12 +58,12 @@ JSON output (--json, one-shot only):
 			svc := app.New(client)
 			appleID := client.Session().AppleID
 
-			if len(args) == 0 {
+			if task == "" {
 				return agent.RunREPL(cmd.Context(), svc, appleID, agent.GrantMode(grant), effort)
 			}
 
 			jsonFlag, _ := cmd.Flags().GetBool("json")
-			res, err := agent.RunTask(cmd.Context(), svc, appleID, strings.Join(args, " "), agent.GrantMode(grant), effort, jsonFlag)
+			res, err := agent.RunTask(cmd.Context(), svc, appleID, task, agent.GrantMode(grant), effort, jsonFlag)
 			if err != nil {
 				return err
 			}
@@ -70,5 +76,20 @@ JSON output (--json, one-shot only):
 
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Consent for mutating actions: ask or auto")
 	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort for responses-API models: minimal, low, medium, high")
+	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Run one task and exit (same as a positional task)")
 	return cmd
+}
+
+// resolveTask merges the two ways to hand the agent a one-shot task.
+// Both at once is refused rather than silently joined or dropped.
+func resolveTask(prompt string, args []string) (string, error) {
+	prompt = strings.TrimSpace(prompt)
+	argTask := strings.TrimSpace(strings.Join(args, " "))
+	if prompt != "" && argTask != "" {
+		return "", fmt.Errorf("task given twice — use --prompt %q or the positional task %q, not both", prompt, argTask)
+	}
+	if prompt != "" {
+		return prompt, nil
+	}
+	return argTask, nil
 }

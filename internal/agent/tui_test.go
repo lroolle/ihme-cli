@@ -248,6 +248,105 @@ func TestSafeTextDropsTerminalControls(t *testing.T) {
 	}
 }
 
+func TestReserveEmitsAMemoryStatusStep(t *testing.T) {
+	m := newTUIModel(context.Background(), nil, "person@example.com", GrantAsk)
+	m.handleAgentEvent(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "reserve_address", Args: json.RawMessage(`{"rationale":"a quiet river bend that holds the eye"}`)},
+		Result: json.RawMessage(`{"status":"reserved","address":{"hme":"calm.river@icloud.com","label":"undetectable"},"memory":{"status":"created","topic":"undetectable"}}`),
+	})
+	var texts []string
+	for _, s := range m.steps {
+		texts = append(texts, s.text)
+	}
+	joined := strings.Join(texts, "\n")
+	if !strings.Contains(joined, `Memory created for "undetectable"`) {
+		t.Fatalf("memory operation invisible in steps: %q", joined)
+	}
+	if !strings.Contains(joined, "Reserved calm.river@icloud.com") {
+		t.Fatalf("reserve step lost: %q", joined)
+	}
+
+	// A failed write must not read as success.
+	m.steps = nil
+	m.handleAgentEvent(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "reserve_address"},
+		Result: json.RawMessage(`{"status":"reserved","address":{"hme":"x@icloud.com"},"memory":{"status":"failed","topic":"undetectable"}}`),
+	})
+	found := false
+	for _, s := range m.steps {
+		if strings.Contains(s.text, "Memory write failed") && s.level == stepWarn {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("failed memory write not surfaced truthfully: %+v", m.steps)
+	}
+}
+
+func TestRecallStepDistinguishesReuseFromMiss(t *testing.T) {
+	hit, ok := toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "recall_memory", Args: json.RawMessage(`{"query":"undetectable"}`)},
+		Result: json.RawMessage(`{"hits":[{}],"count":1}`),
+	})
+	if !ok || !strings.Contains(hit.text, `Reused memory for "undetectable"`) || hit.level != stepOK {
+		t.Fatalf("recall hit step = %+v", hit)
+	}
+	miss, ok := toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "recall_memory", Args: json.RawMessage(`{"query":"netflix"}`)},
+		Result: json.RawMessage(`{"hits":[],"count":0}`),
+	})
+	if !ok || !strings.Contains(miss.text, `No memory of "netflix" yet`) || miss.level != stepInfo {
+		t.Fatalf("recall miss step = %+v", miss)
+	}
+}
+
+func TestRememberStepStatesTheOperation(t *testing.T) {
+	step, ok := toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"preferences"}`)},
+		Result: json.RawMessage(`{"remembered":"preferences","status":"created","alwaysLoaded":false}`),
+	})
+	if !ok || step.text != `Memory created for "preferences"` {
+		t.Fatalf("remember step = %+v", step)
+	}
+	step, ok = toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"flashcards"}`)},
+		Result: json.RawMessage(`{"remembered":"flashcards","status":"updated","alwaysLoaded":true}`),
+	})
+	if !ok || step.text != `Memory updated for "flashcards" (loaded every run)` {
+		t.Fatalf("remember flashcards step = %+v", step)
+	}
+}
+
+func TestSessionHeaderReportsEffectiveModelAndEffort(t *testing.T) {
+	s := &session{model: "gpt-5.6", effort: "high", api: "responses"}
+	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: high" {
+		t.Fatalf("header = %q", got)
+	}
+	// Empty effort means the endpoint default applies — say that, do
+	// not invent a value.
+	s = &session{model: "gpt-5.6", api: "responses"}
+	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: default" {
+		t.Fatalf("header = %q", got)
+	}
+	// On chat completions the effort parameter is never sent, even if
+	// configured — the header must not claim it was applied.
+	s = &session{model: "gemini-2.5-pro", effort: "high", api: "completions"}
+	if got := s.header(); got != "Model: gemini-2.5-pro\nThinking effort: n/a (chat completions)" {
+		t.Fatalf("header = %q", got)
+	}
+}
+
+func TestWelcomeShowsModelHeader(t *testing.T) {
+	m := newTUIModel(context.Background(), nil, "person@example.com", GrantAsk)
+	m.session = &session{st: newRunState(""), model: "gpt-5.6", effort: "high", api: "responses"}
+	view := strings.Join(strings.Fields(m.renderWelcome(80)), " ")
+	for _, want := range []string{"Model: gpt-5.6", "Thinking effort: high"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("welcome missing %q: %q", want, view)
+		}
+	}
+}
+
 func TestSystemPromptKeepsExplicitLabelsVerbatim(t *testing.T) {
 	for _, want := range []string{"label the user supplies", "verbatim", "separate canonical search key"} {
 		if !strings.Contains(systemPrompt, want) {

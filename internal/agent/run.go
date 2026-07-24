@@ -93,6 +93,29 @@ type session struct {
 	mem   *memory.Store
 	run   agentkit.RunConfig
 	usage agentkit.Usage
+
+	// The effective model configuration, after every layer of
+	// resolution (agent.json, env, flags) — recorded here so the UI
+	// can state what actually runs, not what was requested.
+	model  string
+	effort string // as sent to the responses API; empty = omitted
+	api    string // resolved wire protocol at session start
+}
+
+// header is the run banner: the model and thinking effort that are
+// actually in effect. Effort is a responses-API parameter: when the
+// wire protocol is chat completions it is never sent, and when the
+// config leaves it empty the endpoint's own default applies — both
+// are reported as such rather than echoing an unapplied value.
+func (s *session) header() string {
+	effort := s.effort
+	switch {
+	case s.api != "responses":
+		effort = "n/a (chat completions)"
+	case effort == "":
+		effort = "default"
+	}
+	return fmt.Sprintf("Model: %s\nThinking effort: %s", s.model, effort)
 }
 
 // newSession builds a session. label scopes the consent policy:
@@ -128,7 +151,11 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 	if grant == "" {
 		grant = GrantAsk
 	}
-	s := &session{st: newRunState(label), mem: memory.Open()}
+	auto := newAutoStreamer(cfg, key)
+	s := &session{
+		st: newRunState(label), mem: memory.Open(),
+		model: cfg.Model, effort: cfg.Effort, api: auto.api,
+	}
 	observe := sio.events
 	if observe == nil {
 		observe = renderer(sio.textOut, sio.meta, &s.usage)
@@ -140,7 +167,7 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 		return observe(ev)
 	}
 	s.run = agentkit.RunConfig{
-		Streamer: streamer(cfg, key),
+		Streamer: auto,
 		System:   systemPrompt,
 		Tools:    tools(svc, s.st, appleID, sio.ask, s.mem),
 		Gate:     gate(grant, s.st, sio.ask),
@@ -155,12 +182,6 @@ func newSession(svc *app.Service, appleID, label string, grant GrantMode, effort
 func (s *session) exec(ctx context.Context, transcript []agentkit.Message) ([]agentkit.Message, error) {
 	out, err := agentkit.Run(ctx, s.run, transcript)
 	return out, hintErr(err)
-}
-
-// streamer resolves the wire protocol: auto-detected and persisted
-// unless the config pins it.
-func streamer(cfg Config, key string) agentkit.Streamer {
-	return newAutoStreamer(cfg, key)
 }
 
 // hintErr turns the reasoning-models-need-responses 400 into an
@@ -203,10 +224,12 @@ type Result struct {
 // the label-scoped consent policy. All rendering goes to stderr;
 // stdout stays clean for --json.
 func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options) (*Result, error) {
-	s, err := newSession(svc, appleID, opts.Label, opts.Grant, opts.Effort, defaultIO(false))
+	sio := defaultIO(false)
+	s, err := newSession(svc, appleID, opts.Label, opts.Grant, opts.Effort, sio)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Fprintln(sio.meta, s.header())
 	task := fmt.Sprintf("Create a new Hide My Email address with the label %q. "+
 		"The label is the user's explicit choice — reserve under it VERBATIM. "+
 		"Derive your search key from it (the service name, e.g. dropping dates "+
@@ -223,10 +246,12 @@ func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options)
 // RunTask executes one general task ("find my old figma addresses",
 // "deactivate the newsletter alias") with every mutation gated.
 func RunTask(ctx context.Context, svc *app.Service, appleID, task string, grant GrantMode, effort string, jsonOut bool) (*Result, error) {
-	s, err := newSession(svc, appleID, "", grant, effort, defaultIO(!jsonOut))
+	sio := defaultIO(!jsonOut)
+	s, err := newSession(svc, appleID, "", grant, effort, sio)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Fprintln(sio.meta, s.header())
 	transcript, runErr := s.exec(ctx, []agentkit.Message{s.invocation(task)})
 	return result(s, transcript), runErr
 }
@@ -316,6 +341,7 @@ func reservedBanner(e agentkit.ToolEnd) string {
 	var result struct {
 		Address addressView `json:"address"`
 		Copied  bool        `json:"copiedToClipboard"`
+		Memory  memoryNote  `json:"memory"`
 	}
 	_ = json.Unmarshal(e.Call.Args, &args)
 	_ = json.Unmarshal(e.Result, &result)
@@ -330,6 +356,9 @@ func reservedBanner(e agentkit.ToolEnd) string {
 	}
 	if result.Copied {
 		b.WriteString("  (copied to clipboard)\n")
+	}
+	if line := memoryLine(result.Memory); line != "" {
+		fmt.Fprintf(&b, "  %s\n", line)
 	}
 	return b.String()
 }
