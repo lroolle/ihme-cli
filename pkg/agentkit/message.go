@@ -51,6 +51,13 @@ type Message struct {
 	ToolCallID string `json:"toolCallId,omitempty"`
 	ToolName   string `json:"toolName,omitempty"`
 	IsError    bool   `json:"isError,omitempty"`
+
+	// Provider is opaque continuity data owned by the Streamer that
+	// produced the message (e.g. Anthropic extended-thinking blocks,
+	// whose signatures must round-trip verbatim). Only that client
+	// reads it back; the kernel, tools, and renderers never interpret
+	// it, and other providers ignore it.
+	Provider json.RawMessage `json:"provider,omitempty"`
 }
 
 // Usage counts tokens for one model request.
@@ -65,9 +72,10 @@ type AssistantMessage struct {
 	ToolCalls  []ToolCall
 	StopReason StopReason
 	Usage      Usage
+	Provider   json.RawMessage // see Message.Provider
 }
 
 // Message converts the assembled result to a transcript entry.
 func (a AssistantMessage) Message() Message {
-	return Message{Role: RoleAssistant, Text: a.Text, ToolCalls: a.ToolCalls}
+	return Message{Role: RoleAssistant, Text: a.Text, ToolCalls: a.ToolCalls, Provider: a.Provider}
 }

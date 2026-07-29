@@ -334,6 +334,35 @@ func TestSessionHeaderReportsEffectiveModelAndEffort(t *testing.T) {
 	if got := s.header(); got != "Model: gemini-2.5-pro\nThinking effort: n/a (chat completions)" {
 		t.Fatalf("header = %q", got)
 	}
+	// Modern Claude (4.6+): effort is the applied control; report the
+	// wire value, including the minimal→low fold.
+	s = &session{model: "claude-opus-5", effort: "high", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-opus-5\nThinking effort: high" {
+		t.Fatalf("header = %q", got)
+	}
+	s = &session{model: "claude-opus-5", effort: "minimal", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-opus-5\nThinking effort: low" {
+		t.Fatalf("header = %q", got)
+	}
+	// No effort → the parameter is omitted and the API default rules.
+	s = &session{model: "claude-opus-5", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-opus-5\nThinking effort: high (default)" {
+		t.Fatalf("header = %q", got)
+	}
+	// An unmapped effort applies nothing — never echo it as applied.
+	s = &session{model: "claude-opus-5", effort: "ultra", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-opus-5\nThinking effort: ultra (unrecognized — model default applies)" {
+		t.Fatalf("header = %q", got)
+	}
+	// Legacy Claude (pre-4.6): manual thinking; empty means none sent.
+	s = &session{model: "claude-sonnet-4-5", effort: "high", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-sonnet-4-5\nThinking effort: high" {
+		t.Fatalf("header = %q", got)
+	}
+	s = &session{model: "claude-sonnet-4-5", api: "anthropic"}
+	if got := s.header(); got != "Model: claude-sonnet-4-5\nThinking effort: off" {
+		t.Fatalf("header = %q", got)
+	}
 }
 
 func TestWelcomeShowsModelHeader(t *testing.T) {

@@ -19,7 +19,7 @@
 
 ## The embedded agent (`ihme --agent`)
 
-- Bring your own key (any OpenAI-compatible endpoint); config in `~/.config/ihme/agent.json` + `~/.config/ihme/.env`
+- Bring your own key — Claude native (Anthropic Messages API), or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama); config in `~/.config/ihme/agent.json` + `~/.config/ihme/.env`
 - Consent gates every mutation; the consent card carries the taste verdict and rejected candidates; typed replies redirect it
 - Keeps a Logseq-style markdown memory across runs — inspect with `ihme memory`
 - [pkg/agentkit](pkg/agentkit/README.md): the stdlib-only, embeddable agent kernel it runs on — reusable outside this CLI

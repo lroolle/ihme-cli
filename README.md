@@ -170,11 +170,16 @@ ihme new mysite.com --json | jq '.candidates'
 `ihme` ships with an embedded assistant — bring your own model key, and it runs the address workflow end to end:
 
 ```bash
-# one-time config (any OpenAI-compatible endpoint)
+# one-time config — a Claude key alone is enough:
 mkdir -p ~/.config/ihme && cat > ~/.config/ihme/.env <<'ENV'
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-mini        # or any /chat/completions | /v1/responses model
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-4-5
 ENV
+
+# ...or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama):
+# OPENAI_API_KEY=sk-...
+# OPENAI_BASE_URL=https://api.openai.com/v1
+# OPENAI_MODEL=gpt-5-mini
 
 ihme new "github signup" --agent    # scoped: may reserve ONE address for this label
 ihme agent                          # interactive session (inline TUI)
@@ -184,8 +189,11 @@ ihme --agent -p "new for github signup"      # one-shot via --prompt/-p
 
 Every run opens by stating the effective configuration — `Model:` and
 `Thinking effort:` as actually resolved from config, environment, and
-flags (effort is a responses-API parameter; on chat-completions models
-it is reported as not applicable rather than echoed).
+flags. The header never echoes a value that was not applied: effort
+passes through on the responses API, becomes `output_config` effort
+on current Claude models (a manual thinking budget on pre-4.6 ones),
+and reads `n/a` on chat-completions models where the parameter is
+never sent.
 
 What you get, and what it must earn:
 
@@ -194,7 +202,7 @@ What you get, and what it must earn:
 - **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
 - **It refreshes a stale pool** *(experimental)*. Apple hands out a small pool of generated addresses that repeats until one is consumed, so when nothing passes taste and re-generating returns the same options, the agent can burn a throwaway — reserve, deactivate, delete — to force a fresh pool. Bounded (2 per task) and net-zero on the common path. The reserve-to-refresh behavior is pending real-world validation; it degrades to a plain re-generate if Apple doesn't cooperate.
 - **It remembers — visibly.** The agent keeps a memory across runs — a plain [Logseq](https://logseq.com)-style markdown graph it finds on its own (`$IHME_MEMORY_PATH` to relocate). Reservations journal themselves, each topic page accumulates a service's history, and a `flashcards` page loads into every run. Every memory operation states what actually happened — `Memory created for "x"`, `Memory updated for "x"`, `Reused memory for "x"` — and a failed write says so instead of pretending. Inspect it with `ihme memory` (`search`, `graph`, `card`, `path`), or open the directory in Logseq or Obsidian — no database, just files.
-- **Wire protocol is auto-detected** per model family (`gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`.
+- **Wire protocol is auto-detected** per endpoint and model family (`claude*` or an anthropic.com base URL → native Messages API, `gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`. Claude behind an OpenAI-protocol gateway self-heals to chat completions on the first 404.
 
 The agent kernel is [`pkg/agentkit`](pkg/agentkit/README.md) — stdlib-only, embeddable, reusable outside this CLI.
 

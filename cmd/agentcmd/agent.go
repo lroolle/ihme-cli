@@ -75,7 +75,7 @@ JSON output (--json, one-shot only):
 	}
 
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Consent for mutating actions: ask or auto")
-	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort for responses-API models: minimal, low, medium, high")
+	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort: minimal, low, medium, high (claude 4.6+ also: xhigh, max; older claude models map it to a thinking budget)")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Run one task and exit (same as a positional task)")
 	return cmd
 }
