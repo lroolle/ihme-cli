@@ -13,6 +13,7 @@ import (
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
+	"github.com/lroolle/ihme-cli/pkg/agentkit/ai/anthropic"
 	"github.com/lroolle/ihme-cli/skill"
 	"golang.org/x/term"
 )
@@ -108,12 +109,37 @@ type session struct {
 // config leaves it empty the endpoint's own default applies — both
 // are reported as such rather than echoing an unapplied value.
 func (s *session) header() string {
+	// Report what is actually applied, never a requested value that
+	// the wire protocol dropped.
 	effort := s.effort
-	switch {
-	case s.api != "responses":
+	switch s.api {
+	case "responses":
+		if effort == "" {
+			effort = "default"
+		}
+	case "anthropic":
+		if anthropic.LegacyThinking(s.model) {
+			// Pre-4.6: manual thinking; no effort means none was sent.
+			switch {
+			case effort == "":
+				effort = "off"
+			case thinkingBudget(effort) == 0:
+				effort = fmt.Sprintf("%s (unrecognized — thinking off)", effort)
+			}
+			break
+		}
+		// 4.6+: effort IS the applied control; report the value that
+		// went on the wire, not the alias the user typed.
+		switch applied := anthropicEffort(effort); {
+		case effort == "":
+			effort = "high (default)"
+		case applied == "":
+			effort = fmt.Sprintf("%s (unrecognized — model default applies)", effort)
+		default:
+			effort = applied
+		}
+	default:
 		effort = "n/a (chat completions)"
-	case effort == "":
-		effort = "default"
 	}
 	return fmt.Sprintf("Model: %s\nThinking effort: %s", s.model, effort)
 }

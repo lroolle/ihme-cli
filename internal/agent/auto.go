@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
+	"github.com/lroolle/ihme-cli/pkg/agentkit/ai/anthropic"
 	"github.com/lroolle/ihme-cli/pkg/agentkit/ai/openai"
 )
 
@@ -31,25 +32,69 @@ type autoStreamer struct {
 func newAutoStreamer(cfg Config, key string) *autoStreamer {
 	a := &autoStreamer{
 		make: func(api string) agentkit.Streamer {
-			if api == "responses" {
+			switch api {
+			case "responses":
 				// Summaries make the deliberation renderable as
 				// thinking events — part of the product.
 				return &openai.ResponsesClient{
 					BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model,
 					Effort: cfg.Effort, Summary: "auto",
 				}
+			case "anthropic":
+				c := &anthropic.Client{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}
+				// The thinking wire shape is generational: manual
+				// budgets on 4.5-and-earlier, output_config effort on
+				// 4.6+ (where the manual shape is a 400).
+				if anthropic.LegacyThinking(cfg.Model) {
+					c.ThinkingBudget = thinkingBudget(cfg.Effort)
+				} else {
+					c.Effort = anthropicEffort(cfg.Effort)
+				}
+				return c
 			}
 			return &openai.Client{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}
 		},
 		persist: func(api string) { persistAPI(cfg.Model, api) },
 	}
 	switch cfg.API {
-	case "completions", "responses":
+	case "completions", "responses", "anthropic":
 		a.api, a.locked = cfg.API, true
 	default: // "auto"
-		a.api = guessAPI(cfg.Model)
+		a.api = guessAPI(cfg.Model, cfg.BaseURL)
 	}
 	return a
+}
+
+// thinkingBudget maps the shared effort vocabulary to a manual
+// extended-thinking token budget for legacy (pre-4.6) Claude models.
+// Unknown values map to 0 (thinking off) — the header reports that
+// honestly rather than inventing a budget the user never asked for.
+func thinkingBudget(effort string) int {
+	switch effort {
+	case "minimal":
+		return 1024
+	case "low":
+		return 2048
+	case "medium":
+		return 8192
+	case "high":
+		return 16384
+	}
+	return 0
+}
+
+// anthropicEffort maps the shared effort vocabulary to Anthropic's
+// output_config values for 4.6-and-later models. minimal folds into
+// low (Anthropic's floor); native values pass through; unknown maps
+// to "" (parameter omitted, model default applies).
+func anthropicEffort(effort string) string {
+	switch effort {
+	case "minimal":
+		return "low"
+	case "low", "medium", "high", "xhigh", "max":
+		return effort
+	}
+	return ""
 }
 
 // Stream implements agentkit.Streamer. On a protocol-misroute error
@@ -79,36 +124,65 @@ func (a *autoStreamer) Stream(ctx context.Context, req agentkit.Request, emit fu
 
 // misroute classifies "wrong API for this model" errors.
 func misroute(current string, err error) (string, bool) {
-	var apiErr *openai.APIError
-	if !errors.As(err, &apiErr) {
+	status, body, ok := apiFailure(err)
+	if !ok {
 		return "", false
 	}
-	body := strings.ToLower(apiErr.Body)
 	switch current {
 	case "completions":
 		// e.g. "Function tools with reasoning_effort are not supported
 		// for <model> in /v1/chat/completions. To use function tools,
 		// use /v1/responses ..." and OpenAI's "this model is only
 		// supported in v1/responses".
-		if apiErr.Status == 400 && strings.Contains(body, "responses") {
+		if status == 400 && strings.Contains(body, "responses") {
 			return "responses", true
 		}
 	case "responses":
 		// Endpoint absent on completions-only gateways/runtimes.
-		if apiErr.Status == 404 || apiErr.Status == 405 ||
-			(apiErr.Status == 400 && strings.Contains(body, "unknown") && strings.Contains(body, "path")) {
+		if status == 404 || status == 405 ||
+			(status == 400 && strings.Contains(body, "unknown") && strings.Contains(body, "path")) {
+			return "completions", true
+		}
+	case "anthropic":
+		// A claude model on an OpenAI-protocol gateway: /v1/messages
+		// does not exist there — fall back to chat completions.
+		if status == 404 || status == 405 ||
+			(status == 400 && strings.Contains(body, "unknown") && strings.Contains(body, "path")) {
 			return "completions", true
 		}
 	}
 	return "", false
 }
 
-// guessAPI picks the starting protocol from the model family.
-// Reasoning-first families need /responses for function tools;
-// everything else speaks /chat/completions. Wrong guesses self-heal
-// via misroute detection.
-func guessAPI(model string) string {
+// apiFailure extracts status and lowercased body from either
+// provider's typed API error.
+func apiFailure(err error) (int, string, bool) {
+	var oaiErr *openai.APIError
+	if errors.As(err, &oaiErr) {
+		return oaiErr.Status, strings.ToLower(oaiErr.Body), true
+	}
+	var antErr *anthropic.APIError
+	if errors.As(err, &antErr) {
+		return antErr.Status, strings.ToLower(antErr.Body), true
+	}
+	return 0, "", false
+}
+
+// guessAPI picks the starting protocol from the endpoint and model
+// family. Anthropic's own host always speaks the Messages API;
+// claude models elsewhere start native and self-heal to completions
+// when the gateway has no /v1/messages. Reasoning-first OpenAI
+// families need /responses for function tools; everything else
+// speaks /chat/completions. Wrong guesses self-heal via misroute
+// detection.
+func guessAPI(model, baseURL string) string {
+	if strings.Contains(baseURL, "anthropic.com") {
+		return "anthropic"
+	}
 	m := strings.ToLower(model)
+	if strings.HasPrefix(m, "claude") {
+		return "anthropic"
+	}
 	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4", "codex"} {
 		if strings.HasPrefix(m, prefix) {
 			return "responses"

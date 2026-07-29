@@ -2,6 +2,24 @@
 
 Current: **v0.4.0** · [MIT](LICENSE)
 
+## Unreleased — claude and codex as first-class providers
+
+- **Native Anthropic Messages API** (`pkg/agentkit/ai/anthropic`):
+  point the agent at a Claude model and `ANTHROPIC_API_KEY` +
+  `ANTHROPIC_MODEL` is a complete configuration — the base URL
+  defaults to Anthropic's endpoint. The shared `--effort` vocabulary
+  applies generationally: `output_config` effort on Claude 4.6+
+  (where manual budgets are a 400), a manual thinking budget on
+  older models. Thinking blocks (signatures included) round-trip
+  verbatim and stream live like responses-API reasoning summaries;
+  a safety refusal surfaces as an error, never as a clean finish.
+- **Auto-detection covers three protocols.** `claude*` models and
+  anthropic.com endpoints start on the Messages API; a claude model
+  behind an OpenAI-protocol gateway self-heals to chat completions
+  on the first 404, and the discovery persists. Codex/gpt-5/o-series
+  keep starting on the responses API — codex as a provider already
+  worked; now it is documented.
+
 ## Shipped in v0.4.0 — agent polish
 
 - **`--prompt`/`-p`.** Direct one-shot execution: `ihme agent -p

@@ -1,9 +1,10 @@
 # agentkit
 
-A minimal embeddable agent kernel: a provider-neutral loop, one
-streaming backend, typed tools, a pre-execution gate, hard limits,
-and explicit skill invocation. Stdlib-only. Designed to be audited
-in one sitting.
+A minimal embeddable agent kernel: a provider-neutral loop,
+streaming backends for the three wire protocols that matter
+(chat completions, responses, Anthropic messages), typed tools, a
+pre-execution gate, hard limits, and explicit skill invocation.
+Stdlib-only. Designed to be audited in one sitting.
 
 agentkit is not a framework. It holds no sessions, no memory, no
 config, no renderer, no consent policy, and no domain logic — those
@@ -13,13 +14,17 @@ belong to the embedding application. The first consumer is
 ## Shape
 
 ```
-pkg/agentkit            the kernel: loop, tools, gate, limits,
-                        events, skill invocation, transcript types
-pkg/agentkit/schema     fluent JSON-schema builder (map[string]any)
-pkg/agentkit/ai/openai  two Streamers: Client (/chat/completions,
-                        the OpenAI-compat lingua franca) and
-                        ResponsesClient (/responses, required by
-                        reasoning models for function tools)
+pkg/agentkit              the kernel: loop, tools, gate, limits,
+                          events, skill invocation, transcript types
+pkg/agentkit/schema       fluent JSON-schema builder (map[string]any)
+pkg/agentkit/ai/openai    two Streamers: Client (/chat/completions,
+                          the OpenAI-compat lingua franca) and
+                          ResponsesClient (/responses, required by
+                          reasoning models for function tools)
+pkg/agentkit/ai/anthropic one Streamer over the Messages API, with
+                          extended thinking (blocks round-trip
+                          through Message.Provider — opaque to the
+                          kernel, owned by the emitting client)
 ```
 
 Essential contracts:
@@ -105,7 +110,6 @@ creep by definition.
 
 | Next | Trigger |
 |---|---|
-| anthropic-messages backend | a consumer needs native Claude (caching, thinking blocks) beyond OpenAI-compat |
 | structured final output (schema-forced result turn) | a CLI needs machine-readable outcomes richer than transcript + app state |
 | transcript persistence helpers (save/load, caller-side) | a REPL needs resume across processes |
 | steering (inject a user message mid-run) | an interactive surface wants course-correction without killing the run |

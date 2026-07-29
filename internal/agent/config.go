@@ -14,20 +14,22 @@ import (
 )
 
 // Config is the BYOK model configuration. Resolution order per
-// field: agent.json, then environment (OPENAI_MODEL /
-// OPENAI_BASE_URL / OPENAI_API_KEY). The key itself is never stored
-// in agent.json — only the name of the env var holding it.
+// field: agent.json, then environment (OPENAI_* first, ANTHROPIC_*
+// as fallback). The key itself is never stored in agent.json — only
+// the name of the env var holding it.
 type Config struct {
 	Model     string `json:"model"`
 	BaseURL   string `json:"baseUrl"`
 	APIKeyEnv string `json:"apiKeyEnv"`
 
 	// API selects the wire protocol: "auto" (default — guess by
-	// model family, flip on the endpoint's misroute signal, persist
-	// the discovery), or pin "completions"/"responses" explicitly.
+	// model family and base URL, flip on the endpoint's misroute
+	// signal, persist the discovery), or pin one explicitly:
+	// "completions", "responses", or "anthropic".
 	API string `json:"api"`
-	// Effort sets reasoning effort for the responses API
-	// ("low"/"medium"/"high"); empty omits the parameter.
+	// Effort sets reasoning effort ("low"/"medium"/"high"). On the
+	// responses API it is passed through; on the Anthropic API it
+	// maps to an extended-thinking budget. Empty applies neither.
 	Effort string `json:"effort"`
 }
 
@@ -53,11 +55,26 @@ func LoadConfig() (Config, string, error) {
 	if cfg.Model == "" {
 		cfg.Model = os.Getenv("OPENAI_MODEL")
 	}
+	if cfg.Model == "" {
+		cfg.Model = os.Getenv("ANTHROPIC_MODEL")
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("OPENAI_BASE_URL")
 	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = os.Getenv("ANTHROPIC_BASE_URL")
+	}
+	// Claude models default to Anthropic's own endpoint, so
+	// ANTHROPIC_API_KEY + a model name is a complete configuration.
+	if cfg.BaseURL == "" && strings.HasPrefix(strings.ToLower(cfg.Model), "claude") {
+		cfg.BaseURL = "https://api.anthropic.com"
+	}
 	if cfg.APIKeyEnv == "" {
-		cfg.APIKeyEnv = "OPENAI_API_KEY"
+		if strings.Contains(cfg.BaseURL, "anthropic.com") {
+			cfg.APIKeyEnv = "ANTHROPIC_API_KEY"
+		} else {
+			cfg.APIKeyEnv = "OPENAI_API_KEY"
+		}
 	}
 	if cfg.API == "" {
 		cfg.API = os.Getenv("OPENAI_API")
@@ -65,15 +82,17 @@ func LoadConfig() (Config, string, error) {
 	if cfg.API == "" {
 		cfg.API = "auto"
 	}
-	if cfg.API != "auto" && cfg.API != "completions" && cfg.API != "responses" {
-		return Config{}, "", fmt.Errorf("invalid api %q in agent config — use \"auto\", \"completions\", or \"responses\"", cfg.API)
+	switch cfg.API {
+	case "auto", "completions", "responses", "anthropic":
+	default:
+		return Config{}, "", fmt.Errorf("invalid api %q in agent config — use \"auto\", \"completions\", \"responses\", or \"anthropic\"", cfg.API)
 	}
 
 	key := os.Getenv(cfg.APIKeyEnv)
 	switch {
 	case cfg.Model == "" || cfg.BaseURL == "":
 		return Config{}, "", fmt.Errorf(
-			"agent not configured — set model and baseUrl in %s/agent.json or OPENAI_MODEL/OPENAI_BASE_URL",
+			"agent not configured — set model and baseUrl in %s/agent.json, or OPENAI_MODEL/OPENAI_BASE_URL, or ANTHROPIC_MODEL for a claude model",
 			configDir())
 	case key == "":
 		return Config{}, "", fmt.Errorf("no API key in $%s — put it in %s/.env or export it", cfg.APIKeyEnv, configDir())
