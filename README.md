@@ -2,7 +2,8 @@
   <h1 align="center">ihme</h1>
   <p align="center">
     iCloud Hide My Email, from the terminal.<br>
-    For humans who pick. For agents who script. For scripts that just run.
+    For humans who pick. For agents who script. For scripts that just run.<br>
+    And it ships its own agent — claude, codex, or any model key you bring.
   </p>
 </p>
 
@@ -20,7 +21,7 @@
 
 <div align="center">
 
-[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Agent integration](#agent-integration) · [Auth](#auth-details) · [Roadmap](ROADMAP.md)
+[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Built-in agent](#built-in-agent) · [Agent integration](#agent-integration) · [Auth](#auth-details) · [Roadmap](ROADMAP.md)
 
 </div>
 
@@ -78,6 +79,7 @@ ihme list --search netflix         # Find one
 ihme new github.com                # Create (pick from 3 candidates)
 ihme view github.com               # Details
 ihme export -o backup.csv          # Export everything
+ihme -p "new for netflix signup"   # Or let the built-in agent do it (see below)
 ```
 
 ## How `ihme new` works
@@ -173,7 +175,7 @@ ihme new mysite.com --json | jq '.candidates'
 # one-time config — a Claude key alone is enough:
 mkdir -p ~/.config/ihme && cat > ~/.config/ihme/.env <<'ENV'
 ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-sonnet-4-5
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ENV
 
 # ...or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama):
@@ -184,7 +186,26 @@ ENV
 ihme new "github signup" --agent    # scoped: may reserve ONE address for this label
 ihme agent                          # interactive session (inline TUI)
 ihme agent "tag my linear address as work"   # one-shot task
-ihme --agent -p "new for github signup"      # one-shot via --prompt/-p
+ihme -p "new for github signup"     # one-shot via --prompt/-p (implies the agent)
+```
+
+A one-shot run, abridged:
+
+```
+$ ihme agent -p "new address for netflix"
+
+Model: claude-sonnet-4-6
+Thinking effort: high (default)
+
+-> recall_memory {"query":"netflix"}
+<- recall_memory {"hits":[],"count":0}
+-> generate_candidates {"count":3}
+   ...
+
+✓ reserved calm.spruce_9k@icloud.com — netflix
+  why: quiet two-word image; nothing that names the service
+  passed: payout.blimp44@icloud.com — "payout" reads like spam bait
+  Memory created for "netflix"
 ```
 
 Every run opens by stating the effective configuration — `Model:` and
