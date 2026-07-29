@@ -1,8 +1,8 @@
 # Roadmap
 
-Current: **v0.4.0** · [MIT](LICENSE)
+Current: **v0.5.0** · [MIT](LICENSE)
 
-## Unreleased — claude and codex as first-class providers
+## Shipped in v0.5.0 — claude and codex as first-class providers
 
 - **Native Anthropic Messages API** (`pkg/agentkit/ai/anthropic`):
   point the agent at a Claude model and `ANTHROPIC_API_KEY` +
