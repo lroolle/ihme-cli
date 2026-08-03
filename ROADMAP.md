@@ -1,6 +1,37 @@
 # Roadmap
 
-Current: **v0.5.0** · [MIT](LICENSE)
+Current: **v0.6.0** · [MIT](LICENSE)
+
+## Shipped in v0.6.0 — harness a coding agent as the provider
+
+- **`ihme agent --via codex|claude|opencode "<task>"`.** The
+  provider relationship inverts: ihme is the harness (an [Agent
+  Client Protocol](https://agentclientprotocol.com) client,
+  `internal/acp` — a hand-rolled v1 subset in the agentkit spirit),
+  the coding agent you are already signed in to is the brain. Its
+  subscription auth, its models, no API key. The guest gets the HME
+  operations back as MCP tools by re-invoking this binary
+  (`ihme mcp`, hidden), so the rationale floor, rate caps, and
+  memory journaling hold no matter who drives.
+- **The consent card does not move to the guest.** Verified live:
+  guest permission layers execute mutating MCP tools without asking
+  (claude-agent-acp issued zero `session/request_permission` for a
+  deactivate). So the scoped-consent gate runs inside the MCP
+  server process, and its cards travel over a unix socket to the
+  harness terminal — same card, same y/N/a-or-reply protocol; a
+  typed reply rides the denial back to the guest as in-turn
+  direction. Unattended runs deny mutations with an adaptable
+  reason, exactly like the embedded agent.
+- **deepseek-v4 as a first-class BYOK provider.** DeepSeek ships
+  native /responses support in the v4 generation:
+  `DEEPSEEK_API_KEY` + `DEEPSEEK_MODEL=deepseek-v4-flash` is now a
+  complete configuration (base URL and key env default per vendor),
+  auto-detection starts `deepseek-v4*` on the responses API
+  (earlier generations stay on chat completions), and `--effort`
+  passes through. Verified live against api.deepseek.com.
+- One-shot tasks only for `--via` so far; the interactive REPL
+  stays BYOK. Codex/claude adapters are fetched via `npx` on first
+  use; opencode speaks ACP natively.
 
 ## Shipped in v0.5.0 — claude and codex as first-class providers
 
