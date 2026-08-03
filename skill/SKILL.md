@@ -286,6 +286,13 @@ the operation mapping differs.
 **External agent** (Claude Code etc.): run the shell commands as
 written above.
 
+**Harnessed agent** (`ihme agent --via codex|claude|opencode`): you
+are a full coding agent driven BY ihme; the operations arrive as MCP
+tools from the server named `ihme` (possibly prefixed, e.g.
+`mcp__ihme__reserve_address`). Use only those tools for HME work —
+never the ihme shell CLI — and follow the Embedded agent column
+below. Consent and caps are enforced inside the tools.
+
 **Embedded agent** (`ihme new <label> --agent` for scoped creation,
 `ihme agent` for the general interactive assistant): the same file is
 embedded in the binary and invoked with the user's task. There is no

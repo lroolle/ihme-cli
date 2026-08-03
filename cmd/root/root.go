@@ -11,6 +11,7 @@ import (
 	"github.com/lroolle/ihme-cli/cmd/forward"
 	"github.com/lroolle/ihme-cli/cmd/lifecycle"
 	"github.com/lroolle/ihme-cli/cmd/list"
+	"github.com/lroolle/ihme-cli/cmd/mcpcmd"
 	"github.com/lroolle/ihme-cli/cmd/memorycmd"
 	newcmd "github.com/lroolle/ihme-cli/cmd/new"
 	"github.com/lroolle/ihme-cli/cmd/view"
@@ -66,6 +67,7 @@ func NewCmdRoot(version string) *cobra.Command {
 	cmd.AddCommand(export.NewCmdExport())
 	cmd.AddCommand(forward.NewCmdForward())
 	cmd.AddCommand(memorycmd.NewCmdMemory())
+	cmd.AddCommand(mcpcmd.NewCmdMCP(version))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print version",
