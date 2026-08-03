@@ -58,21 +58,32 @@ func LoadConfig() (Config, string, error) {
 	if cfg.Model == "" {
 		cfg.Model = os.Getenv("ANTHROPIC_MODEL")
 	}
+	if cfg.Model == "" {
+		cfg.Model = os.Getenv("DEEPSEEK_MODEL")
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("OPENAI_BASE_URL")
 	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = os.Getenv("ANTHROPIC_BASE_URL")
 	}
-	// Claude models default to Anthropic's own endpoint, so
-	// ANTHROPIC_API_KEY + a model name is a complete configuration.
-	if cfg.BaseURL == "" && strings.HasPrefix(strings.ToLower(cfg.Model), "claude") {
+	// Vendor models default to their vendor's endpoint, so key + a
+	// model name is a complete configuration.
+	model := strings.ToLower(cfg.Model)
+	switch {
+	case cfg.BaseURL != "":
+	case strings.HasPrefix(model, "claude"):
 		cfg.BaseURL = "https://api.anthropic.com"
+	case strings.HasPrefix(model, "deepseek"):
+		cfg.BaseURL = "https://api.deepseek.com/v1"
 	}
 	if cfg.APIKeyEnv == "" {
-		if strings.Contains(cfg.BaseURL, "anthropic.com") {
+		switch {
+		case strings.Contains(cfg.BaseURL, "anthropic.com"):
 			cfg.APIKeyEnv = "ANTHROPIC_API_KEY"
-		} else {
+		case strings.Contains(cfg.BaseURL, "deepseek.com"):
+			cfg.APIKeyEnv = "DEEPSEEK_API_KEY"
+		default:
 			cfg.APIKeyEnv = "OPENAI_API_KEY"
 		}
 	}
@@ -92,7 +103,7 @@ func LoadConfig() (Config, string, error) {
 	switch {
 	case cfg.Model == "" || cfg.BaseURL == "":
 		return Config{}, "", fmt.Errorf(
-			"agent not configured — set model and baseUrl in %s/agent.json, or OPENAI_MODEL/OPENAI_BASE_URL, or ANTHROPIC_MODEL for a claude model",
+			"agent not configured — set model and baseUrl in %s/agent.json, or OPENAI_MODEL/OPENAI_BASE_URL, or ANTHROPIC_MODEL/DEEPSEEK_MODEL for a claude/deepseek model",
 			configDir())
 	case key == "":
 		return Config{}, "", fmt.Errorf("no API key in $%s — put it in %s/.env or export it", cfg.APIKeyEnv, configDir())

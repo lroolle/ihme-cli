@@ -10,6 +10,7 @@ func clearBYOKEnv(t *testing.T) {
 	for _, v := range []string{
 		"OPENAI_MODEL", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_API",
 		"ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY",
+		"DEEPSEEK_MODEL", "DEEPSEEK_API_KEY",
 	} {
 		t.Setenv(v, "")
 	}
@@ -44,6 +45,23 @@ func TestGatewayClaudeKeepsOpenAIKeyConvention(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.APIKeyEnv != "OPENAI_API_KEY" || key != "sk-gw-test" || cfg.BaseURL != "https://gw.example.com/v1" {
+		t.Fatalf("cfg = %+v key = %q", cfg, key)
+	}
+}
+
+func TestDeepseekModelIsACompleteConfiguration(t *testing.T) {
+	// DEEPSEEK_MODEL + DEEPSEEK_API_KEY alone must resolve, same
+	// convenience as claude: base URL defaults to DeepSeek's
+	// endpoint, key env follows the host.
+	clearBYOKEnv(t)
+	t.Setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+	t.Setenv("DEEPSEEK_API_KEY", "sk-ds-test")
+
+	cfg, key, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BaseURL != "https://api.deepseek.com/v1" || cfg.APIKeyEnv != "DEEPSEEK_API_KEY" || key != "sk-ds-test" {
 		t.Fatalf("cfg = %+v key = %q", cfg, key)
 	}
 }

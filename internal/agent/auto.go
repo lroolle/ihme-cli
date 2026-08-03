@@ -172,9 +172,10 @@ func apiFailure(err error) (int, string, bool) {
 // family. Anthropic's own host always speaks the Messages API;
 // claude models elsewhere start native and self-heal to completions
 // when the gateway has no /v1/messages. Reasoning-first OpenAI
-// families need /responses for function tools; everything else
-// speaks /chat/completions. Wrong guesses self-heal via misroute
-// detection.
+// families need /responses for function tools; deepseek-v4 ships
+// native /responses support (earlier deepseek generations stay on
+// completions); everything else speaks /chat/completions. Wrong
+// guesses self-heal via misroute detection.
 func guessAPI(model, baseURL string) string {
 	if strings.Contains(baseURL, "anthropic.com") {
 		return "anthropic"
@@ -183,7 +184,7 @@ func guessAPI(model, baseURL string) string {
 	if strings.HasPrefix(m, "claude") {
 		return "anthropic"
 	}
-	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4", "codex"} {
+	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4", "codex", "deepseek-v4"} {
 		if strings.HasPrefix(m, prefix) {
 			return "responses"
 		}

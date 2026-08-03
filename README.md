@@ -129,6 +129,8 @@ AGENT (built-in, BYOK)
   ihme agent                     Interactive session (inline TUI)
   ihme agent "<task>"            One-shot: "deactivate my old figma alias"
   ihme agent -p "<task>"         Same, via --prompt/-p (also: ihme -p "<task>")
+  ihme agent --via claude "<task>"  Harness claude-code/codex/opencode as the
+                                 provider (subscription auth, no API key)
   ihme agent --grant auto        Skip consent prompts for this run
   ihme memory                    Inspect the agent's memory graph
   ihme memory search <query>     Search journals and pages
@@ -178,6 +180,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-sonnet-4-6
 ENV
 
+# ...a DeepSeek key alone works the same way:
+# DEEPSEEK_API_KEY=sk-...
+# DEEPSEEK_MODEL=deepseek-v4-flash
+
 # ...or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama):
 # OPENAI_API_KEY=sk-...
 # OPENAI_BASE_URL=https://api.openai.com/v1
@@ -188,6 +194,24 @@ ihme agent                          # interactive session (inline TUI)
 ihme agent "tag my linear address as work"   # one-shot task
 ihme -p "new for github signup"     # one-shot via --prompt/-p (implies the agent)
 ```
+
+No API key? Harness a coding agent you are already signed in to —
+its subscription auth, its models, ihme's tools and consent:
+
+```bash
+ihme agent --via claude "new address for github signup"   # Claude plan
+ihme agent --via codex  "new address for github signup"   # ChatGPT plan
+ihme agent --via opencode "which addresses go to netflix?"
+```
+
+ihme drives the guest over the [Agent Client Protocol](https://agentclientprotocol.com)
+and hands it the HME operations back as MCP tools by re-invoking
+itself (`ihme mcp`). The taste rationale, rate caps, and memory
+journaling are enforced inside those tools, and every mutation still
+stops at ihme's own consent card — the gate deliberately does NOT
+trust the guest's permission layer. One-shot tasks for now;
+codex/claude go through their ACP adapters (fetched via `npx` on
+first use), opencode speaks ACP natively.
 
 A one-shot run, abridged:
 
@@ -223,7 +247,7 @@ What you get, and what it must earn:
 - **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
 - **It refreshes a stale pool** *(experimental)*. Apple hands out a small pool of generated addresses that repeats until one is consumed, so when nothing passes taste and re-generating returns the same options, the agent can burn a throwaway — reserve, deactivate, delete — to force a fresh pool. Bounded (2 per task) and net-zero on the common path. The reserve-to-refresh behavior is pending real-world validation; it degrades to a plain re-generate if Apple doesn't cooperate.
 - **It remembers — visibly.** The agent keeps a memory across runs — a plain [Logseq](https://logseq.com)-style markdown graph it finds on its own (`$IHME_MEMORY_PATH` to relocate). Reservations journal themselves, each topic page accumulates a service's history, and a `flashcards` page loads into every run. Every memory operation states what actually happened — `Memory created for "x"`, `Memory updated for "x"`, `Reused memory for "x"` — and a failed write says so instead of pretending. Inspect it with `ihme memory` (`search`, `graph`, `card`, `path`), or open the directory in Logseq or Obsidian — no database, just files.
-- **Wire protocol is auto-detected** per endpoint and model family (`claude*` or an anthropic.com base URL → native Messages API, `gpt-5*`/`o1`/`o3`/`codex` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`. Claude behind an OpenAI-protocol gateway self-heals to chat completions on the first 404.
+- **Wire protocol is auto-detected** per endpoint and model family (`claude*` or an anthropic.com base URL → native Messages API, `gpt-5*`/`o1`/`o3`/`codex`/`deepseek-v4*` → responses API, else chat completions), corrected on the endpoint's misroute signal, and persisted to `~/.config/ihme/agent.json`. Claude behind an OpenAI-protocol gateway self-heals to chat completions on the first 404.
 
 The agent kernel is [`pkg/agentkit`](pkg/agentkit/README.md) — stdlib-only, embeddable, reusable outside this CLI.
 

@@ -43,7 +43,13 @@ internal/
                          (both are adapters over it)
   agent/                 Embedded-agent adapter: BYOK config,
                          in-process tools, scoped-consent gate,
-                         renderer (see `ihme new --agent`)
+                         renderer (see `ihme new --agent`); also the
+                         harness side (`--via`, via.go) and the MCP
+                         server (mcpserve.go) for `ihme mcp`
+  acp/                   Minimal Agent Client Protocol client (v1
+                         subset, hand-rolled): ihme as the HARNESS
+                         spawning claude-code/codex/opencode as the
+                         model provider — see `ihme agent --via`
   memory/                Agent memory: a Logseq-style markdown graph
                          (journals/, pages/, flashcards). Plain files,
                          no DB — see its package doc
@@ -75,6 +81,18 @@ Two entry points, one adapter (internal/agent):
 - `ihme agent [task]` (alias `ihme --agent`) — general: interactive
   TUI without args, one-shot with a task; nothing is pre-granted.
 
+A third mode inverts the provider: `ihme agent --via codex|claude|
+opencode "<task>"` harnesses a full coding agent (its subscription
+auth, its models — no BYOK key) as the brain. ihme is the ACP
+client (internal/acp); the guest gets the HME operations back as
+MCP tools by re-invoking this binary as `ihme mcp`. The consent
+gate does NOT move to the guest: it runs inside the MCP child and
+its cards travel over a unix socket to the harness terminal
+(consentsock.go) — verified live that guest permission layers
+(claude-agent-acp) execute mutating MCP tools without asking, so
+ours is the only real gate. Tool physics (rationale floor, caps,
+journaling) are unchanged — they live in tools.go, not the loop.
+
 Code is the source of truth for the behavior; the load-bearing
 comments live where the behavior lives:
 
@@ -85,6 +103,13 @@ comments live where the behavior lives:
 - internal/agent/config.go, auto.go — BYOK config keys and
   wire-protocol auto-detection
 - internal/agent/run.go — system prompt, renderer, one-shot runs
+- internal/agent/via.go — the --via harness: guest resolution,
+  session/prompt loop, update rendering, consent socket wiring
+- internal/agent/mcpserve.go — `ihme mcp`: the tool layer over MCP
+  stdio, gate in front of every call
+- internal/agent/consentsock.go — consent cards across the process
+  boundary (why: the guest's permission layer never asks)
+- internal/acp/client.go — the ACP v1 client subset and its types
 - internal/agent/memtool.go — memory glue: the recall_memory /
   remember tools, the <memory> continuity block injected at session
   start, and the journal+page write made at reserve time

@@ -144,8 +144,10 @@ func TestGuessAPI(t *testing.T) {
 		"codex-mini":        "responses",
 		"claude-opus-5":     "anthropic",
 		"claude-sonnet-4-5": "anthropic",
+		"deepseek-v4-flash": "responses",
 		"gpt-4o-mini":       "completions",
 		"deepseek-chat":     "completions",
+		"deepseek-v3.2":     "completions",
 		"gemini-2.5-flash":  "completions",
 		"llama3.3":          "completions",
 	}
