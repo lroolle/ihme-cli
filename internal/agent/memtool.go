@@ -174,6 +174,16 @@ func memoryLine(n memoryNote) string {
 	return ""
 }
 
+// JournalReservation is the shell adapter's hook into the same
+// episodic record the embedded/MCP paths write: cmd/new calls it
+// after Apple confirms a reserve, so SKILL.md's "reservations
+// journal themselves" holds no matter which adapter made the
+// reservation. No rationale exists on this path — the entry is the
+// bare fact. Best-effort like writeReservation below.
+func JournalReservation(e *api.HmeEmail) {
+	writeReservation(memory.Open(), e, "", nil)
+}
+
 // writeReservation records a reservation the moment Apple confirms
 // it: a dated journal block linking the service page, and a bullet on
 // the service page itself so a topic accumulates its own history.
