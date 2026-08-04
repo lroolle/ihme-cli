@@ -139,19 +139,34 @@ func misroute(current string, err error) (string, bool) {
 		}
 	case "responses":
 		// Endpoint absent on completions-only gateways/runtimes.
-		if status == 404 || status == 405 ||
-			(status == 400 && strings.Contains(body, "unknown") && strings.Contains(body, "path")) {
+		if endpointAbsent(status, body) {
 			return "completions", true
 		}
 	case "anthropic":
 		// A claude model on an OpenAI-protocol gateway: /v1/messages
 		// does not exist there — fall back to chat completions.
-		if status == 404 || status == 405 ||
-			(status == 400 && strings.Contains(body, "unknown") && strings.Contains(body, "path")) {
+		if endpointAbsent(status, body) {
 			return "completions", true
 		}
 	}
 	return "", false
+}
+
+// endpointAbsent classifies "this path does not exist here" replies.
+// Beyond the plain 404/405, new-api-family gateways answer
+// unimplemented endpoints with 500 {"message":"not implemented",
+// "type":"new_api_error"} — permanent despite the 5xx dress, so it
+// must flip the protocol rather than burn the transient retries.
+func endpointAbsent(status int, body string) bool {
+	switch status {
+	case 404, 405, 501:
+		return true
+	case 400:
+		return strings.Contains(body, "unknown") && strings.Contains(body, "path")
+	case 500:
+		return strings.Contains(body, "not implemented")
+	}
+	return false
 }
 
 // apiFailure extracts status and lowercased body from either

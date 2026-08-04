@@ -128,6 +128,28 @@ func TestNonMisrouteErrorsPassThrough(t *testing.T) {
 	}
 }
 
+func TestMisrouteResponsesNotImplemented500(t *testing.T) {
+	// new-api-family gateways answer a missing /v1/responses with a
+	// 500 "not implemented" (seen live with deepseek-v4-flash). It
+	// arrives Transient-wrapped (5xx path) and must still flip.
+	notImpl := agentkit.Transient{Err: &openai.APIError{
+		Status: 500,
+		Body:   `{"error":{"message":"not implemented (request id: 20260804x)","type":"new_api_error","param":"","code":500}}`,
+	}}
+	next, ok := misroute("responses", notImpl)
+	if !ok || next != "completions" {
+		t.Fatalf("misroute = %q, %v", next, ok)
+	}
+	// A plain 501 is the same signal by definition.
+	if next, ok := misroute("responses", &openai.APIError{Status: 501, Body: "Not Implemented"}); !ok || next != "completions" {
+		t.Fatalf("501 misroute = %q, %v", next, ok)
+	}
+	// A generic 500 without the signal stays transient — no flip.
+	if _, ok := misroute("responses", agentkit.Transient{Err: &openai.APIError{Status: 500, Body: "internal server error"}}); ok {
+		t.Fatal("generic 500 must not flip")
+	}
+}
+
 func TestMisrouteUnwrapsTransient(t *testing.T) {
 	// APIError wrapped in Transient (5xx path) must still classify.
 	if _, ok := misroute("completions", agentkit.Transient{Err: needsResponses}); !ok {

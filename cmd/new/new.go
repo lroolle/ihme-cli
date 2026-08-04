@@ -139,6 +139,7 @@ func reserve(svc *app.Service, hme, label string, tagList []string, note string,
 	if err != nil {
 		return err
 	}
+	agent.JournalReservation(reserved)
 	if jsonFlag {
 		return cmdutil.OutputResult(cmd, reserved)
 	}

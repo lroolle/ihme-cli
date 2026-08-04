@@ -160,6 +160,18 @@ func TestMemoryContextInjectsFlashcardsAndJournal(t *testing.T) {
 	}
 }
 
+func TestJournalReservationWritesTheSharedRecord(t *testing.T) {
+	// The shell adapter's hook (cmd/new) must land in the same graph
+	// the embedded/MCP paths write — SKILL.md's "reservations journal
+	// themselves" covers every adapter.
+	t.Setenv("IHME_MEMORY_PATH", t.TempDir())
+	JournalReservation(&api.HmeEmail{Hme: "pole-toils-3x@icloud.com", Label: "github"})
+	page, ok := memory.Open().ReadPage("github")
+	if !ok || !strings.Contains(page, "pole-toils-3x@icloud.com") {
+		t.Errorf("shell reservation not journaled: %q", page)
+	}
+}
+
 func TestWriteReservationIsNilSafe(t *testing.T) {
 	if note := writeReservation(nil, nil, "x", nil); note.Status != "" {
 		t.Errorf("nil store/address must be a no-op, got %+v", note)
