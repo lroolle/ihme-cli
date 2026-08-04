@@ -221,7 +221,12 @@ func (c *ResponsesClient) consume(ctx context.Context, body io.Reader, emit func
 				return agentkit.AssistantMessage{}, err
 			}
 
-		case ev.Type == "response.reasoning_summary_text.delta" && ev.Delta != "":
+		// Two names for the same product surface: OpenAI streams a
+		// summary of its hidden reasoning, DeepSeek streams the raw
+		// chain-of-thought and generates no summary at all (it accepts
+		// and ignores reasoning.summary). Render whichever arrives.
+		case (ev.Type == "response.reasoning_summary_text.delta" ||
+			ev.Type == "response.reasoning_text.delta") && ev.Delta != "":
 			if err := emit(agentkit.StreamEvent{Type: agentkit.StreamThinking, Text: ev.Delta}); err != nil {
 				return agentkit.AssistantMessage{}, err
 			}
