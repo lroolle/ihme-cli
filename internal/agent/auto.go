@@ -52,7 +52,9 @@ func newAutoStreamer(cfg Config, key string) *autoStreamer {
 				}
 				return c
 			}
-			return &openai.Client{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}
+			return &openai.Client{
+				BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model, Effort: cfg.Effort,
+			}
 		},
 		persist: func(api string) { persistAPI(cfg.Model, api) },
 	}

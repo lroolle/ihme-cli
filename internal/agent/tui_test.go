@@ -328,10 +328,16 @@ func TestSessionHeaderReportsEffectiveModelAndEffort(t *testing.T) {
 	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: default" {
 		t.Fatalf("header = %q", got)
 	}
-	// On chat completions the effort parameter is never sent, even if
-	// configured — the header must not claim it was applied.
-	s = &session{model: "gemini-2.5-pro", effort: "high", api: "completions"}
-	if got := s.header(); got != "Model: gemini-2.5-pro\nThinking effort: n/a (chat completions)" {
+	// Chat completions carries reasoning_effort too, but only thinking
+	// models act on it: name the parameter that went on the wire rather
+	// than promising the model honored it.
+	s = &session{model: "deepseek-v4-flash", effort: "high", api: "completions"}
+	if got := s.header(); got != "Model: deepseek-v4-flash\nThinking effort: high (sent as reasoning_effort)" {
+		t.Fatalf("header = %q", got)
+	}
+	// Nothing configured → nothing sent; the model's own default rules.
+	s = &session{model: "gemini-2.5-pro", api: "completions"}
+	if got := s.header(); got != "Model: gemini-2.5-pro\nThinking effort: default" {
 		t.Fatalf("header = %q", got)
 	}
 	// Modern Claude (4.6+): effort is the applied control; report the

@@ -238,3 +238,33 @@ func TestResponsesThinkingSummaries(t *testing.T) {
 		t.Fatalf("thinking events = %d, want 1", thinking)
 	}
 }
+
+// DeepSeek's /responses streams the raw chain-of-thought as
+// reasoning_text and generates no summary at all (it accepts and
+// ignores reasoning.summary), so a summary-only reader renders a
+// silent model. Event sequence and termination follow DeepSeek's
+// published example: no trailing [DONE].
+func TestResponsesDeepSeekReasoningText(t *testing.T) {
+	msg, events, err := runResp(t, []string{
+		`data: {"type":"response.created","sequence_number":0,"response":{"status":"in_progress"}}`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning"}}`,
+		`data: {"type":"response.reasoning_text.delta","item_id":"rs_1","delta":"The user greets me."}`,
+		`data: {"type":"response.output_text.delta","item_id":"msg_1","delta":"Hello!"}`,
+		`data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":22,"output_tokens":29}}}`,
+	}, agentkit.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Text != "Hello!" || msg.StopReason != agentkit.StopEnd {
+		t.Fatalf("msg = %+v", msg)
+	}
+	thinking := 0
+	for _, ev := range events {
+		if ev.Type == agentkit.StreamThinking && strings.Contains(ev.Text, "greets me") {
+			thinking++
+		}
+	}
+	if thinking != 1 {
+		t.Fatalf("raw chain-of-thought not rendered: events = %+v", events)
+	}
+}

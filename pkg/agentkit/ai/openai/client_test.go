@@ -242,6 +242,112 @@ func TestRequestWireFormat(t *testing.T) {
 	}
 }
 
+// DeepSeek 400s a request carrying tools when an earlier assistant
+// turn dropped its reasoning_content, so the chain-of-thought has to
+// survive the round trip — streamed as thinking, stored on the
+// message, replayed verbatim on the next request.
+func TestReasoningContentRoundTrips(t *testing.T) {
+	msg, events, err := run(t, []string{
+		`data: {"choices":[{"delta":{"reasoning_content":"weigh "}}]}`,
+		`data: {"choices":[{"delta":{"reasoning_content":"options"}}]}`,
+		`data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}`,
+		`data: [DONE]`,
+	}, agentkit.Request{Messages: []agentkit.Message{{Role: agentkit.RoleUser, Text: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 || events[0].Type != agentkit.StreamThinking {
+		t.Fatalf("thinking not streamed: %+v", events)
+	}
+	var stored string
+	if err := json.Unmarshal(msg.Provider, &stored); err != nil || stored != "weigh options" {
+		t.Fatalf("Provider = %s (%v)", msg.Provider, err)
+	}
+
+	// The next request must carry it back on the assistant turn.
+	var captured []byte
+	srv := sseServer(t, []string{
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`data: [DONE]`,
+	}, &captured)
+	defer srv.Close()
+	req := agentkit.Request{Messages: []agentkit.Message{
+		{Role: agentkit.RoleUser, Text: "hi"},
+		msg.Message(),
+	}}
+	if _, err := client(srv.URL).Stream(context.Background(), req, func(agentkit.StreamEvent) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Messages []struct {
+			Role             string `json:"role"`
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(captured, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire.Messages[1].ReasoningContent != "weigh options" {
+		t.Fatalf("reasoning_content not replayed: %+v", wire.Messages[1])
+	}
+}
+
+// A Provider payload written by another backend (Anthropic stores an
+// array of thinking blocks) must be ignored, not mangled onto the wire.
+func TestForeignProviderPayloadIgnored(t *testing.T) {
+	var captured []byte
+	srv := sseServer(t, []string{
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`data: [DONE]`,
+	}, &captured)
+	defer srv.Close()
+	req := agentkit.Request{Messages: []agentkit.Message{
+		{Role: agentkit.RoleAssistant, Text: "hi", Provider: json.RawMessage(`[{"type":"thinking"}]`)},
+	}}
+	if _, err := client(srv.URL).Stream(context.Background(), req, func(agentkit.StreamEvent) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(captured), "reasoning_content") {
+		t.Fatalf("foreign provider payload leaked: %s", captured)
+	}
+}
+
+func TestReasoningEffortSentOnlyWhenSet(t *testing.T) {
+	lines := []string{
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`data: [DONE]`,
+	}
+	// Unset: the request must be byte-identical to before this
+	// parameter existed — endpoints that never heard of it see nothing.
+	var captured []byte
+	srv := sseServer(t, lines, &captured)
+	defer srv.Close()
+	if _, err := client(srv.URL).Stream(context.Background(), agentkit.Request{}, func(agentkit.StreamEvent) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(captured), "reasoning_effort") {
+		t.Fatalf("empty effort must be omitted: %s", captured)
+	}
+
+	var captured2 []byte
+	srv2 := sseServer(t, lines, &captured2)
+	defer srv2.Close()
+	c := client(srv2.URL)
+	c.Effort = "high"
+	if _, err := c.Stream(context.Background(), agentkit.Request{}, func(agentkit.StreamEvent) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		ReasoningEffort string `json:"reasoning_effort"`
+	}
+	if err := json.Unmarshal(captured2, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if wire.ReasoningEffort != "high" {
+		t.Fatalf("reasoning_effort = %q, want high", wire.ReasoningEffort)
+	}
+}
+
 func TestNonStreamResponseIsPermanentError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
