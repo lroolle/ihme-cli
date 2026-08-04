@@ -139,7 +139,14 @@ func (s *session) header() string {
 			effort = applied
 		}
 	default:
-		effort = "n/a (chat completions)"
+		// Chat completions carries effort too (reasoning_effort), but
+		// only thinking models act on it — report what went on the
+		// wire, not a promise about what the model did with it.
+		if effort == "" {
+			effort = "default"
+		} else {
+			effort += " (sent as reasoning_effort)"
+		}
 	}
 	return fmt.Sprintf("Model: %s\nThinking effort: %s", s.model, effort)
 }
@@ -230,7 +237,7 @@ type Options struct {
 	Label  string
 	Note   string // extra context from the user, folded into the task
 	Grant  GrantMode
-	Effort string // reasoning effort override (responses API models)
+	Effort string // reasoning effort override (thinking models)
 	JSON   bool
 }
 

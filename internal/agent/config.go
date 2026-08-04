@@ -27,9 +27,10 @@ type Config struct {
 	// signal, persist the discovery), or pin one explicitly:
 	// "completions", "responses", or "anthropic".
 	API string `json:"api"`
-	// Effort sets reasoning effort ("low"/"medium"/"high"). On the
-	// responses API it is passed through; on the Anthropic API it
-	// maps to an extended-thinking budget. Empty applies neither.
+	// Effort sets reasoning effort ("low"/"medium"/"high"). The
+	// responses and chat-completions APIs pass it through (as
+	// reasoning_effort); the Anthropic API maps it to an
+	// extended-thinking budget or output_config. Empty sends nothing.
 	Effort string `json:"effort"`
 }
 

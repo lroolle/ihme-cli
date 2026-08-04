@@ -130,7 +130,7 @@ JSON output with --yes or --address (reserved):
 	cmd.Flags().IntVarP(&count, "count", "n", 3, "Number of candidates to generate")
 	cmd.Flags().BoolVar(&agentic, "agent", false, "Run the embedded agent: search, generate, judge, reserve per SKILL.md")
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Agent consent for actions beyond this run's scope: ask or auto")
-	cmd.Flags().StringVar(&effort, "effort", "", "Agent reasoning effort (responses-API models): minimal, low, medium, high")
+	cmd.Flags().StringVar(&effort, "effort", "", "Agent reasoning effort: minimal, low, medium, high (some models also: xhigh, max)")
 	return cmd
 }
 

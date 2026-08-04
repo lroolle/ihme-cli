@@ -107,7 +107,7 @@ JSON output (--json, one-shot only):
 	}
 
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Consent for mutating actions: ask or auto")
-	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort: minimal, low, medium, high (claude 4.6+ also: xhigh, max; older claude models map it to a thinking budget)")
+	cmd.Flags().StringVar(&effort, "effort", "", "Reasoning effort: minimal, low, medium, high (claude 4.6+ and deepseek also: xhigh, max; older claude models map it to a thinking budget)")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Run one task and exit (same as a positional task)")
 	cmd.Flags().StringVar(&via, "via", "", "Harness a full coding agent as the provider: codex, claude, or opencode (uses its subscription auth, no API key)")
 	return cmd

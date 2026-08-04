@@ -25,6 +25,19 @@ type Client struct {
 	APIKey  string
 	Model   string
 
+	// Effort sets reasoning_effort. Sent ONLY when non-empty, so an
+	// endpoint that never heard of the parameter sees byte-identical
+	// requests to before. Thinking models on this API take it
+	// (DeepSeek: none/minimal/low/medium/high/xhigh/max); OpenAI's
+	// reasoning models reject it alongside function tools and want
+	// /responses instead — autoStreamer reads that 400 as a misroute.
+	Effort string
+
+	// Chain-of-thought (reasoning_content) is emitted as
+	// StreamThinking and round-tripped verbatim through
+	// Message.Provider: DeepSeek 400s a request carrying tools whose
+	// earlier assistant turns dropped their reasoning_content.
+
 	// HTTPClient defaults to a client with no overall timeout:
 	// streaming responses are long-lived; cancel via ctx.
 	HTTPClient *http.Client
@@ -42,10 +55,11 @@ type wireToolCall struct {
 }
 
 type wireMessage struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content"`
-	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Role             string         `json:"role"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	ToolCalls        []wireToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
 }
 
 type wireTool struct {
@@ -58,11 +72,12 @@ type wireTool struct {
 }
 
 type wireRequest struct {
-	Model         string        `json:"model"`
-	Messages      []wireMessage `json:"messages"`
-	Tools         []wireTool    `json:"tools,omitempty"`
-	Stream        bool          `json:"stream"`
-	StreamOptions struct {
+	Model           string        `json:"model"`
+	Messages        []wireMessage `json:"messages"`
+	Tools           []wireTool    `json:"tools,omitempty"`
+	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	Stream          bool          `json:"stream"`
+	StreamOptions   struct {
 		IncludeUsage bool `json:"include_usage"`
 	} `json:"stream_options"`
 }
@@ -140,7 +155,7 @@ func (c *Client) Stream(ctx context.Context, req agentkit.Request, emit func(age
 }
 
 func (c *Client) buildRequest(req agentkit.Request) wireRequest {
-	w := wireRequest{Model: c.Model, Stream: true}
+	w := wireRequest{Model: c.Model, Stream: true, ReasoningEffort: c.Effort}
 	w.StreamOptions.IncludeUsage = true
 	if req.System != "" {
 		w.Messages = append(w.Messages, wireMessage{Role: "system", Content: req.System})
@@ -149,6 +164,7 @@ func (c *Client) buildRequest(req agentkit.Request) wireRequest {
 		wm := wireMessage{Role: string(m.Role), Content: m.Text}
 		switch m.Role {
 		case agentkit.RoleAssistant:
+			wm.ReasoningContent = providerReasoning(m.Provider)
 			for _, tc := range m.ToolCalls {
 				var wtc wireToolCall
 				wtc.ID = tc.ID
@@ -179,11 +195,27 @@ func (c *Client) buildRequest(req agentkit.Request) wireRequest {
 	return w
 }
 
+// providerReasoning reads back the chain-of-thought this client
+// stored on an assistant turn. A Provider payload written by a
+// different backend (Anthropic's thinking blocks are an array) does
+// not decode into a string and is skipped rather than mangled.
+func providerReasoning(p json.RawMessage) string {
+	if len(p) == 0 {
+		return ""
+	}
+	var reasoning string
+	if err := json.Unmarshal(p, &reasoning); err != nil {
+		return ""
+	}
+	return reasoning
+}
+
 // consume reads the SSE stream, emitting deltas and assembling the
 // final message.
 func (c *Client) consume(ctx context.Context, body io.Reader, emit func(agentkit.StreamEvent) error) (agentkit.AssistantMessage, error) {
 	var (
 		text       strings.Builder
+		reasoning  strings.Builder
 		finish     string
 		usage      agentkit.Usage
 		calls      []*pendingCall
@@ -228,6 +260,7 @@ func (c *Client) consume(ctx context.Context, body io.Reader, emit func(agentkit
 			}
 		}
 		if choice.Delta.ReasoningContent != "" {
+			reasoning.WriteString(choice.Delta.ReasoningContent)
 			if err := emit(agentkit.StreamEvent{Type: agentkit.StreamThinking, Text: choice.Delta.ReasoningContent}); err != nil {
 				return agentkit.AssistantMessage{}, err
 			}
@@ -276,6 +309,9 @@ func (c *Client) consume(ctx context.Context, body io.Reader, emit func(agentkit
 	}
 	for _, pc := range calls {
 		msg.ToolCalls = append(msg.ToolCalls, pc.toolCall())
+	}
+	if reasoning.Len() > 0 {
+		msg.Provider, _ = json.Marshal(reasoning.String())
 	}
 	return msg, nil
 }
