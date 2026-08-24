@@ -177,8 +177,16 @@ func checkSuccess(operation string, body []byte) error {
 }
 
 func hmeErr(operation string, e *HmeError) error {
-	if e != nil && e.ErrorMessage != "" {
+	switch {
+	case e == nil:
+		return fmt.Errorf("%s failed", operation)
+	case e.ErrorMessage != "" && e.ErrorCode != "":
+		return fmt.Errorf("%s failed: %s (code %s)", operation, e.ErrorMessage, e.ErrorCode)
+	case e.ErrorMessage != "":
 		return fmt.Errorf("%s failed: %s", operation, e.ErrorMessage)
+	case e.ErrorCode != "":
+		return fmt.Errorf("%s failed (code %s)", operation, e.ErrorCode)
+	default:
+		return fmt.Errorf("%s failed", operation)
 	}
-	return fmt.Errorf("%s failed", operation)
 }

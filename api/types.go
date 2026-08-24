@@ -34,9 +34,43 @@ type HmeResponse struct {
 	Error   *HmeError       `json:"error,omitempty"`
 }
 
+// HmeError is the error member of an HME response envelope. Apple is
+// inconsistent about its shape: usually an object, but errorCode may be
+// a number or a quoted string (reserve sends "-41015"-style strings),
+// and some responses carry a bare scalar with no object at all
+// ({"success":false,"error":1}). Accept all of them — a parse failure
+// here hides the real error from the user.
 type HmeError struct {
 	ErrorMessage string `json:"errorMessage"`
-	ErrorCode    int    `json:"errorCode,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
+}
+
+func (e *HmeError) UnmarshalJSON(data []byte) error {
+	var obj struct {
+		ErrorMessage string          `json:"errorMessage"`
+		ErrorCode    json.RawMessage `json:"errorCode"`
+	}
+	if err := json.Unmarshal(data, &obj); err == nil {
+		e.ErrorMessage = obj.ErrorMessage
+		e.ErrorCode = scalarText(obj.ErrorCode)
+		return nil
+	}
+	e.ErrorMessage = ""
+	e.ErrorCode = scalarText(data)
+	return nil
+}
+
+// scalarText renders a JSON scalar (quoted string or number) as its
+// bare text, "" for empty/null.
+func scalarText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
 }
 
 type AuthInitRequest struct {

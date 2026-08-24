@@ -45,18 +45,36 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 		case "recall_memory", "remember":
 			return agentkit.GateDecision{Allowed: true}
 
-		// refresh_candidates reserves, deactivates, then deletes a
-		// throwaway — net-zero on the common path (nothing is left
-		// behind). Consent gates PERSISTENT keeper state (a real
-		// reservation, a deactivation, an edit the user will see
-		// later); a confirmation here would only add friction and
-		// dilute the one card that matters, while the real abuse bound
-		// is the per-task refresh cap in code. The rare delete failure
-		// leaves one inactive, clearly-labeled throwaway — surfaced to
-		// the user via the tool result, not silent. Allowed, and
-		// rendered loudly in the step log so the churn stays visible.
+		// refresh_candidates burns a throwaway — a real reserve +
+		// delete against Apple. It ran consent-free for three weeks on
+		// the "net-zero transient" argument (TASTE.md 2026-07-22);
+		// field traces killed that: a model with a miscalibrated taste
+		// bar declared healthy pools weak and rotated task after task,
+		// and since the per-task cap resets every turn (resetTurn),
+		// "capped in code" still meant steady reserve+delete churn —
+		// exactly the traffic that draws Apple rate limiting. Net-zero
+		// described the ACCOUNT state; the API pressure was never
+		// zero. The card shows the model's per-candidate verdict, so
+		// the user can veto a bogus weak-pool call ("n" or a redirect)
+		// or wave rotation through for the session ("a").
 		case "refresh_candidates":
-			return agentkit.GateDecision{Allowed: true}
+			var args struct {
+				Reason string `json:"reason"`
+			}
+			_ = json.Unmarshal(req.Call.Args, &args)
+			// Verdict-less churn never reaches the user — same rule as
+			// a rationale-less reservation.
+			if len(strings.TrimSpace(args.Reason)) < minRationale {
+				return agentkit.GateDecision{Allowed: false,
+					Reason: "reason first: name each current candidate and its ACTIVE defect (deficit word, leading digits, gibberish) — a pool that is merely plain is not weak: reserve the best instead of rotating"}
+			}
+			return consent(ctx, ask, st, "refresh_candidates", userPrompt{
+				Kind:    promptConsent,
+				Title:   "Burn a throwaway to fetch fresh candidates?",
+				Subject: st.label,
+				Warn:    "a real reserve + delete on Apple — refreshes usually swap only one candidate",
+				Why:     strings.TrimSpace(args.Reason),
+			})
 
 		case "reserve_address":
 			var args struct {
@@ -77,7 +95,7 @@ func gate(mode GrantMode, st *runState, ask asker) agentkit.Gate {
 			// tool's own length check backstops the GrantAuto path.)
 			if len(strings.TrimSpace(args.Rationale)) < minRationale {
 				return agentkit.GateDecision{Allowed: false,
-					Reason: "rationale first: the user decides from your taste verdict on the consent card — state the image this address makes and list each rejected candidate with its failure, then reserve again"}
+					Reason: "rationale first: the user decides from your taste verdict on the consent card — state in one plain sentence why this candidate wins the pool and list each rejected candidate with its failure, then reserve again"}
 			}
 			// The card shows everything the reservation will write.
 			facts := [][2]string{{"label", args.Label}}

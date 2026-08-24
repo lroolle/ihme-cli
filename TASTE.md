@@ -38,6 +38,9 @@ from the subject alone.
 
 ## 2026-07-22 rejected: a consent prompt on refresh_candidates
 
+**SUPERSEDED 2026-08-12** — the expiry fired in the field, just not
+the one predicted: see the next entry.
+
 **Why.** `refresh_candidates` (reserve then delete a throwaway to force
 Apple to hand out a fresh candidate pool) was first shipped behind a
 light consent card, on the reflex that "every Apple mutation asks."
@@ -62,3 +65,67 @@ a human tap.
 **Expires.** If refresh ever stops being net-zero — e.g. it starts
 leaving a persistent address behind by design rather than as a rare
 delete-failure fallback — it rejoins the gated class.
+
+---
+
+## 2026-08-12 reversed: refresh_candidates rejoins the gated class
+
+**Why.** The 2026-07-22 scar above assumed the per-task cap bounded
+abuse and a consent card bought nothing. A field trace (deepseek via
+the embedded agent) broke both legs: a model with a miscalibrated
+taste bar declared a healthy pool "all three candidates are weak" and
+burned throwaways task after task. (1) "Net-zero" described ACCOUNT
+state, not API pressure — each refresh is a real reserve + delete
+against Apple's HME endpoints, exactly the churn that draws rate
+limiting or a ban. (2) The cap is per-task and resets every turn
+(resetTurn), so capped-in-code still allowed steady burn across a
+session. The consent card also fixes the upstream failure: it puts
+the model's "every candidate fails because…" verdict in front of the
+user, who can veto a bogus weak-pool call with one keystroke,
+redirect ("just take sterner.turning5r"), or grant "a" for the
+session. Shipped alongside a taste recalibration in SKILL.md (taste
+ranks a pool, it rarely vetoes one) so the gate is a backstop, not
+the fix.
+
+**Reuse.** "Net-zero on persistent state" is not net-zero — remote
+API cost is state the user pays for too. A per-task rate cap bounds
+one task, never a session. And when a safeguard exists to catch model
+misjudgment, the card must show the judgment being consented to.
+
+**Expires.** If Apple ships an official pool-refresh endpoint (no
+reserve+delete cost), or telemetry shows bogus weak-pool verdicts
+have become rare across providers, refresh may argue its way back to
+the ungated class.
+
+---
+
+## 2026-08-13 rejected: "the image" as the required rationale
+
+**Why.** The 2026-08-12 recalibration fixed the gate (taste ranks,
+rarely vetoes) but left the rationale schema demanding an image: the
+system prompt required "the image it makes, the inspiration," the
+summary had to restate "the image that made it win," and SKILL.md
+step 4 asked for "the winner's image and why it fits." A field trace
+(claude signup, pool `turbine.dives0s` / `navy-cliched9f` /
+`fiends-salty-4j`) showed the new failure mode: the honest verdict
+was "the only candidate without a defect word," but the model —
+obligated to produce an image — confabulated one ("a power generator
+plunging into deep water, energy meets depth"), force-fit service
+resonance ("actually echoes what Claude does"), and delivered the
+same purple paragraph twice, once narrating and once on the card.
+The old bug vetoed pools for lacking poetry; the schema then made
+poetry mandatory, so the model performed it. Fixed by making the
+rationale one honest sentence in plain register, with image and
+resonance allowed only when genuinely present, and by banning
+pre-card restatement.
+
+**Reuse.** A required field is an order to fill it: if the schema
+demands an image, the model will manufacture one whether or not it
+exists. Make the honest low-key answer ("cleanest of the three")
+explicitly sufficient, or the model will decorate. Selling the pick
+is a taste defect in its own right — resonance is discovered, not
+constructed.
+
+**Expires.** If a future rubric scores images separately from the
+pass/fail verdict (image as scored bonus, not rationale), the
+rationale field may reference it again.
