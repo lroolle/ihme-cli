@@ -101,7 +101,12 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 
 			fmt.Println("Authenticating...")
 			if err := client.Login(appleID, password, otpCallback); err != nil {
-				return err
+				// %v, not %w, on purpose: the final accountLogin can
+				// fail as an auth rejection, and cmdutil.Explain would
+				// answer it with "Fix: ihme auth login" — the command
+				// that is running. A failed sign-in gets the cause and
+				// no circular advice.
+				return fmt.Errorf("sign-in failed: %v", err)
 			}
 
 			if err := api.SaveSession(sessPath, client.Session()); err != nil {

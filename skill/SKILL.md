@@ -181,7 +181,12 @@ Error: <ref> required — an address label, email, or ID
 
 - 0: success
 - 1: error
-- 2: not authenticated (run `ihme auth login`)
+- 2: not authenticated (run `ihme auth login`) — from ANY command, not
+  just `auth status`
+
+A session that expires mid-command heals itself (one silent re-auth,
+then the call is replayed), so a lone 401 never surfaces. Exit 2 means
+Apple kept refusing: only an interactive login fixes it.
 
 ## Operational guide (for agents)
 
