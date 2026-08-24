@@ -85,13 +85,56 @@ func TestUnknownToolDeniedByDefault(t *testing.T) {
 	}
 }
 
-func TestRefreshCandidatesAllowedUnattended(t *testing.T) {
+// Refresh burns a real reserve+delete against Apple; field traces
+// showed miscalibrated models rotating healthy pools task after task
+// (TASTE.md 2026-08-12 reversal), so it is consent-gated like any
+// other Apple mutation — and a verdict-less refresh never reaches
+// the user at all.
+func TestRefreshWithoutReasonNeverReachesTheUser(t *testing.T) {
 	st := newRunState("github")
-	// A net-zero transient (reserve + delete leaves nothing): allowed
-	// without consent, even non-interactively. The abuse bound is the
-	// per-task refresh cap in code, not a prompt.
-	if d := decide(t, st, "refresh_candidates", `{}`); !d.Allowed {
-		t.Fatalf("refresh must run without a consent prompt: %s", d.Reason)
+	asked := false
+	ask := func(context.Context, userPrompt) (string, error) {
+		asked = true
+		return "y", nil
+	}
+	g := gate(GrantAsk, st, ask)
+	d := g(context.Background(), agentkit.GateRequest{
+		Call: agentkit.ToolCall{Name: "refresh_candidates", Args: json.RawMessage(`{}`)},
+	})
+	if d.Allowed || asked {
+		t.Fatalf("verdict-less refresh must bounce to the model, not the user (allowed=%v asked=%v)", d.Allowed, asked)
+	}
+	if !strings.Contains(d.Reason, "reason") {
+		t.Fatalf("denial must tell the model what to fix: %q", d.Reason)
+	}
+}
+
+func TestRefreshAsksConsentAndCarriesTheVerdict(t *testing.T) {
+	st := newRunState("github")
+	var got userPrompt
+	ask := func(_ context.Context, p userPrompt) (string, error) {
+		got = p
+		return "y", nil
+	}
+	g := gate(GrantAsk, st, ask)
+	d := g(context.Background(), agentkit.GateRequest{
+		Call: agentkit.ToolCall{Name: "refresh_candidates",
+			Args: json.RawMessage(`{"reason":"63.posher leads with digits; debts_pale carries a deficit word; qzx.vrn is gibberish"}`)},
+	})
+	if !d.Allowed {
+		t.Fatalf("consented refresh denied: %s", d.Reason)
+	}
+	if !strings.Contains(got.Why, "leads with digits") {
+		t.Fatalf("per-candidate verdict missing from the card: %q", got.Why)
+	}
+}
+
+func TestRefreshUnattendedDenied(t *testing.T) {
+	st := newRunState("github")
+	d := decide(t, st, "refresh_candidates",
+		`{"reason":"63.posher leads with digits; debts_pale carries a deficit word; qzx.vrn is gibberish"}`)
+	if d.Allowed {
+		t.Fatal("refresh must not run without consent in a non-interactive session")
 	}
 }
 

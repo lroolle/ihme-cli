@@ -128,6 +128,28 @@ Two checks, in order:
    tone (immune, generic, baseline), nothing that carries weight. An address is a
    micro-identity — it shouldn't feel assigned.
 
+Calibration — the bar is keep-worthy, not poetic:
+
+- Taste RANKS a pool; it rarely vetoes one. The expected outcome of every pool
+  is "reserve the best," and with three candidates that is almost always round 1.
+- A clean, pronounceable address with a normal email shape passes even when it
+  makes no vivid picture. `sterner.turning5r` passes: two real words, one dot,
+  reads like an address a person could have. Trailing suffix noise (`5r`, `0j`,
+  `2k`) is Apple's fingerprint on nearly every candidate — never count it
+  against one.
+- A candidate FAILS only on an active defect: a deficit or clinical word,
+  leading digits (`63.posher_pearly`), unpronounceable gibberish.
+- A vivid image or contextual resonance PROMOTES a passing candidate; its
+  absence disqualifies nothing. Resonance is discovered, not manufactured — a
+  stretch (`turbine.dives` ~ "does energized deep-dives, like the service")
+  reads as selling, and selling is bad taste.
+- The rationale is one honest sentence in plain register. When the true reason
+  is "the only candidate without a defect word," say exactly that; do not
+  invent an image to fill the field or restate the verdict in fuller prose.
+- If your verdict is "all candidates are weak," you are almost certainly
+  misreading the bar — recheck each candidate against this list before even
+  considering a refresh.
+
 Bonus (elevates good to great, not a gate):
 
 - **Contextual resonance**: does the address echo something about the service —
@@ -201,15 +223,16 @@ Error: <ref> required — an address label, email, or ID
    ```
    Evaluate each candidate individually — don't let bad neighbors taint a good
    one. A pool with two duds and one strong image is not a "weak pool."
-   Reserve the best immediately — don't ask unless no single candidate passes
-   taste ("does it make a picture you'd keep?"). When NO candidate passes
+   Reserve the best immediately — rotation and questions are for pools where
+   every candidate actively fails, not pools that merely lack a vivid image
+   (see Calibration above). When NO candidate passes
    after rotation: interactively (embedded: `ask_user`), offer your top two
-   with a one-line image each and let the user pick; non-interactively,
+   with a one-line reason each and let the user pick; non-interactively,
    reserve the least-bad and say plainly it was a compromise. Embedded runs
-   must articulate the verdict: `reserve_address` requires `rationale` (the
-   winner's image and why it fits) plus one `rejected` entry per candidate
-   you passed on, each naming its failure — the user judges your pick
-   against these on the consent card.
+   must articulate the verdict: `reserve_address` requires `rationale` (one
+   honest sentence on why it wins this pool — an image only if genuinely
+   there) plus one `rejected` entry per candidate you passed on, each naming
+   its failure — the user judges your pick against these on the consent card.
 
 5. **Reserve with a useful note.** `ihme new` supports `--note`; Apple stores it
    in the address metadata, and `ihme list --search` searches it. Keep notes
@@ -220,15 +243,21 @@ Error: <ref> required — an address label, email, or ID
    ihme new <label> --address <candidate> --note "signup: https://example.com/auth/signup?via=team; workspace: acme" --json
    ```
 
-6. **Refresh the pool if it is weak.** Apple's generate returns a
-   FIXED pending pool that repeats — calling generate again returns
-   the SAME candidates until a slot is consumed. So if no candidate
-   passes taste and the pool stops changing, do not keep generating.
-   Consume a slot to force a fresh pool: reserve a throwaway and
-   immediately delete it, then generate again.
+6. **Refresh the pool only when every candidate actively fails.**
+   Apple's generate returns a FIXED pending pool that repeats —
+   calling generate again returns the SAME candidates until a slot is
+   consumed, so re-generating never helps. But a refresh is NOT free
+   either: it reserves and deletes a real address on Apple (mutations
+   that count toward rate pressure — repeated churn risks the
+   account) and typically swaps only ONE candidate in the pool. It is
+   a last resort for a pool with zero keepers, never a reroll for a
+   better image.
    - Embedded agent: `refresh_candidates` does the whole maneuver in
-     one call (reserve + delete + regenerate), capped at 2 per task.
-   - Shell: reserve any candidate, delete it, then generate again.
+     one call (reserve + delete + regenerate). It requires a `reason`
+     naming each candidate's active defect, asks the user for consent
+     before burning anything, and is capped at 2 per task.
+   - Shell: ask the user before rotating, then reserve any candidate,
+     delete it, and generate again.
      ```bash
      ihme new <label> --address <throwaway> --json   # consume a slot
      ihme delete <throwaway-id> --yes --json          # clean it up
@@ -239,7 +268,7 @@ Error: <ref> required — an address label, email, or ID
      user to restart the session — you get a fresh budget next request.
 
 7. **Show the result.** State what was reserved and one line on why it was
-   picked. If a compromise was made (weak pool, no good images), say so.
+   picked. If a compromise was made (every candidate actively failed), say so.
 
 ### Labels
 

@@ -66,13 +66,19 @@ func TestRefreshCandidatesCapIsPhysics(t *testing.T) {
 	st := newRunState("github")
 	tool := refreshTool(t, app.New(fake), st)
 
+	reason := `{"reason":"every candidate actively fails: leading digits, deficit word, gibberish"}`
+	// A reason-less call is refused in code before touching Apple and
+	// must not consume budget (GrantAuto runs have no gate in front).
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{}`)); err == nil {
+		t.Fatal("refresh without a per-candidate reason must error")
+	}
 	for i := 0; i < maxRefreshCycles; i++ {
-		if _, err := tool.Execute(context.Background(), json.RawMessage(`{}`)); err != nil {
+		if _, err := tool.Execute(context.Background(), json.RawMessage(reason)); err != nil {
 			t.Fatalf("refresh %d within cap errored: %v", i+1, err)
 		}
 	}
 	// One past the cap is refused in code, not left to the prompt.
-	if _, err := tool.Execute(context.Background(), json.RawMessage(`{}`)); err == nil {
+	if _, err := tool.Execute(context.Background(), json.RawMessage(reason)); err == nil {
 		t.Fatalf("refresh past the cap of %d must error", maxRefreshCycles)
 	}
 	// Each cycle burned exactly one throwaway and deleted it — no litter.
@@ -82,7 +88,7 @@ func TestRefreshCandidatesCapIsPhysics(t *testing.T) {
 
 	// resetTurn restores the budget for the next request.
 	st.resetTurn()
-	if _, err := tool.Execute(context.Background(), json.RawMessage(`{}`)); err != nil {
+	if _, err := tool.Execute(context.Background(), json.RawMessage(reason)); err != nil {
 		t.Fatalf("refresh budget did not reset for a new turn: %v", err)
 	}
 }

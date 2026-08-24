@@ -189,20 +189,27 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 		},
 		agentkit.FuncTool{
 			ToolName: "refresh_candidates",
-			Desc: fmt.Sprintf("Force a genuinely NEW candidate pool. Apple repeats the same pending addresses every time you call generate_candidates until a slot is consumed — so if the candidates stop changing, generating again is useless. This briefly reserves and deletes a throwaway to make Apple hand out fresh options. Use only when the pool is weak (no candidate passes taste) AND generate_candidates has stopped changing. Hard limit: %d per task.",
+			Desc: fmt.Sprintf("LAST RESORT — burn a throwaway to force a fresh candidate pool. This is a real reserve + delete against Apple (it counts toward rate pressure) and typically swaps only ONE candidate, so it needs user consent and a per-candidate reason. Use only when EVERY current candidate actively fails (deficit word, clinical tone, leading digits, gibberish) — a plain but clean, pronounceable pool is NOT weak: reserve the best instead. Re-calling generate_candidates never helps (Apple repeats the same pending pool until a slot is consumed), but neither does churning refreshes. Hard limit: %d per task.",
 				maxRefreshCycles),
 			Params: schema.Object(
+				schema.Property("reason", schema.String("the active defect of EACH current candidate, one clause per candidate — shown to the user on the consent card")).Required(),
 				schema.Property("count", schema.Int("how many fresh candidates (default 3)")),
 			),
 			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 				if st.refreshes >= maxRefreshCycles {
 					return nil, fmt.Errorf("refresh limit reached (%d) — pick the least-bad candidate and say plainly it was a compromise; do not ask the user to restart", maxRefreshCycles)
 				}
-				st.refreshes++
 				var args struct {
-					Count int `json:"count"`
+					Reason string `json:"reason"`
+					Count  int    `json:"count"`
 				}
 				_ = json.Unmarshal(raw, &args)
+				// Same floor as reserve's rationale, enforced here so the
+				// GrantAuto path (no gate) still demands the verdict.
+				if len(strings.TrimSpace(args.Reason)) < minRationale {
+					return nil, fmt.Errorf("reason required: name each current candidate and its active defect — a pool that is merely plain is not weak, reserve the best instead")
+				}
+				st.refreshes++
 				if args.Count <= 0 || args.Count > 5 {
 					args.Count = 3
 				}
@@ -228,11 +235,11 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 			Params: schema.Object(
 				schema.Property("address", schema.String("the candidate address to reserve")).Required(),
 				schema.Property("label", schema.String("service label, bare noun")).Required(),
-				schema.Property("rationale", schema.String("the winner's taste verdict: the picture this address makes, the inspiration, why it fits this service")).Required(),
+				schema.Property("rationale", schema.String("one honest sentence in plain register: why this candidate wins this pool. Name an image or service resonance only if genuinely there — 'only candidate without a defect word' is a complete rationale")).Required(),
 				schema.Property("rejected", schema.Array("one entry per candidate you saw and did NOT pick — the user judges your choice against these",
 					schema.Object(
 						schema.Property("address", schema.String("the candidate")).Required(),
-						schema.Property("reason", schema.String("why it lost, one clause (e.g. leading digits, no image, deficit word)")).Required(),
+						schema.Property("reason", schema.String("why it lost, one clause naming the active defect (e.g. leading digits, deficit word, gibberish) or 'outranked' when it merely lost")).Required(),
 					))).Required(),
 				schema.Property("note", schema.String("compact durable note: why it exists, signup URL, context. Never secrets.")),
 				schema.Property("tags", schema.Array("tags like dev, work", schema.String("tag"))),
@@ -253,7 +260,7 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 				// reserve without an articulated verdict is refused
 				// before it reaches Apple.
 				if len(strings.TrimSpace(args.Rationale)) < minRationale {
-					return nil, fmt.Errorf("rationale required: state the image this address makes, why you'd keep it, and why each rejected candidate lost")
+					return nil, fmt.Errorf("rationale required: one honest sentence on why this candidate wins the pool, plus why each rejected candidate lost")
 				}
 				reserved, err := svc.Reserve(args.Address, args.Label, args.Tags, args.Note)
 				if err != nil {
