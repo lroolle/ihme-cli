@@ -22,7 +22,15 @@ type Client struct {
 	frameID   string
 	authAttr  string
 	userAgent string
+	// setupBase overrides the setup.icloud.com origin. Empty in
+	// production (the region constants decide); set by tests.
+	setupBase string
 	Verbose   bool
+	// OnSessionUpdate, when set, is called after the client re-mints
+	// a session mid-command. The session lives longer than the
+	// process, so whoever owns the file gets a chance to persist the
+	// fresh cookies instead of losing them at exit.
+	OnSessionUpdate func(*SessionData)
 }
 
 func NewClient() (*Client, error) {
@@ -33,13 +41,14 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("creating cookie jar: %w", err)
 	}
 
+	clientID := uuid.New().String()
 	return &Client{
 		http: &http.Client{
 			Jar:     jar,
 			Timeout: 30 * time.Second,
 		},
-		clientID:  uuid.New().String(),
-		session:   &SessionData{},
+		clientID:  clientID,
+		session:   &SessionData{ClientID: clientID},
 		userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3.1 Safari/605.1.15",
 	}, nil
 }
@@ -50,6 +59,13 @@ func NewClientWithSession(sess *SessionData) (*Client, error) {
 		return nil, err
 	}
 	c.session = sess
+	// A client id identifies an installation, not a request. Apple
+	// sees one stable id per machine instead of a new one every
+	// invocation, and -v output correlates across commands.
+	if sess.ClientID == "" {
+		sess.ClientID = c.clientID
+	}
+	c.clientID = sess.ClientID
 	return c, nil
 }
 
@@ -220,7 +236,7 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 	}
 
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "[svc] %s %s\n", method, url)
+		fmt.Fprintf(os.Stderr, "[svc] %s %s\n", method, redactURL(url))
 	}
 
 	resp, err := c.http.Do(req)
@@ -248,6 +264,9 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 }
 
 func (c *Client) setupURL() string {
+	if c.setupBase != "" {
+		return c.setupBase
+	}
 	if c.session.AccountCountry == "CN" {
 		return SetupEndpointCN
 	}

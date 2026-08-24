@@ -141,11 +141,31 @@ Error: <ref> required — an address label, email, or ID
   Example: ihme deactivate github.com
 ```
 
+Session errors keep that shape and separate Apple's verdict on the
+session from Apple having a bad day — the `Fix:` line is the whole
+difference:
+
+```
+Error: iCloud rejected this session — the saved login is no longer valid
+  Cause: listing HME: HTTP 401 from https://p137-maildomainws.icloud.com/v2/hme/list
+  Fix: ihme auth login
+
+Error: iCloud is temporarily unreachable — your session is probably still valid
+  Cause: validating session: HTTP 502 from https://setup.icloud.com/setup/ws/1/validate
+  Fix: run the same command again in a moment
+```
+
+A session that expires mid-command is re-minted once and the call
+replayed, so a one-off 401 never reaches you. Only a session Apple
+keeps refusing exits 2. Error text carries no account identifiers
+(dsid, clientId) — safe to paste into a bug report.
+
 ## Exit codes
 
 - `0` — success
 - `1` — error (check stderr)
-- `2` — not authenticated (user must run `ihme auth login`)
+- `2` — authentication required — from any command, not just
+  `auth status`. Run `ihme auth login`.
 
 ## Conventions
 

@@ -8,6 +8,14 @@ const (
 
 	WidgetKey = "d39ba9916b7251055b22c7f910e2ea796ee65e98b2ddecea8f5dde8d9d1a815d"
 
+	// Build numbers are decoration on the premiummailsettings
+	// endpoints: probed live 2026-08-23, list and generate return 200
+	// with these, with none at all, and with a nonsense
+	// "1000Build1". The browser extension Apple's own users run
+	// sends no client params whatsoever. They are kept because the
+	// iCloud web client sends them and blending in costs nothing —
+	// but a 401 is never a stale build number, so do not "fix" one
+	// by bumping these.
 	ClientBuildNumber     = "2602Build17"
 	ClientMasteringNumber = "2602Build17"
 )
