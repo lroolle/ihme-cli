@@ -1,8 +1,8 @@
 # Roadmap
 
-Current: **v0.6.0** · [MIT](LICENSE)
+Current: **v0.6.3** · [MIT](LICENSE)
 
-## Unreleased — the session heals itself, and errors say so
+## Shipped in v0.6.3 — the session heals itself, and errors say so
 
 - **A 401 mid-command no longer reaches the user.** The mail-domain
   host keeps its own cookies, so it can refuse a session `/validate`
@@ -24,6 +24,14 @@ Current: **v0.6.0** · [MIT](LICENSE)
   and `-v` logs, so a pasted error is safe.
 - **Session writes are atomic** (write-then-rename) and `clientId`
   is generated once per installation instead of per invocation.
+- **`refresh_candidates` rejoins the consent gate**, and taste stops
+  demanding poetry. Net-zero described ACCOUNT state, never API
+  pressure, and the per-task cap resets every turn — so a model with
+  a miscalibrated bar burned throwaways task after task. The card now
+  carries the model's per-candidate verdict; the prompt says taste
+  RANKS a pool and rarely vetoes one; the rationale is one honest
+  sentence, with an image only when there is one (TASTE.md,
+  2026-08-12 and 2026-08-13).
 
 ## Shipped in v0.6.0 — harness a coding agent as the provider
 
