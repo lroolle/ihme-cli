@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // HTTPError is a non-2xx response from an Apple endpoint, carrying
@@ -15,7 +16,21 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, e.URL, e.Body)
+	if e.Body == "" {
+		return fmt.Sprintf("HTTP %d from %s", e.Status, redactURL(e.URL))
+	}
+	return fmt.Sprintf("HTTP %d from %s: %s", e.Status, redactURL(e.URL), e.Body)
+}
+
+// redactURL keeps host and path, drops the query. Apple's service
+// URLs carry dsid and clientId — account identifiers that add
+// nothing to a diagnosis and should not land in a pasted error,
+// a log, or an issue report.
+func redactURL(raw string) string {
+	if i := strings.IndexByte(raw, '?'); i >= 0 {
+		return raw[:i]
+	}
+	return raw
 }
 
 // TransientError marks a failure that does NOT mean the session is
@@ -39,14 +54,14 @@ func IsTransient(err error) bool {
 // the accountLogin fallback.
 var ErrSessionInvalid = errors.New("session rejected by iCloud")
 
-// isAuthRejection reports whether err is a definitive auth
+// IsAuthRejection reports whether err is a definitive auth
 // rejection rather than transport/server trouble. Notably 421
 // ("misdirected request") is NOT a rejection: Apple returns it for
 // routing hiccups and rate pressure on sessions that are still
 // valid — the CN-region case is already retried inside
 // ValidateSessionInfo, and everything else deserves "try again",
 // never "re-login".
-func isAuthRejection(err error) bool {
+func IsAuthRejection(err error) bool {
 	if errors.Is(err, ErrSessionInvalid) {
 		return true
 	}

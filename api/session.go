@@ -78,7 +78,28 @@ func SaveSession(path string, sess *SessionData) error {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	// Write-then-rename: a session is now also saved mid-command
+	// (recovery re-mints cookies), so a crash or a second ihme
+	// process must never leave a half-written session behind. This
+	// makes the file whole, not the read-modify-write serialized —
+	// concurrent writers still need the lock file on the roadmap.
+	tmp, err := os.CreateTemp(dir, "session-*.tmp")
+	if err != nil {
+		return fmt.Errorf("writing session: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("writing session: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("writing session: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("writing session: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("writing session: %w", err)
 	}
 	return nil

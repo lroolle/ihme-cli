@@ -1,6 +1,7 @@
 package cmdutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -17,6 +18,10 @@ import (
 // "re-login").
 const validateTTL = 15 * time.Minute
 
+// ErrNotLoggedIn is the no-session-on-disk case. Nothing to recover
+// from and nothing to retry: only a login fixes it.
+var ErrNotLoggedIn = errors.New("no saved session")
+
 func GetClient(cmd *cobra.Command) (*api.Client, error) {
 	sessPath := api.DefaultSessionPath()
 	sess, err := api.LoadSession(sessPath)
@@ -24,7 +29,7 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 		return nil, fmt.Errorf("loading session: %w", err)
 	}
 	if sess == nil {
-		return nil, fmt.Errorf("not logged in — run 'ihme auth login' first")
+		return nil, ErrNotLoggedIn
 	}
 
 	client, err := api.NewClientWithSession(sess)
@@ -33,22 +38,62 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 	}
 	client.Verbose, _ = cmd.Flags().GetBool("verbose")
 
+	// A session re-minted mid-command (a service host rejected the
+	// call the pre-flight check had cleared) is worth keeping: the
+	// next command starts on the fresh cookies instead of paying for
+	// the same recovery again.
+	client.OnSessionUpdate = func(sess *api.SessionData) {
+		_ = api.SaveSession(sessPath, sess)
+	}
+
 	// Recently confirmed sessions skip the validate round trip.
 	if time.Since(sess.ValidatedAt) < validateTTL {
 		return client, nil
 	}
 
 	if err := client.ResumeSession(); err != nil {
-		if api.IsTransient(err) {
-			return nil, fmt.Errorf("iCloud is temporarily unreachable — your session is probably still valid, try again shortly: %w", err)
-		}
-		return nil, fmt.Errorf("session expired — run 'ihme auth login' to re-authenticate: %w", err)
+		return nil, err
 	}
 
 	// Save updated session (cookies + validation timestamp refreshed)
 	api.SaveSession(sessPath, client.Session())
 
 	return client, nil
+}
+
+// Explain renders err the way the user should read it: what
+// happened, the cause worth pasting into a bug report, and the one
+// command that fixes it. Apple's transport failures and Apple's
+// verdicts on the session look alike in a stack of wrapped errors
+// and are opposite advice — "try again" versus "sign in again" —
+// so the split happens here, once, for every command.
+func Explain(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrNotLoggedIn):
+		return "Error: not signed in to iCloud\n  Fix: ihme auth login"
+	case api.IsAuthRejection(err):
+		return fmt.Sprintf("Error: iCloud rejected this session — the saved login is no longer valid\n  Cause: %s\n  Fix: ihme auth login", err)
+	case api.IsTransient(err):
+		return fmt.Sprintf("Error: iCloud is temporarily unreachable — your session is probably still valid\n  Cause: %s\n  Fix: run the same command again in a moment", err)
+	default:
+		return fmt.Sprintf("Error: %s", err)
+	}
+}
+
+// ExitCode maps err onto the documented contract: 2 means the user
+// must authenticate, 1 is every other failure. Scripts and agents
+// branch on this instead of matching message text.
+func ExitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, ErrNotLoggedIn), api.IsAuthRejection(err):
+		return 2
+	default:
+		return 1
+	}
 }
 
 func OutputResult(cmd *cobra.Command, v any) error {
@@ -87,7 +132,7 @@ func ExactRefArg(use, example string) cobra.PositionalArgs {
 
 func CheckErr(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, Explain(err))
+		os.Exit(ExitCode(err))
 	}
 }

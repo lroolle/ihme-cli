@@ -2,6 +2,29 @@
 
 Current: **v0.6.0** · [MIT](LICENSE)
 
+## Unreleased — the session heals itself, and errors say so
+
+- **A 401 mid-command no longer reaches the user.** The mail-domain
+  host keeps its own cookies, so it can refuse a session `/validate`
+  just cleared — the pre-flight check cannot see that coming. HME
+  calls now re-mint once through `accountLogin` (not `validate`,
+  which already lied), rebuild the URL from the fresh webservices
+  map and dsid, and replay the call; a rejected call changed nothing
+  on Apple's side, so replaying is safe even for mutations. One shot
+  only, and the fresh cookies land back on disk.
+- **2FA survives Apple's 409.** Since ~mid-2026 the securitycode
+  endpoints answer 409 to a *valid* code; the acceptance signal is
+  the fresh `X-Apple-Session-Token`, not the status. `ihme auth
+  login` used to die there (same break as rclone#9488).
+- **Errors are a decision, not a dump.** One place renders them
+  (`cmdutil.Explain`) and one maps exit codes (`cmdutil.ExitCode`):
+  what happened, the cause, the command that fixes it — and exit 2
+  for "authenticate" from every command, not just `auth status`.
+  Account identifiers (dsid, clientId) are stripped from error text
+  and `-v` logs, so a pasted error is safe.
+- **Session writes are atomic** (write-then-rename) and `clientId`
+  is generated once per installation instead of per invocation.
+
 ## Shipped in v0.6.0 — harness a coding agent as the provider
 
 - **`ihme agent --via codex|claude|opencode "<task>"`.** The
@@ -120,7 +143,6 @@ Not on the original roadmap; it emerged and took the release:
 
 | Item | Why |
 |------|-----|
-| Auto session resume on 401/expired mid-command | Resume-at-start is classified now; mid-command 401 still fails |
 | Lock file for concurrent access | Parallel agent invocations corrupt session.json |
 
 ## v0.5 — Agent-native features

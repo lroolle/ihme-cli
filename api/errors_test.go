@@ -23,7 +23,7 @@ func TestAuthRejectionClassification(t *testing.T) {
 		{"wrapped 401", fmt.Errorf("outer: %w", &HTTPError{Status: 401}), true},
 	}
 	for _, tc := range cases {
-		if got := isAuthRejection(tc.err); got != tc.want {
+		if got := IsAuthRejection(tc.err); got != tc.want {
 			t.Fatalf("%s: isAuthRejection = %v, want %v", tc.name, got, tc.want)
 		}
 	}

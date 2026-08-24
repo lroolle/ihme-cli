@@ -3,15 +3,53 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 )
 
-func (c *Client) ListHme() (*ListHmeResult, error) {
-	url, err := c.hmeURL(2, "list")
+// hmeRequest performs one HME call, recovering once from a session
+// rejection. Apple hands the mail-domain host its own cookies, so it
+// can answer 401 minutes after /validate said the session was fine —
+// the pre-flight check in cmdutil cannot see that coming. A rejected
+// call changed nothing on Apple's side, so replaying it after
+// re-auth is safe even for the mutating paths.
+//
+// The URL is rebuilt after recovery on purpose: accountLogin returns
+// a fresh webservices map, and the mail-domain host (p137-, p52-, …)
+// and dsid can both move.
+func (c *Client) hmeRequest(version int, path, method string, body any) ([]byte, error) {
+	url, err := c.hmeURL(version, path)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := c.doServiceRequest("GET", url, nil)
+	respBody, err := c.doServiceRequest(method, url, body)
+	if err == nil || !IsAuthRejection(err) {
+		return respBody, err
+	}
+
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[svc] %s rejected the session, re-authenticating once\n", path)
+	}
+	if rerr := c.recoverSession(); rerr != nil {
+		// Transport trouble during recovery proves nothing about the
+		// session — say "try again", not "sign in again". A refused
+		// recovery confirms the rejection, and the service's own
+		// verdict stays the diagnosis.
+		if IsTransient(rerr) {
+			return nil, rerr
+		}
+		return nil, fmt.Errorf("%w (re-auth: %v)", err, rerr)
+	}
+
+	url, err = c.hmeURL(version, path)
+	if err != nil {
+		return nil, err
+	}
+	return c.doServiceRequest(method, url, body)
+}
+
+func (c *Client) ListHme() (*ListHmeResult, error) {
+	body, err := c.hmeRequest(2, "list", "GET", nil)
 	if err != nil {
 		return nil, fmt.Errorf("listing HME: %w", err)
 	}
@@ -31,12 +69,7 @@ func (c *Client) ListHme() (*ListHmeResult, error) {
 }
 
 func (c *Client) GenerateHme() (string, error) {
-	url, err := c.hmeURL(1, "generate")
-	if err != nil {
-		return "", err
-	}
-
-	body, err := c.doServiceRequest("POST", url, map[string]string{"langCode": "en-us"})
+	body, err := c.hmeRequest(1, "generate", "POST", map[string]string{"langCode": "en-us"})
 	if err != nil {
 		return "", fmt.Errorf("generating HME: %w", err)
 	}
@@ -58,17 +91,12 @@ func (c *Client) GenerateHme() (string, error) {
 }
 
 func (c *Client) ReserveHme(hme, label, note string) (*HmeEmail, error) {
-	url, err := c.hmeURL(1, "reserve")
-	if err != nil {
-		return nil, err
-	}
-
 	reqBody := map[string]string{"hme": hme, "label": label}
 	if note != "" {
 		reqBody["note"] = note
 	}
 
-	body, err := c.doServiceRequest("POST", url, reqBody)
+	body, err := c.hmeRequest(1, "reserve", "POST", reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("reserving HME: %w", err)
 	}
@@ -90,11 +118,6 @@ func (c *Client) ReserveHme(hme, label, note string) (*HmeEmail, error) {
 }
 
 func (c *Client) UpdateHmeMetadata(anonymousID, label, note string) error {
-	url, err := c.hmeURL(1, "updateMetaData")
-	if err != nil {
-		return err
-	}
-
 	reqBody := map[string]string{
 		"anonymousId": anonymousID,
 		"label":       label,
@@ -103,7 +126,7 @@ func (c *Client) UpdateHmeMetadata(anonymousID, label, note string) error {
 		reqBody["note"] = note
 	}
 
-	body, err := c.doServiceRequest("POST", url, reqBody)
+	body, err := c.hmeRequest(1, "updateMetaData", "POST", reqBody)
 	if err != nil {
 		return fmt.Errorf("updating HME: %w", err)
 	}
@@ -111,12 +134,7 @@ func (c *Client) UpdateHmeMetadata(anonymousID, label, note string) error {
 }
 
 func (c *Client) DeactivateHme(anonymousID string) error {
-	url, err := c.hmeURL(1, "deactivate")
-	if err != nil {
-		return err
-	}
-
-	body, err := c.doServiceRequest("POST", url, map[string]string{"anonymousId": anonymousID})
+	body, err := c.hmeRequest(1, "deactivate", "POST", map[string]string{"anonymousId": anonymousID})
 	if err != nil {
 		return fmt.Errorf("deactivating HME: %w", err)
 	}
@@ -124,12 +142,7 @@ func (c *Client) DeactivateHme(anonymousID string) error {
 }
 
 func (c *Client) ReactivateHme(anonymousID string) error {
-	url, err := c.hmeURL(1, "reactivate")
-	if err != nil {
-		return err
-	}
-
-	body, err := c.doServiceRequest("POST", url, map[string]string{"anonymousId": anonymousID})
+	body, err := c.hmeRequest(1, "reactivate", "POST", map[string]string{"anonymousId": anonymousID})
 	if err != nil {
 		return fmt.Errorf("reactivating HME: %w", err)
 	}
@@ -137,12 +150,7 @@ func (c *Client) ReactivateHme(anonymousID string) error {
 }
 
 func (c *Client) DeleteHme(anonymousID string) error {
-	url, err := c.hmeURL(1, "delete")
-	if err != nil {
-		return err
-	}
-
-	body, err := c.doServiceRequest("POST", url, map[string]string{"anonymousId": anonymousID})
+	body, err := c.hmeRequest(1, "delete", "POST", map[string]string{"anonymousId": anonymousID})
 	if err != nil {
 		return fmt.Errorf("deleting HME: %w", err)
 	}
@@ -150,12 +158,7 @@ func (c *Client) DeleteHme(anonymousID string) error {
 }
 
 func (c *Client) UpdateForwardTo(email string) error {
-	url, err := c.hmeURL(1, "updateForwardTo")
-	if err != nil {
-		return err
-	}
-
-	body, err := c.doServiceRequest("POST", url, map[string]string{"forwardToEmail": email})
+	body, err := c.hmeRequest(1, "updateForwardTo", "POST", map[string]string{"forwardToEmail": email})
 	if err != nil {
 		return fmt.Errorf("updating forward-to: %w", err)
 	}

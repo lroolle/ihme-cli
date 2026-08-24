@@ -162,7 +162,10 @@ type SessionData struct {
 	Dsid           string                        `json:"dsid"`
 	Webservices    map[string]WebserviceEndpoint `json:"webservices"`
 	Cookies        []SavedCookie                 `json:"cookies,omitempty"`
-	SavedAt        time.Time                     `json:"savedAt"`
+	// ClientID identifies this installation to Apple. Generated once
+	// and kept: a new id per invocation is a stranger every time.
+	ClientID string    `json:"clientId,omitempty"`
+	SavedAt  time.Time `json:"savedAt"`
 	// ValidatedAt is the last time Apple confirmed this session
 	// (successful validate or accountLogin). Fresh sessions skip
 	// the per-command validate round trip.

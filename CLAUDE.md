@@ -134,7 +134,11 @@ Apple SRP via idmsa.apple.com (web auth, not GSA):
 2. POST /federate — submit email
 3. POST /signin/init — SRP key exchange
 4. POST /signin/complete — SRP proof (M1/M2)
-5. 2FA: SMS (PUT /verify/phone) or device push (PUT /verify/trusteddevice/securitycode)
+5. 2FA: SMS (PUT /verify/phone) or device push (PUT /verify/trusteddevice/securitycode).
+   Since ~mid-2026 Apple answers the securitycode POST with 409 even
+   for a VALID code — the acceptance signal is the fresh
+   X-Apple-Session-Token header, not the status (rclone#9488). Do
+   not "restore" a strict 2xx check there.
 6. GET  /2sv/trust — trust token
 7. POST setup.icloud.com/accountLogin — get webservices map + cookies
 
@@ -158,6 +162,18 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 4. accountLogin (triggers sign-in email) only on real rejection; its
    own transient failures also report as unreachable, not expired
 5. Save updated session (cookies + validatedAt) after resume
+6. A service host can still answer 401 inside that window — the
+   mail-domain host holds its own cookies, so /validate passing is
+   not its promise. api/hme.go recovers once: accountLogin (NOT
+   validate, which already lied), rebuild the URL from the fresh
+   webservices map and dsid, replay the call. A rejected call
+   changed nothing on Apple's side, so replaying is safe even for
+   mutations. Recovery is one shot; a session Apple keeps refusing
+   is expired, and retry loops against auth endpoints get accounts
+   rate limited. Fresh cookies go back to disk through
+   Client.OnSessionUpdate.
+7. clientId is generated once and persisted in the session — one
+   installation, not a new stranger every invocation.
 
 ## Design rules
 
@@ -165,7 +181,12 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 - --json output includes hints with follow-up commands
 - --help documents JSON response shapes
 - <ref> resolves by anonymousId, email, or label (fuzzy)
-- Errors include usage example and fix command
+- Errors include usage example and fix command; cmdutil.Explain is
+  the single place that turns an error into user text (what
+  happened / Cause / Fix) and cmdutil.ExitCode the single place
+  that maps it to 0/1/2
+- Error text never carries dsid or clientId (api.redactURL strips
+  the query) — pasteable into an issue
 - Errors to stderr, data to stdout
 - Exit codes: 0 success, 1 error, 2 auth required
 - Session at ~/.config/ihme/session.json (respects $XDG_CONFIG_HOME), 0600

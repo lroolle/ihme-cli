@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -67,7 +68,7 @@ func (c *Client) ResumeSession() error {
 		if err == nil {
 			return nil
 		}
-		if !isAuthRejection(err) {
+		if !IsAuthRejection(err) {
 			if c.Verbose {
 				fmt.Fprintf(os.Stderr, "[svc] validate failed transiently, retrying once: %v\n", err)
 			}
@@ -76,7 +77,7 @@ func (c *Client) ResumeSession() error {
 			if err == nil {
 				return nil
 			}
-			if !isAuthRejection(err) {
+			if !IsAuthRejection(err) {
 				return &TransientError{Err: fmt.Errorf("validating session: %w", err)}
 			}
 		}
@@ -87,10 +88,33 @@ func (c *Client) ResumeSession() error {
 
 	// Fall back to accountLogin (triggers Apple sign-in email).
 	if err := c.accountLogin(); err != nil {
-		if !isAuthRejection(err) {
+		if !IsAuthRejection(err) {
 			return &TransientError{Err: fmt.Errorf("account login: %w", err)}
 		}
 		return err
+	}
+	return nil
+}
+
+// recoverSession re-mints service cookies after Apple rejected a
+// service call mid-command. It skips the validate step ResumeSession
+// starts with, on purpose: a service host can answer 401 while
+// /validate still answers 200 (the cookies are scoped per service),
+// so revalidating would only confirm a session the service already
+// refused. accountLogin trades the stored session and trust tokens
+// for fresh cookies without a password or a 2FA prompt.
+func (c *Client) recoverSession() error {
+	if c.session.SessionToken == "" && c.session.TrustToken == "" {
+		return fmt.Errorf("recovering session: %w", ErrSessionInvalid)
+	}
+	if err := c.accountLogin(); err != nil {
+		if !IsAuthRejection(err) {
+			return &TransientError{Err: fmt.Errorf("recovering session: %w", err)}
+		}
+		return err
+	}
+	if c.OnSessionUpdate != nil {
+		c.OnSessionUpdate(c.session)
 	}
 	return nil
 }
@@ -334,10 +358,12 @@ func (c *Client) handle2FASMS(phones []TrustedPhoneNumber, otpCallback TwoFactor
 		return fmt.Errorf("submitting SMS code: %w", err)
 	}
 
-	switch resp.StatusCode {
-	case 200, 204:
+	switch {
+	case resp.StatusCode == 200 || resp.StatusCode == 204:
 		return nil
-	case 401, 403:
+	case codeAcceptedDespiteConflict(resp):
+		return nil
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		return fmt.Errorf("incorrect verification code")
 	default:
 		return fmt.Errorf("SMS verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
@@ -363,14 +389,31 @@ func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
 		return fmt.Errorf("submitting 2FA code: %w", err)
 	}
 
-	switch resp.StatusCode {
-	case 200, 204:
+	switch {
+	case resp.StatusCode == 200 || resp.StatusCode == 204:
 		return nil
-	case 401, 403:
+	case codeAcceptedDespiteConflict(resp):
+		return nil
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		return fmt.Errorf("incorrect verification code")
 	default:
 		return fmt.Errorf("2FA verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
+}
+
+// codeAcceptedDespiteConflict reports whether Apple accepted a
+// security code while answering 409. Since ~mid-2026 the
+// securitycode endpoints answer 409 even for a valid code; the body
+// says securityCode.valid=true and — the part worth trusting —
+// Apple issues a fresh X-Apple-Session-Token, which it only does on
+// success. doAuthRequest has already absorbed those headers by the
+// time this runs, so accepting here continues straight to the trust
+// step. Verified against rclone's fix for the same break
+// (backend/iclouddrive/api/session.go, rclone#9488, 2026-07-29).
+func codeAcceptedDespiteConflict(resp *http.Response) bool {
+	return resp != nil &&
+		resp.StatusCode == 409 &&
+		resp.Header.Get("X-Apple-Session-Token") != ""
 }
 
 func (c *Client) getTrust() error {

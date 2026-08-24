@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -102,5 +103,29 @@ func TestDerivePasswordDefaultProtocol(t *testing.T) {
 
 	if hex.EncodeToString(keyUnknown) != hex.EncodeToString(keyS2K) {
 		t.Error("unknown protocol should default to s2k behavior")
+	}
+}
+
+// Apple started answering 409 to a VALID security code around
+// mid-2026 (rclone#9488). The tell that it was accepted is the fresh
+// session token; without one, a 409 is still a failure.
+func TestCodeAcceptedDespiteConflict(t *testing.T) {
+	withToken := &http.Response{StatusCode: 409, Header: http.Header{"X-Apple-Session-Token": []string{"fresh"}}}
+	if !codeAcceptedDespiteConflict(withToken) {
+		t.Error("409 carrying a session token means the code was accepted")
+	}
+
+	bare := &http.Response{StatusCode: 409, Header: http.Header{}}
+	if codeAcceptedDespiteConflict(bare) {
+		t.Error("409 without a session token is not an acceptance")
+	}
+
+	ok := &http.Response{StatusCode: 200, Header: http.Header{"X-Apple-Session-Token": []string{"fresh"}}}
+	if codeAcceptedDespiteConflict(ok) {
+		t.Error("only 409 takes this path")
+	}
+
+	if codeAcceptedDespiteConflict(nil) {
+		t.Error("nil response must not read as acceptance")
 	}
 }
