@@ -16,11 +16,11 @@ SITE_URL = 'https://lroolle.github.io/ihme-cli/'
 REPO_URL = 'https://github.com/lroolle/ihme-cli/'
 # Deliberate public entry points. Never recursively copy docs or the workspace.
 PUBLIC_DOCS = (
-    'README.md', 'docs/usage.md', 'docs/agents.md', 'skill/SKILL.md',
+    'README.md', 'README.zh.md', 'docs/usage.md', 'docs/agents.md', 'skill/SKILL.md',
     'ROADMAP.md', 'AGENTS.md', 'pkg/agentkit/README.md', 'LICENSE',
     'SECURITY.md', 'CONTRIBUTING.md',
 )
-ASSETS = ('index.html', 'style.css', 'main.js', 'icon.svg')
+ASSETS = ('index.html', 'zh.html', 'style.css', 'icon.svg')
 LINK = re.compile(r'(?<!!)\[([^\]\n]+)\]\(([^\s)]+)\)')
 
 
@@ -82,19 +82,22 @@ def main():
     (OUT / 'llms-full.txt').write_text(''.join(full))
     for filename in ASSETS:
         shutil.copyfile(ROOT / 'site' / filename, OUT / filename)
-    page_path = OUT / 'index.html'
-    page_path.write_text(page_path.read_text().replace(
-        f'{REPO_URL}blob/main/', f'{REPO_URL}blob/{revision}/'
-    ))
-    page = Page(page_path.read_text())
-    for target in page.links:
-        url = urlsplit(target)
-        if url.scheme or url.netloc:
+    for filename in ASSETS:
+        if not filename.endswith('.html'):
             continue
-        if url.path and not (OUT / unquote(url.path)).is_file():
-            raise ValueError(f'index.html: missing asset {target}')
-        if not url.path and url.fragment and url.fragment not in page.ids:
-            raise ValueError(f'index.html: missing anchor {target}')
+        page_path = OUT / filename
+        page_path.write_text(page_path.read_text().replace(
+            f'{REPO_URL}blob/main/', f'{REPO_URL}blob/{revision}/'
+        ))
+        page = Page(page_path.read_text())
+        for target in page.links:
+            url = urlsplit(target)
+            if url.scheme or url.netloc:
+                continue
+            if url.path and not (OUT / unquote(url.path)).is_file():
+                raise ValueError(f'{filename}: missing asset {target}')
+            if not url.path and url.fragment and url.fragment not in page.ids:
+                raise ValueError(f'{filename}: missing anchor {target}')
     hashes = {
         file.relative_to(OUT).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest()
         for file in sorted(OUT.rglob('*')) if file.is_file()

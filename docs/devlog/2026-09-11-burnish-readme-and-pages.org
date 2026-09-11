@@ -1,0 +1,56 @@
+#+TITLE: Burnish: README, Chinese README, and a text-first site
+#+DATE: 2026-09-11
+
+* Tension
+
+The README and the Pages site shipped in PR #10 were correct but
+mannered: a hero, numbered "01 / 02 / 03" sections, an invented
+terminal transcript, a "Proof" section, 689 lines of CSS and a
+platform picker in JavaScript for a tool whose install is one curl.
+The owner asked for the opposite: super concise, literal statements,
+no prose that performs the writer. And a Chinese version.
+
+* Decision
+
+- The README is now ~75 lines: what it does, four commands, the
+  Apple caveat, install, scripts, agents, docs, development. The
+  "Proof" section is gone; CI and releases are one click away and
+  the reader does not need to be told the tests exist.
+- =README.zh.md= is a full Chinese README, not a translation stub.
+  It says its linked docs are English.
+- The site is two static pages, =index.html= and =zh.html=, one
+  stylesheet, no JavaScript. Each page is the README's own edited
+  sentences: intro, the four commands, install, docs. The zh page
+  sets =lang="zh-Hans"=, which flips the font stack and leading.
+- Editors, not us, wrote the published prose. We drafted both
+  languages, then sent the English to Grok 4.6 (=grok -p= with tools
+  denied) and the Chinese to Kimi K3 (=pi --provider openrouter=).
+  Both were told: literal over mannered, cut freely, change no
+  fact, command, flag, URL or exit code. Both returned light edits;
+  a diff against the draft confirmed nothing factual moved. Drafts
+  and outputs lived in =/tmp=, not the repo.
+- =scripts/build_site.py= now checks links and anchors in every
+  HTML asset, not only =index.html=, and =README.zh.md= is a public
+  entry point in =llms.txt=.
+
+* Tradeoff
+
+- No vendored CJK webfont on the zh page. The design kit's rule is
+  "no system stack on a zh page", but a multi-megabyte font for two
+  hundred characters is the wrong trade for a page about a small
+  tool; the stack names PingFang, Hiragino, Noto Sans CJK and YaHei
+  explicitly instead.
+- No platform picker. The page shows the macOS arm64 install and
+  links the releases page for the rest; the README has the same.
+
+* Verification
+
+=make site= builds 17 public files with links and anchors checked.
+The pages were not rendered in a browser from the container; the
+Pages workflow verifies published bytes against the local build.
+
+* Next
+
+Look at both pages on a phone and a desktop. If the zh leading or
+face is wrong on a real device, adjust the =:root[lang]= tokens in
+=site/style.css=.

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="在终端里管理 iCloud 隐藏邮件地址。生成、查找、停用、导出。给人、脚本和 agent 用的 Go 命令行工具，MIT 协议。"
+    />
+    <meta name="theme-color" content="#f6f5ef" />
+    <meta property="og:title" content="ihme：在终端里管理 iCloud 隐藏邮件地址" />
+    <meta
+      property="og:description"
+      content="为一次注册生成一个地址，之后按标签找到它，不想再收信了就停掉。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lroolle.github.io/ihme-cli/zh.html" />
+    <link rel="canonical" href="https://lroolle.github.io/ihme-cli/zh.html" />
+    <link rel="alternate" hreflang="en" href="https://lroolle.github.io/ihme-cli/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://lroolle.github.io/ihme-cli/zh.html" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="alternate" type="text/plain" href="llms.txt" title="给 agent 的文档索引" />
+    <title>ihme：在终端里管理 iCloud 隐藏邮件地址</title>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <a class="brand" href="zh.html"><img src="icon.svg" alt="" />ihme</a>
+        <nav aria-label="主导航">
+          <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">命令</a>
+          <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md">Agent</a>
+          <a href="https://github.com/lroolle/ihme-cli">GitHub</a>
+          <a href="index.html" lang="en" hreflang="en">English</a>
+        </nav>
+      </header>
+      <main>
+        <h1>ihme</h1>
+        <p class="lede">在终端里管理 iCloud 隐藏邮件地址。</p>
+        <p>ihme 是一个管理 iCloud 隐藏邮件地址的命令行工具。为一次注册生成一个地址，之后按标签找到它，不想再收信了就停掉。它还能把所有地址导出成 CSV 或 JSON，留一份不在 Apple 服务器上的备份。</p>
+        <pre><code>ihme new github.com          <span class="c"># Apple 给几个候选地址，你选一个</span>
+ihme list --search github    <span class="c"># 按标签、地址或备注查找</span>
+ihme deactivate github.com   <span class="c"># 停止转发</span>
+ihme export -o backup.csv    <span class="c"># 导出一份自己的备份</span></code></pre>
+        <p>三种用法。手动：跑一条命令，选一个地址。脚本：所有命令都支持 <code>--json</code>。agent：内置助手用你自己的模型 key，或者用你已经登录的编程 agent，改动账户之前会先问你。</p>
+        <p class="note">需要 iCloud+ 订阅和开启了双重认证的 Apple ID。Apple 没有公开这个 API，ihme 用的是 icloud.com 网页版的同一套接口，Apple 随时可以改动或封掉它。</p>
+
+        <h2 id="install">安装</h2>
+        <p>macOS，Apple 芯片：</p>
+        <pre><code>curl -fL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz -o ihme.tar.gz
+tar -xzf ihme.tar.gz ihme
+sudo install -m 755 ihme /usr/local/bin/ihme</code></pre>
+        <p>macOS Intel、Linux、Windows 的 arm64 和 x86-64 版本在 <a href="https://github.com/lroolle/ihme-cli/releases/latest">releases 页面</a>，附 SHA-256 校验值。有 Go 的话：<code>go install github.com/lroolle/ihme-cli/cmd/ihme@latest</code>。</p>
+        <p>然后登录，查看自己的地址：</p>
+        <pre><code>ihme auth login    <span class="c"># Apple ID、密码、双重认证码。会话会保存在本地，密码和验证码不保存。</span>
+ihme list</code></pre>
+
+        <h2 id="docs">文档</h2>
+        <p>以下文档为英文。</p>
+        <ul class="docs">
+          <li><a href="README.zh.md">中文 README</a><span>完整说明：安装、脚本、agent</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">命令说明</a><span>查找、创建、编辑、标签、导出、JSON、错误</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md">Agent 说明</a><span>模型、确认、记忆、MCP</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/ROADMAP.md">路线图与更新记录</a><span></span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/SECURITY.md">安全说明</a><span>本地存了什么，存在哪</span></li>
+        </ul>
+      </main>
+      <footer>
+        <p><a href="LICENSE">MIT</a> 协议。与 Apple 无关。</p>
+        <nav aria-label="页脚导航">
+          <a href="https://github.com/lroolle/ihme-cli">源码</a>
+          <a href="llms.txt">llms.txt</a>
+          <a href="llms-full.txt">全文</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
+</html>
