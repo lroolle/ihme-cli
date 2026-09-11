@@ -57,3 +57,7 @@ check: vet test build
 	@echo "All checks passed"
 
 .DEFAULT_GOAL := build
+
+.PHONY: site
+site:
+	python3 scripts/build_site.py

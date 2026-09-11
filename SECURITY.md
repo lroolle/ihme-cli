@@ -1,29 +1,29 @@
 # Security
 
-## Session storage
+## Local storage
 
-`ihme` stores session tokens and cookies at:
-- macOS / Linux: `~/.config/ihme/session.json` (respects `$XDG_CONFIG_HOME`)
+`ihme` stores session tokens, trust tokens, cookies, Apple account identifiers, and webservice URLs in its session file. These are credentials: anyone who obtains them may be able to act on the account.
+
+- macOS / Linux: `~/.config/ihme/session.json` (respects `XDG_CONFIG_HOME`)
 - Windows: `%AppData%\ihme\session.json`
+- Override: `IHME_SESSION_PATH`
 
-Override the full path with `IHME_SESSION_PATH`.
+Session writes are atomic and request owner-only file permissions (`0600` on Unix). Protect the file with your operating system's account and filesystem permissions. Atomic writes do not serialize concurrent CLI processes.
 
-File permissions are `0600` (owner read/write only).
+The Apple ID password and 2FA codes are not saved. Authentication uses SRP-6a; the password itself is not transmitted. Trust tokens can allow later sign-ins without a new 2FA challenge; Apple controls their lifetime.
 
-**What's stored**: session token, trust token, scnt, session ID, cookies, webservice URLs.
+## Agent mode
 
-**What's NOT stored**: Apple ID password, 2FA codes, or any credentials.
+Model keys may be stored in the local ihme configuration or environment. Agent memory contains aliases, labels, notes, preferences, and task history in plain Markdown files. Treat both as private.
 
-## Authentication
+Agent tasks and tool results go to your selected model provider or coding agent. Direct CLI commands do not use an LLM. `ihme auth logout` clears the saved Apple session, not model configuration or agent memory.
 
-- SRP-6a protocol — password is never transmitted over the network
-- 2FA via SMS or trusted device push
-- Trust token enables 2FA-free login for ~30 days
+## Report a vulnerability
 
-## Reporting vulnerabilities
+Use GitHub's [private vulnerability reporting](https://github.com/lroolle/ihme-cli/security/advisories/new). Include the affected version, impact, and steps to reproduce; omit real tokens and account data. Do not open a public issue with an exploit or credentials.
 
-If you find a security issue, please email the maintainer directly instead of opening a public issue. Include steps to reproduce.
+Security fixes target the latest release. Older versions are not separately maintained; there is no guaranteed response time.
 
-## Disclaimer
+## Service boundary
 
-This tool uses Apple's undocumented iCloud web API. Apple may change or block access at any time. The authors are not responsible for account restrictions or other consequences.
+This is an unofficial client of Apple's undocumented iCloud web API. Apple can change or block access. This project cannot guarantee account availability, rate limits, or continued compatibility.

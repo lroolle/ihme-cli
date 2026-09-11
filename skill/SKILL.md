@@ -20,7 +20,7 @@ tools:
 Prefer the local checkout when available, so agents use the newest CLI changes:
 
 ```bash
-cd worktree/ihme-cli
+# From the root of an ihme-cli checkout
 make install
 ```
 

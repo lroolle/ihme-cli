@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Create, find, and manage iCloud Hide My Email aliases from your terminal. A Go CLI for people, scripts, and agents. Open source, MIT licensed."
+    />
+    <meta name="theme-color" content="#f6f5ef" />
+    <meta
+      property="og:title"
+      content="ihme — iCloud email aliases, from your terminal"
+    />
+    <meta
+      property="og:description"
+      content="Create an alias for a signup. Find it later. Turn it off when the mail gets noisy. For people, scripts, and agents."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lroolle.github.io/ihme-cli/" />
+    <link rel="canonical" href="https://lroolle.github.io/ihme-cli/" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="alternate"
+      type="text/plain"
+      href="llms.txt"
+      title="Documentation index for agents"
+    />
+    <script src="main.js" defer></script>
+    <title>ihme — iCloud email aliases, from your terminal</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="shell">
+      <header class="header">
+        <a class="brand" href="#" aria-label="ihme home"
+          ><img src="icon.svg" width="32" height="32" alt="" />ihme<span
+            class="cursor"
+            aria-hidden="true"
+            >_</span
+          ></a
+        >
+        <nav aria-label="Main navigation">
+          <a href="#workflow">How it works</a>
+          <a
+            href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md"
+            data-doc="docs/usage.md"
+            >Guide</a
+          >
+          <a href="https://github.com/lroolle/ihme-cli"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </nav>
+      </header>
+      <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow">
+              <span class="status-dot" aria-hidden="true"></span> A small tool
+              for iCloud Hide My Email
+            </p>
+            <h1 id="hero-title">
+              Your email aliases.<br /><span>In your terminal.</span>
+            </h1>
+            <p class="lede">
+              Create an alias for a signup. Find it by label. Turn it off when
+              the mail gets noisy.
+            </p>
+            <div class="hero-actions">
+              <a class="button" href="#install"
+                >Get ihme <span aria-hidden="true">↓</span></a
+              ><a class="text-link" href="#workflow"
+                >See the commands <span aria-hidden="true">↗</span></a
+              >
+            </div>
+            <p class="fine">
+              macOS · Linux · Windows <span aria-hidden="true">/</span> MIT
+              licensed
+            </p>
+          </div>
+          <figure class="terminal">
+            <figcaption>
+              <span>ihme / a signup</span
+              ><span class="terminal-label">ILLUSTRATIVE EXAMPLE</span>
+            </figcaption>
+            <div class="terminal-body">
+              <p><span class="prompt">$</span> ihme new github.com</p>
+              <pre class="candidates">
+[1] sample.fern@icloud.com
+[2] sample.moss@icloud.com
+[3] sample.pine@icloud.com</pre
+              >
+              <p>
+                <span class="muted">Select [1-3] or [c]ancel:</span>
+                <span class="chosen">2</span>
+              </p>
+              <p class="reserved">
+                Reserved: sample.moss@icloud.com<br /><span class="muted"
+                  >(label: github.com)</span
+                >
+              </p>
+              <p class="last-command">
+                <span class="prompt">$</span> ihme list --search github<span
+                  class="block-cursor"
+                  aria-hidden="true"
+                ></span>
+              </p>
+            </div>
+            <p class="terminal-foot">
+              Example addresses are invented. Your candidates come from Apple.
+            </p>
+          </figure>
+        </section>
+        <div class="requirements">
+          <span class="section-label">Before you start</span>
+          <p>
+            Requires iCloud+ and Apple ID sign-in with 2FA. An unofficial client
+            of Apple’s web API.
+          </p>
+        </div>
+        <section
+          class="workflow section"
+          id="workflow"
+          aria-labelledby="workflow-title"
+        >
+          <div class="section-heading">
+            <p class="eyebrow">01 / Everyday commands</p>
+            <h2 id="workflow-title">
+              One alias per service.<br />A label you can find later.
+            </h2>
+          </div>
+          <div class="command-list">
+            <article>
+              <div>
+                <h3>Create and choose</h3>
+                <p>Pick from Apple’s candidates in your terminal.</p>
+              </div>
+              <code>ihme new github.com</code>
+            </article>
+            <article>
+              <div>
+                <h3>Find the right address</h3>
+                <p>Search your labels, addresses, and notes.</p>
+              </div>
+              <code>ihme list --search github</code>
+            </article>
+            <article>
+              <div>
+                <h3>Stop unwanted mail</h3>
+                <p>Deactivate an alias. Reactivate it if you need it again.</p>
+              </div>
+              <code>ihme deactivate github.com</code>
+            </article>
+            <article>
+              <div>
+                <h3>Keep your own copy</h3>
+                <p>Export addresses as CSV or JSON.</p>
+              </div>
+              <code>ihme export -o backup.csv</code>
+            </article>
+          </div>
+        </section>
+        <section class="automation section" aria-labelledby="automation-title">
+          <div class="section-heading">
+            <p class="eyebrow">02 / When you want to automate</p>
+            <h2 id="automation-title">Script it.<br />Or ask an agent.</h2>
+            <p>
+              Direct commands work without an LLM. Use the assistant when a task
+              is easier to describe.
+            </p>
+          </div>
+          <div class="automation-options">
+            <article>
+              <h3>Structured output</h3>
+              <p>
+                Get candidates without reserving. Choose one, then reserve it
+                with <code>--address</code>.
+              </p>
+              <pre><code>ihme new github.com --json</code></pre>
+              <p class="fine">
+                Address commands support JSON. <code>--jq</code> needs an
+                installed jq.
+              </p>
+            </article>
+            <article>
+              <h3>Your existing coding agent</h3>
+              <p>
+                Use an installed, signed-in Codex or Claude. Or configure the
+                built-in assistant with your model key.
+              </p>
+              <pre><code>ihme agent --via codex \
+  "find my github address"</code></pre>
+              <a
+                class="text-link"
+                href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md"
+                data-doc="docs/agents.md"
+                >Agent setup, consent, and memory
+                <span aria-hidden="true">↗</span></a
+              >
+            </article>
+          </div>
+        </section>
+        <section
+          class="install section"
+          id="install"
+          aria-labelledby="install-title"
+        >
+          <div class="section-heading">
+            <p class="eyebrow">03 / Get started</p>
+            <h2 id="install-title">
+              Install. Sign in.<br />List your aliases.
+            </h2>
+            <p>
+              One binary. Your existing iCloud account. Sign-in is interactive;
+              have your trusted device ready.
+            </p>
+          </div>
+          <div class="install-panel">
+            <div class="install-toolbar">
+              <label for="platform">Install for</label
+              ><select id="platform">
+                <option value="macOS_arm64">macOS · Apple Silicon</option>
+                <option value="macOS_x86_64">macOS · Intel</option>
+                <option value="linux_x86_64">Linux · x86-64</option>
+                <option value="linux_arm64">Linux · ARM64</option>
+                <option value="windows_x86_64">Windows · x86-64</option>
+                <option value="windows_arm64">Windows · ARM64</option>
+                <option value="go">Go install</option></select
+              ><button id="copy-install" type="button" hidden>Copy</button>
+            </div>
+            <pre
+              tabindex="0"
+              aria-label="Install commands"
+            ><code id="install-command">curl -fL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz -o ihme.tar.gz
+tar -xzf ihme.tar.gz ihme
+sudo install -m 755 ihme /usr/local/bin/ihme
+ihme version</code></pre>
+            <p id="platform-note" class="fine">
+              Run in your shell. This installs ihme in /usr/local/bin.
+            </p>
+            <p
+              id="copy-status"
+              class="fine"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <div class="login-steps">
+              <span class="section-label">Then sign in</span>
+              <pre><code>ihme auth login
+ihme auth status --json
+ihme list</code></pre>
+            </div>
+            <p class="fine">
+              <a href="https://github.com/lroolle/ihme-cli/releases/latest"
+                >All downloads and SHA-256 checksums
+                <span aria-hidden="true">↗</span></a
+              >
+            </p>
+            <noscript
+              ><p class="fine">
+                The commands above are for macOS Apple Silicon. Use the
+                downloads link for other platforms.
+              </p></noscript
+            >
+          </div>
+        </section>
+        <section class="proof section" aria-labelledby="proof-title">
+          <div class="section-heading">
+            <p class="eyebrow">04 / Check the work</p>
+            <h2 id="proof-title">Small tool.<br />Open source.</h2>
+          </div>
+          <div class="proof-content">
+            <p>
+              CI runs lint, vet, tests, and a build. The tests cover
+              authentication, session recovery, address operations, filtering,
+              and agent consent using fixtures and mock servers.
+            </p>
+            <p>
+              Clone the repo and run <code>make check</code> to reproduce the
+              code checks. They do not test Apple’s live service or guarantee
+              access for your account.
+            </p>
+            <div class="proof-links">
+              <a
+                href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"
+                >View CI <span aria-hidden="true">↗</span></a
+              ><a href="https://github.com/lroolle/ihme-cli/releases/latest"
+                >Browse releases <span aria-hidden="true">↗</span></a
+              ><a
+                href="https://github.com/lroolle/ihme-cli/blob/main/SECURITY.md"
+                data-doc="SECURITY.md"
+                >Security <span aria-hidden="true">↗</span></a
+              >
+            </div>
+          </div>
+        </section>
+        <aside class="limits" aria-labelledby="limits-title">
+          <h2 id="limits-title">A good fit for your existing aliases.</h2>
+          <p>
+            Use Apple’s settings or iCloud.com if you prefer an official
+            interface. ihme is for terminal workflows, scripts, and exports. It
+            needs iCloud+, uses an undocumented API, and is not a bulk address
+            service. Apple controls access and rate limits.
+          </p>
+          <p>
+            Agent mode sends task context and tool results to your chosen
+            provider. Direct commands do not use an LLM.
+          </p>
+        </aside>
+      </main>
+      <footer>
+        <a class="brand" href="#"
+          >ihme<span class="cursor" aria-hidden="true">_</span></a
+        >
+        <p>Independent project. Not affiliated with Apple.</p>
+        <nav aria-label="Footer navigation">
+          <a href="https://github.com/lroolle/ihme-cli">Source</a
+          ><a href="llms.txt">llms.txt</a><a href="llms-full.txt">Full text</a
+          ><a href="LICENSE">MIT</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
+</html>

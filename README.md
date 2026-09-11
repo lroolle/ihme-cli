@@ -1,312 +1,130 @@
-<p align="center">
-  <h1 align="center">ihme</h1>
-  <p align="center">
-    iCloud Hide My Email, from the terminal.<br>
-    For humans who pick. For agents who script. For scripts that just run.<br>
-    And it ships its own agent — claude, codex, or any model key you bring.
-  </p>
-</p>
-
-<p align="center">
-  <a href="https://github.com/lroolle/ihme-cli/releases"><img src="https://img.shields.io/github/v/release/lroolle/ihme-cli?color=blue&label=release" alt="Release"></a>
-  <a href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"><img src="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white" alt="Go"></a>
-  <a href="https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-SRP%2097%25%20|%20filter%20100%25-brightgreen" alt="Coverage"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
-</p>
-
-<p align="center">
-  <img src="docs/demo.svg" alt="ihme demo" width="680">
-</p>
-
 <div align="center">
 
-[Install](#install) · [Quick start](#quick-start) · [Commands](#all-commands) · [Built-in agent](#built-in-agent) · [Agent integration](#agent-integration) · [Auth](#auth-details) · [Roadmap](ROADMAP.md)
+# ihme
+
+**iCloud Hide My Email, from your terminal.**
+
+Create an alias for a signup. Find it later. Turn it off when the mail gets noisy.
+
+[![Release](https://img.shields.io/github/v/release/lroolle/ihme-cli)](https://github.com/lroolle/ihme-cli/releases/latest)
+[![CI](https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+[Website](https://lroolle.github.io/ihme-cli/) · [Install](#install) · [Proof](#proof) · [Commands](docs/usage.md) · [Agents](docs/agents.md)
+
+<sub>For agents: start with <a href="https://lroolle.github.io/ihme-cli/llms.txt">llms.txt</a>.</sub>
 
 </div>
 
----
+```bash
+ihme new github.com                   # pick an address in your terminal
+ihme list --search github             # find it by label, address, or note
+ihme export -o backup.csv             # keep a copy of your aliases
+```
 
-> **Note**: Unofficial tool. Uses Apple's undocumented iCloud web API. Not affiliated with Apple. Use at your own risk.
+Use it by hand, pipe JSON into a script, or ask an agent to manage your aliases. The built-in assistant can use your model key or a coding agent you already sign in to. Normal CLI commands need neither.
+
+Requires an **iCloud+ subscription** and interactive Apple ID sign-in with 2FA. This is an unofficial client of Apple's undocumented web API; Apple can change or block access.
+
+## Proof
+
+- **Published binaries:** [Releases](https://github.com/lroolle/ihme-cli/releases/latest) include macOS, Linux, and Windows builds for ARM64 and x86-64, plus SHA-256 checksums.
+- **Executable checks:** [CI](https://github.com/lroolle/ihme-cli/actions/workflows/ci.yml) runs lint, vet, tests, and a build. Tests exercise SRP authentication, session recovery, address operations, filtering, and agent consent using local fixtures and mock servers.
+- **Reproduce locally:** clone the repo, install the Go version in [go.mod](go.mod), and run `make check`. Use `make test-cover` to measure coverage yourself.
+
+These checks validate the code against fixtures. They do not prove Apple's live service is available or that a particular account can sign in.
 
 ## Install
 
-**A. Download binary** from [Releases](https://github.com/lroolle/ihme-cli/releases):
+Download a binary from [the latest release](https://github.com/lroolle/ihme-cli/releases/latest). For macOS with Apple Silicon:
 
 ```bash
-# macOS (Apple Silicon)
-curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz
-sudo mv ihme /usr/local/bin/
-
-# Linux
-curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_linux_x86_64.tar.gz | tar xz
-sudo mv ihme /usr/local/bin/
+curl -fL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz -o ihme.tar.gz
+tar -xzf ihme.tar.gz ihme
+sudo install -m 755 ihme /usr/local/bin/ihme
+ihme version
 ```
 
-**B. Go install:**
+<details>
+<summary>Other platforms and Go install</summary>
+
+Use the same steps with the archive matching your system. Windows downloads are ZIP files; extract `ihme.exe` into a directory on your `PATH`.
+
+| Platform | Release asset |
+| --- | --- |
+| macOS Apple Silicon | `ihme_macOS_arm64.tar.gz` |
+| macOS Intel | `ihme_macOS_x86_64.tar.gz` |
+| Linux ARM64 | `ihme_linux_arm64.tar.gz` |
+| Linux x86-64 | `ihme_linux_x86_64.tar.gz` |
+| Windows ARM64 | `ihme_windows_arm64.zip` |
+| Windows x86-64 | `ihme_windows_x86_64.zip` |
+
+With Go installed:
 
 ```bash
 go install github.com/lroolle/ihme-cli/cmd/ihme@latest
+ihme version
 ```
 
-**C. With [`skills`](https://github.com/vercel-labs/skills) (any compatible agent):**
+The binary lands in `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Add that directory to `PATH` if needed.
 
-```bash
-npx skills add lroolle/ihme-cli -g
-```
-
-The `-g` flag installs globally so every project picks it up.
-
-**D. Or paste this prompt to your AI agent:**
-
-```
-Install the ihme skill for iCloud Hide My Email management:
-
-1. Download and install the binary:
-   curl -sL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz | tar xz && sudo mv ihme /usr/local/bin/
-2. Install the skill definition:
-   mkdir -p ~/.claude/skills/ihme-cli && curl -sL https://raw.githubusercontent.com/lroolle/ihme-cli/main/skill/SKILL.md -o ~/.claude/skills/ihme-cli/SKILL.md
-3. Verify: ihme version
-4. Authenticate: ihme auth login (interactive — needs Apple ID + 2FA)
-```
+</details>
 
 ## Quick start
 
 ```bash
-ihme auth login                    # Sign in (Apple ID + 2FA)
-ihme list                          # See all your addresses
-ihme list --search netflix         # Find one
-ihme new github.com                # Create (pick from 3 candidates)
-ihme view github.com               # Details
-ihme export -o backup.csv          # Export everything
-ihme -p "new for netflix signup"   # Or let the built-in agent do it (see below)
+ihme auth login                      # interactive Apple ID + 2FA
+ihme auth status --json               # verify your saved session
+ihme list                            # see your aliases
+ihme new github.com                  # choose and reserve an alias
 ```
 
-## How `ihme new` works
+Sign-in time depends on Apple's verification flow. `new` creates a real alias. In a terminal it asks you to choose; use `ihme new github.com --json` to generate candidates without reserving one.
 
-Matches the iCloud web flow — generate candidates, pick the one you like, reserve it:
+## Pick, script, or ask
 
-```
-$ ihme new github.com --tag dev
+| How you work | Command | What happens |
+| --- | --- | --- |
+| Pick it yourself | `ihme new github.com` | In a terminal, choose from the returned candidates |
+| Generate first | `ihme new github.com --json` | Get candidates without reserving; reserve with `--address <candidate>` |
+| Automate | `ihme new github.com --yes --json` | Reserve the first candidate |
+| Ask an agent | `ihme agent --via codex "find my github address"` | Run a task through your installed, signed-in coding agent |
 
-  [1] uploads_tease.6t@icloud.com
-  [2] copay.jacket-4c@icloud.com
-  [3] rotors.gutless.7q@icloud.com
-
-Select [1-3] or [c]ancel: 2
-Reserved: copay.jacket-4c@icloud.com (label: github.com)
-```
-
-| Who | Command | What happens |
-|-----|---------|-------------|
-| Human | `ihme new github.com` | Show ~3 candidates, pick interactively |
-| Built-in agent | `ihme new github.com --agent` | The embedded agent runs the whole procedure: search, generate, taste-test, reserve — and tells you why it picked |
-| Agent | `ihme new github.com --json` then `--address <pick>` | Get candidates, reserve one |
-| Script | `ihme new github.com -y` | Take first, reserve, done |
-
-## All commands
-
-```
-AUTH
-  ihme auth login                Sign in with Apple ID (SRP + 2FA)
-  ihme auth status [--json]      Session state
-  ihme auth logout               Clear session
-
-LIST & SEARCH
-  ihme list                      All addresses (table)
-  ihme list --search <query>     Search label, address, or note
-  ihme list --active             Only active
-  ihme list --tag <tag>          Filter by tag
-  ihme list --sort label         Sort by label or date
-
-CREATE
-  ihme new <label>               Interactive: pick from ~3 candidates
-  ihme new <label> --yes         Script: take first
-  ihme new <label> --json        Agent: get candidates without reserving
-  ihme new <label> --agent       Embedded agent runs the full procedure
-
-AGENT (built-in, BYOK)
-  ihme agent                     Interactive session (inline TUI)
-  ihme agent "<task>"            One-shot: "deactivate my old figma alias"
-  ihme agent -p "<task>"         Same, via --prompt/-p (also: ihme -p "<task>")
-  ihme agent --via claude "<task>"  Harness claude-code/codex/opencode as the
-                                 provider (subscription auth, no API key)
-  ihme agent --grant auto        Skip consent prompts for this run
-  ihme memory                    Inspect the agent's memory graph
-  ihme memory search <query>     Search journals and pages
-  ihme memory graph              Show topic pages and backlinks
-
-MANAGE
-  ihme view <ref>                View details
-  ihme edit <ref>                Edit label, note, tags
-  ihme copy <ref>                Copy address to clipboard
-  ihme deactivate <ref>          Stop receiving mail
-  ihme reactivate <ref>          Resume receiving mail
-  ihme delete <ref> [--yes]      Permanent deletion (confirms first)
-
-EXPORT
-  ihme export                    CSV to stdout
-  ihme export --format json      JSON to stdout
-  ihme export -o file.csv        To file
-  ihme export --search dev       Filtered export
-
-FORWARD
-  ihme forward [--json]          Show forward-to address
-  ihme forward set <email>       Change it
-```
-
-`<ref>` resolves by: anonymousId (full or 6+ char prefix) > email > label (exact) > label (fuzzy).
-
-## JSON & jq
-
-Every command supports `--json` and `--jq`. Response shapes are documented in `ihme <cmd> --help`.
+Address commands expose `--json` for scripts. Filtering with `--jq` requires `jq` on your `PATH`:
 
 ```bash
-ihme list --json --jq '.addresses[0:5]'
 ihme list --search github --json --jq '.addresses[].hme'
-ihme list --json --jq '.count'
-ihme view github.com --json --jq '.result.hme'
-ihme new mysite.com --json | jq '.candidates'
 ```
 
-## Built-in agent
+The [agent guide](docs/agents.md) covers Claude, Codex, OpenCode, model keys, consent, and memory. To install instructions for an external agent, run `npx skills add lroolle/ihme-cli -g`; install and authenticate the binary separately.
 
-`ihme` ships with an embedded assistant — bring your own model key, and it runs the address workflow end to end:
+## When it fits
 
-```bash
-# one-time config — a Claude key alone is enough:
-mkdir -p ~/.config/ihme && cat > ~/.config/ihme/.env <<'ENV'
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-sonnet-4-6
-ENV
+Use ihme if you already use Hide My Email and want searchable labels, CSV/JSON exports, or an alias workflow in your terminal. Use [Apple's settings or iCloud.com](https://support.apple.com/guide/icloud/what-you-can-do-with-icloud-and-hide-my-email-mme38e1602db/icloud) if you only need an occasional alias and prefer Apple's supported interface.
 
-# ...a DeepSeek key alone works the same way:
-# DEEPSEEK_API_KEY=sk-...
-# DEEPSEEK_MODEL=deepseek-v4-flash
+Skip it if you need an official API, bulk address creation, or an email service independent of iCloud+. Apple controls candidate pools and rate limits. Agent mode also sends task context and tool results to your selected model provider; use direct commands if you do not want that.
 
-# ...or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama):
-# OPENAI_API_KEY=sk-...
-# OPENAI_BASE_URL=https://api.openai.com/v1
-# OPENAI_MODEL=gpt-5-mini
+## Reference
 
-ihme new "github signup" --agent    # scoped: may reserve ONE address for this label
-ihme agent                          # interactive session (inline TUI)
-ihme agent "tag my linear address as work"   # one-shot task
-ihme -p "new for github signup"     # one-shot via --prompt/-p (implies the agent)
-```
-
-No API key? Harness a coding agent you are already signed in to —
-its subscription auth, its models, ihme's tools and consent:
-
-```bash
-ihme agent --via claude "new address for github signup"   # Claude plan
-ihme agent --via codex  "new address for github signup"   # ChatGPT plan
-ihme agent --via opencode "which addresses go to netflix?"
-```
-
-ihme drives the guest over the [Agent Client Protocol](https://agentclientprotocol.com)
-and hands it the HME operations back as MCP tools by re-invoking
-itself (`ihme mcp`). The taste rationale, rate caps, and memory
-journaling are enforced inside those tools, and every mutation still
-stops at ihme's own consent card — the gate deliberately does NOT
-trust the guest's permission layer. One-shot tasks for now;
-codex/claude go through their ACP adapters (fetched via `npx` on
-first use), opencode speaks ACP natively.
-
-A one-shot run, abridged:
-
-```
-$ ihme agent -p "new address for netflix"
-
-Model: claude-sonnet-4-6
-Thinking effort: high (default)
-
--> recall_memory {"query":"netflix"}
-<- recall_memory {"hits":[],"count":0}
--> generate_candidates {"count":3}
-   ...
-
-✓ reserved calm.spruce_9k@icloud.com — netflix
-  why: quiet two-word image; nothing that names the service
-  passed: payout.blimp44@icloud.com — "payout" reads like spam bait
-  Memory created for "netflix"
-```
-
-Every run opens by stating the effective configuration — `Model:` and
-`Thinking effort:` as actually resolved from config, environment, and
-flags. The header never echoes a value that was not applied: effort
-passes through on the responses API, becomes `output_config` effort
-on current Claude models (a manual thinking budget on pre-4.6 ones),
-and reads `n/a` on chat-completions models where the parameter is
-never sent.
-
-What you get, and what it must earn:
-
-- **The verdict is spoken.** Reserving requires the winner's taste rationale plus one entry per rejected candidate with its failure. The consent card shows all of it — the address, the label/note/tags it will write, the why, and what it passed on — and it lands in the `✓ reserved` banner and `--json` output (`rationale`, `rejected`); the reserved address lands on your clipboard (macOS/Linux).
-- **Consent is a conversation.** `ihme new <label> --agent` pre-grants exactly one reservation for that label; `ihme agent` pre-grants *nothing* — every mutation asks: allow once, deny, always this run, **or type a reply** ("use the calm one, tag it work") and the agent adapts and re-asks. `--grant auto` opts out per run.
-- **Visible thinking.** Reasoning summaries stream live in the status line; hard limits on generation rounds and tool calls are enforced in code, not in the prompt.
-- **It refreshes a stale pool** *(experimental)*. Apple hands out a small pool of generated addresses that repeats until one is consumed, so when nothing passes taste and re-generating returns the same options, the agent can burn a throwaway — reserve, deactivate, delete — to force a fresh pool. Bounded (2 per task) and net-zero on the common path. The reserve-to-refresh behavior is pending real-world validation; it degrades to a plain re-generate if Apple doesn't cooperate.
-- **It remembers — visibly.** The agent keeps a memory across runs — a plain [Logseq](https://logseq.com)-style markdown graph it finds on its own (`$IHME_MEMORY_PATH` to relocate). Reservations journal themselves, each topic page accumulates a service's history, and two pages load into every run: `preferences`, your standing direction (it also rides along every candidate pool, so a preference is present where the choice is made — on the embedded, harnessed, MCP, and shell paths alike), and `flashcards`, the agent's own pins. Every memory operation states what actually happened — `Memory created for "x"`, `Memory updated for "x"`, `Reused memory for "x"` — and a failed write says so instead of pretending. Inspect it with `ihme memory` (`search`, `graph`, `prefer`, `card`, `path`), or open the directory in Logseq or Obsidian — no database, just files.
-- **Wire protocol is auto-detected** per endpoint and model family (`claude*` or an anthropic.com base URL → native Messages API; `gpt-5` and every later generation, the `o`-series, `codex`, `deepseek-v4` and later → responses API; else chat completions), corrected on the endpoint's misroute signal, and remembered per model under `"apis"` in `~/.config/ihme/agent.json`. A top-level `"api"` pin is yours alone and never flips. Claude behind an OpenAI-protocol gateway self-heals to chat completions on the first 404.
-
-The agent kernel is [`pkg/agentkit`](pkg/agentkit/README.md) — stdlib-only, embeddable, reusable outside this CLI.
-
-## Agent integration
-
-Built for AI agents — Claude Code, Codex, Cursor, Gemini CLI, Copilot, Windsurf, Devin, Amp, Junie, and any tool that speaks [agents.md](https://agents.md):
-
-| Feature | How |
-|---------|-----|
-| **Response schemas** | Documented in every `--help` |
-| **Next-action hints** | JSON output includes `hints` with follow-up commands |
-| **Actionable errors** | Wrong usage returns the fix: `Usage: ihme view <ref>` |
-| **No prompts** | `--yes` skips all interactive confirmation |
-| **Exit codes** | 0 success, 1 error, 2 auth required |
-| **Composable** | stdout = data, stderr = status |
-
-Ships with a Claude Code skill ([`skill/SKILL.md`](skill/SKILL.md)) and an [`AGENTS.md`](AGENTS.md) for compatible agents.
-
-## Tags
-
-Shared convention with the [browser extension](https://github.com/dedoussis/icloud-hide-my-email-browser-extension):
-
-```bash
-ihme new example.com --tag shopping --note "prime account"
-# Stored as: #shopping | prime account
-
-ihme list --tag shopping
-```
-
-## Auth details
-
-SRP-6a over `idmsa.apple.com`. Password never transmitted.
-
-- 2FA: SMS or trusted device push (iOS 26.4+ supported)
-- Trust token: ~30 days, skips 2FA on subsequent logins
-- Session: `~/.config/ihme/session.json` (respects `$XDG_CONFIG_HOME`)
-- Credentials never stored. File permissions `0600`.
-- Override path: `IHME_SESSION_PATH`
-
-## Limits
-
-| Limit | Value |
-|-------|-------|
-| Addresses per 30 min | ~5 |
-| Total per account | ~750 |
-| Trust token lifetime | ~30 days |
-| Candidate pool | ~3 unique |
+| Start here | What it covers |
+| --- | --- |
+| [Command guide](docs/usage.md) | Search, create, edit, tags, lifecycle, exports, JSON, and errors |
+| [Agent guide](docs/agents.md) | Providers, coding agents, consent, preferences, memory, and MCP |
+| [Agent skill](skill/SKILL.md) | The address-selection procedure and taste rubric |
+| [Release history and roadmap](ROADMAP.md) | Shipped behavior and planned work |
+| [Security](SECURITY.md) | Session storage, model data, and vulnerability reports |
+| [Agent kernel](pkg/agentkit/README.md) | The reusable Go library behind the assistant |
 
 ## Development
 
 ```bash
-make              # build
-make test         # tests
-make test-cover   # with coverage
-make check        # vet + test + build
-make cross        # linux/darwin/windows x amd64/arm64
-make completions  # bash/zsh/fish
+make check         # vet, tests, and build
+make test-cover    # local coverage report
+make site          # build and check the static Pages site (Python 3)
 ```
 
-## License
+Bug reports should include `ihme version`, the command, and a redacted error. See [Contributing](CONTRIBUTING.md) for checks and [Security](SECURITY.md) for private reports.
 
-[MIT](LICENSE)
+Built with [Cobra](https://github.com/spf13/cobra) and [Charm](https://charm.sh/). Agent handoffs use the [Agent Client Protocol](https://agentclientprotocol.com). Tags follow the convention used by the [Hide My Email browser extension](https://github.com/dedoussis/icloud-hide-my-email-browser-extension).
+
+[MIT](LICENSE).
