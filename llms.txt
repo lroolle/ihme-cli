@@ -8,7 +8,8 @@ The live index is https://lroolle.github.io/ihme-cli/llms.txt; the mapped docume
 
 ## Start here
 
-- [README](README.md): install, quick start, reproducible checks, and when to use ihme
+- [README](README.md): what it does, install, scripts, agents
+- [README, Chinese](README.zh.md): the same, in Chinese
 - [Command guide](docs/usage.md): search, create, edit, tags, lifecycle, exports, JSON, and errors
 - [Agent guide](docs/agents.md): providers, coding agents, consent, preferences, memory, and MCP
 - [SKILL.md](skill/SKILL.md): the operational procedure both external agents (shell) and the embedded agent follow — including the address taste rubric
