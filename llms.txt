@@ -1,34 +1,26 @@
 # ihme
 
-> A command-line tool for iCloud Hide My Email: list, create, edit, deactivate, and export alias addresses. Built for humans who pick addresses by hand, agents that script them, and an embedded BYOK assistant that runs the whole workflow with a taste rubric and a memory.
+> A command-line tool for iCloud Hide My Email: list, create, edit, deactivate, and export alias addresses. Includes JSON output, an agent skill, a built-in assistant, and a stdio MCP server. MIT licensed.
 
-`ihme` speaks JSON on every command (`--json`, `--jq`), returns actionable errors with the fix command, and uses exit codes agents can branch on (0 ok, 1 error, 2 auth required). It authenticates to Apple over SRP-6a; the password is never transmitted or stored.
+Requires iCloud+ and interactive Apple ID sign-in with 2FA. Install a release binary or run `go install github.com/lroolle/ihme-cli/cmd/ihme@latest`, then `ihme auth login`. Installing the agent skill does not install the binary. This is an unofficial client of Apple's undocumented web API.
+
+The live index is https://lroolle.github.io/ihme-cli/llms.txt; the mapped documents are available together at https://lroolle.github.io/ihme-cli/llms-full.txt. `--jq` requires a local jq executable. Use `new --json` to generate without reserving, then `--address` to reserve. Exit codes are 0 for success, 1 for other errors, and 2 when authentication is required. Agent mode sends task context and tool results to the selected provider.
 
 ## Start here
 
-- [README](README.md): install, quick start, every command, JSON/jq usage, auth details
+- [README](README.md): install, quick start, reproducible checks, and when to use ihme
+- [Command guide](docs/usage.md): search, create, edit, tags, lifecycle, exports, JSON, and errors
+- [Agent guide](docs/agents.md): providers, coding agents, consent, preferences, memory, and MCP
 - [SKILL.md](skill/SKILL.md): the operational procedure both external agents (shell) and the embedded agent follow — including the address taste rubric
 - [ROADMAP](ROADMAP.md): what shipped per version and what's planned
 
 ## Using it as an agent
 
-- Every command supports `--json` and `--jq`; `--help` documents the response shape
-- Errors go to stderr, data to stdout; `--yes` skips confirmation prompts
-- `<ref>` resolves by anonymousId, email, or label (fuzzy)
 - [AGENTS.md](AGENTS.md): command reference for agents that read agents.md
-
-## The embedded agent (`ihme --agent`)
-
-- Bring your own key — Claude native (Anthropic Messages API), or any OpenAI-compatible endpoint (gpt/codex/o-series, gateways, Ollama); config in `~/.config/ihme/agent.json` + `~/.config/ihme/.env`
-- Consent gates every mutation; the consent card carries the taste verdict and rejected candidates; typed replies redirect it
-- Keeps a Logseq-style markdown memory across runs — inspect with `ihme memory`
 - [pkg/agentkit](pkg/agentkit/README.md): the stdlib-only, embeddable agent kernel it runs on — reusable outside this CLI
 
 ## Health
 
 - [LICENSE](LICENSE): MIT
 - [SECURITY.md](SECURITY.md): what's stored, what isn't, how to report an issue
-
-## Note
-
-Unofficial. Uses Apple's undocumented iCloud web API; not affiliated with Apple.
+- [Contributing](CONTRIBUTING.md): bug reports, local checks, and website maintenance

@@ -41,7 +41,7 @@ If exit code is 2, the user must run `ihme auth login` interactively.
 
 ## Commands
 
-All commands support `--json` for structured output and `--jq <expr>` for filtering.
+Address commands support `--json` for structured output and `--jq <expr>` for filtering (requires an installed `jq`; combine it with `--json`). `copy`, `version`, and interactive login print human output even with the global `--json` flag.
 
 ### List and search
 
@@ -79,7 +79,7 @@ ihme new github.com --tag dev --note "main account" --json
 ```bash
 ihme view github.com --json
 ihme edit github.com --label GitHub --tag dev,work --json
-ihme copy github.com                      # outputs address to stdout
+ihme copy github.com                      # clipboard; prints address if unavailable
 ```
 
 ### Lifecycle
