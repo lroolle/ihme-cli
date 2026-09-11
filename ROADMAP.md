@@ -1,6 +1,31 @@
 # Roadmap
 
-Current: **v0.6.3** · [MIT](LICENSE)
+Current: **v0.6.4** · [MIT](LICENSE)
+
+## Shipped in v0.6.4 — preferences load themselves
+
+- A preference recorded under `preferences` is loaded into every run
+  and included with every candidate pool (`generate_candidates` and
+  `ihme new --json` both carry a `preferences` field). It ranks the
+  candidates that pass the taste test, above the rubric's
+  tiebreakers. It never rescues a candidate with a defect. The
+  current request outranks it.
+- `remember` under `preferences` reports `alwaysLoaded: true`. The
+  run banner shows `Preferences: N loaded`. `ihme memory prefer
+  <note>` records one from the shell.
+- `ihme mcp` returns the memory block as server `instructions`, so a
+  direct MCP client gets it without a task turn.
+- A learned wire protocol is stored per model under `"apis"`, never
+  in the user's `"api"` pin, so one model's answer no longer locks
+  the next. If an older ihme wrote `"api": "completions"` for you,
+  delete it.
+- Model guessing goes by generation: `gpt-5` and later, the
+  `o`-series, `codex`, and `deepseek-v4` and later start on the
+  responses API; `gpt-4o` and `gpt-4.1` stay on completions.
+- 2FA accepts Apple's 409 with `securityCode.valid: true` and no
+  fresh session token (rclone#9730). A wrong code never says valid.
+- When both protocols are refused, one error says the model needs an
+  API this endpoint does not serve.
 
 ## Shipped in v0.6.3 — the session heals itself, and errors say so
 
