@@ -146,3 +146,20 @@ func must(t *testing.T, err error) {
 		t.Fatal(err)
 	}
 }
+
+func TestBulletsReadAPageAsFacts(t *testing.T) {
+	s := At(t.TempDir())
+	if s.Bullets(PreferencesPage) != nil {
+		t.Fatal("missing page must read as nil")
+	}
+	must(t, s.PageAppend(PreferencesPage, "dots over hyphens"))
+	must(t, s.PageAppend(PreferencesPage, "- already a bullet"))
+	must(t, s.PageAppend(PreferencesPage, "  \n"))
+	got := s.Bullets(PreferencesPage)
+	if len(got) != 2 || got[0] != "dots over hyphens" || got[1] != "already a bullet" {
+		t.Errorf("bullets = %q", got)
+	}
+	if st := s.Stats(); st.Preferences != 2 || st.Flashcards != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+}

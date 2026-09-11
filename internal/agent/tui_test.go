@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
 )
 
@@ -239,6 +240,16 @@ func TestToolStepCollapsesCandidateRounds(t *testing.T) {
 	if len(m.steps) != 1 || m.steps[0].text != "Reviewed 3 rounds of address ideas" {
 		t.Fatalf("steps = %+v", m.steps)
 	}
+
+	// A pool that arrived with standing preferences says so: the user
+	// can tell a preference-shaped pick from a rubric-only one.
+	step, ok := toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "generate_candidates"},
+		Result: json.RawMessage(`{"candidates":["one@icloud.com"],"round":1,"roundsLeft":2,"preferences":["dots over hyphens"]}`),
+	})
+	if !ok || step.text != "Reviewed address ideas · round 1 · 1 preference in play" {
+		t.Fatalf("generate step with preferences = %+v", step)
+	}
 }
 
 func TestSafeTextDropsTerminalControls(t *testing.T) {
@@ -302,11 +313,18 @@ func TestRecallStepDistinguishesReuseFromMiss(t *testing.T) {
 
 func TestRememberStepStatesTheOperation(t *testing.T) {
 	step, ok := toolStep(agentkit.ToolEnd{
-		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"preferences"}`)},
-		Result: json.RawMessage(`{"remembered":"preferences","status":"created","alwaysLoaded":false}`),
+		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"github"}`)},
+		Result: json.RawMessage(`{"remembered":"github","status":"created","alwaysLoaded":false}`),
 	})
-	if !ok || step.text != `Memory created for "preferences"` {
+	if !ok || step.text != `Memory created for "github"` {
 		t.Fatalf("remember step = %+v", step)
+	}
+	step, ok = toolStep(agentkit.ToolEnd{
+		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"preferences"}`)},
+		Result: json.RawMessage(`{"remembered":"preferences","status":"created","alwaysLoaded":true}`),
+	})
+	if !ok || step.text != `Memory created for "preferences" (loaded every run)` {
+		t.Fatalf("remember preferences step = %+v", step)
 	}
 	step, ok = toolStep(agentkit.ToolEnd{
 		Call:   agentkit.ToolCall{Name: "remember", Args: json.RawMessage(`{"topic":"flashcards"}`)},
@@ -322,6 +340,18 @@ func TestSessionHeaderReportsEffectiveModelAndEffort(t *testing.T) {
 	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: high" {
 		t.Fatalf("header = %q", got)
 	}
+	// Standing preferences in effect are announced; none loaded, no line.
+	s.mem = memory.At(t.TempDir())
+	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: high" {
+		t.Fatalf("empty preferences must add no line: %q", got)
+	}
+	if err := s.mem.PageAppend(memory.PreferencesPage, "dots over hyphens"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.header(); got != "Model: gpt-5.6\nThinking effort: high\nPreferences: 1 loaded" {
+		t.Fatalf("header with preferences = %q", got)
+	}
+	s.mem = nil
 	// Empty effort means the endpoint default applies — say that, do
 	// not invent a value.
 	s = &session{model: "gpt-5.6", api: "responses"}

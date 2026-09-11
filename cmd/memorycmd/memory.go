@@ -17,13 +17,16 @@ import (
 func NewCmdMemory() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "memory",
-		Short: "Inspect the agent's memory (journals, pages, flashcards)",
+		Short: "Inspect the agent's memory (journals, pages, flashcards, preferences)",
 		Long: `The embedded agent keeps a memory across runs: a plain markdown
 graph it finds on its own (override with $IHME_MEMORY_PATH).
 
   journals/    one dated file per day — what the agent did
-  pages/       one file per topic — a service's history, or
-               flashcards.md, the notes loaded into every run
+  pages/       one file per topic — a service's history;
+               flashcards.md, the agent's own notes loaded into
+               every run; preferences.md, your standing preferences,
+               loaded into every run and shown beside every
+               candidate pool
 
 The layout is Logseq's, so the directory opens directly in Logseq
 or Obsidian. This command reports and searches it.`,
@@ -34,14 +37,14 @@ or Obsidian. This command reports and searches it.`,
 				return cmdutil.OutputResult(cmd, st)
 			}
 			fmt.Printf("memory: %s\n", st.Root)
-			fmt.Printf("  %d journal day(s), %d page(s), %d flashcard(s)\n", st.Journals, st.Pages, st.Flashcards)
+			fmt.Printf("  %d journal day(s), %d page(s), %d flashcard(s), %d preference(s)\n", st.Journals, st.Pages, st.Flashcards, st.Preferences)
 			if st.Journals == 0 && st.Pages == 0 {
 				fmt.Println("  (empty — it fills as the agent reserves and learns)")
 			}
 			return nil
 		},
 	}
-	cmd.AddCommand(cmdPath(), cmdSearch(), cmdGraph(), cmdCard())
+	cmd.AddCommand(cmdPath(), cmdSearch(), cmdGraph(), cmdCard(), cmdPrefer())
 	return cmd
 }
 
@@ -119,6 +122,27 @@ func cmdCard() *cobra.Command {
 				return err
 			}
 			fmt.Printf("pinned to flashcards: %s\n", note)
+			return nil
+		},
+	}
+}
+
+// cmdPrefer is the shell adapter's way to state a standing
+// preference — the counterpart of the embedded agent's
+// remember(topic: "preferences"). It lands in the same page every run
+// loads and every candidate pool carries.
+func cmdPrefer() *cobra.Command {
+	return &cobra.Command{
+		Use:     "prefer <note>",
+		Short:   "Record a standing preference (loaded into every agent run, ranks every candidate pool)",
+		Args:    cobra.MinimumNArgs(1),
+		Example: "  ihme memory prefer \"dots between words, even over a cleaner hyphenated candidate\"",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			note := args[0]
+			if err := memory.Open().PageAppend(memory.PreferencesPage, note); err != nil {
+				return err
+			}
+			fmt.Printf("preference recorded: %s\n", note)
 			return nil
 		},
 	}

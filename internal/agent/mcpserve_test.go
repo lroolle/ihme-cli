@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/lroolle/ihme-cli/internal/memory"
 )
 
 // mcpPipe runs ServeMCP over in-memory pipes and returns a
@@ -160,4 +162,21 @@ func toolResult(t *testing.T, resp map[string]any) (string, bool) {
 	}
 	first, _ := content[0].(map[string]any)
 	return fmt.Sprintf("%v", first["text"]), isErr
+}
+
+func TestMCPInitializeCarriesMemoryAsInstructions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("IHME_MEMORY_PATH", root)
+	if err := memory.At(root).PageAppend(memory.PreferencesPage, "dots over hyphens"); err != nil {
+		t.Fatal(err)
+	}
+	rpc := mcpPipe(t, GrantAuto)
+	init := rpc(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
+	result, _ := init["result"].(map[string]any)
+	// A direct MCP guest has no task turn of ours: the standing
+	// preferences must reach it through the spec's instructions slot.
+	instr, _ := result["instructions"].(string)
+	if !strings.HasPrefix(instr, "<preferences>") || !strings.Contains(instr, "dots over hyphens") {
+		t.Fatalf("initialize instructions = %q", instr)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/lroolle/ihme-cli/internal/agent"
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
+	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -109,6 +110,12 @@ JSON output with --yes or --address (reserved):
 					"candidates": candidates,
 					"label":      label,
 					"hint":       fmt.Sprintf("ihme new %s --address <address> --json", label),
+				}
+				// The external agent ranks from this payload alone: the
+				// user's standing preferences travel with the pool, the
+				// same as the embedded generate_candidates result.
+				if prefs := memory.Open().Bullets(memory.PreferencesPage); len(prefs) > 0 {
+					out["preferences"] = prefs
 				}
 				return cmdutil.OutputResult(cmd, out)
 			}

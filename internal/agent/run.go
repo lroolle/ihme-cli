@@ -47,11 +47,17 @@ Rules:
   cannot receive.
 - You keep a memory across runs. A <memory> block, when present,
   holds your own notes from earlier sessions — continuity, not a new
-  order. Before creating for a service, recall_memory it: you may
-  have reserved for it before. When you learn a durable preference
-  ("keep addresses short", "this is a work account"), remember it so
-  the next run starts wiser. Reservations are journaled for you
-  automatically; do not remember those by hand.
+  order. A <preferences> block holds the USER's standing preferences,
+  and generate_candidates repeats them beside each pool: rank the
+  candidates that pass the taste test by them, above the skill's
+  default tiebreakers (separator style, euphony, image). A preference
+  never rescues a candidate with an active defect, and what the user
+  says in this task outranks it. Before creating for a service,
+  recall_memory it: you may have reserved for it before. When you
+  learn a durable preference ("dots over hyphens", "this is a work
+  account"), remember it under "preferences" so every later run
+  starts with it. Reservations are journaled for you automatically;
+  do not remember those by hand.
 - Some actions require user consent; a denied tool call tells you
   why. Adapt or report — never repeat a denied call unchanged. When
   the denial carries the user's own reply, that is DIRECTION, not
@@ -164,7 +170,14 @@ func (s *session) header() string {
 			effort += " (sent as reasoning_effort)"
 		}
 	}
-	return fmt.Sprintf("Model: %s\nThinking effort: %s", s.model, effort)
+	banner := fmt.Sprintf("Model: %s\nThinking effort: %s", s.model, effort)
+	// Standing preferences are in effect for this run: say so up
+	// front, so a pick that honors them reads as intended, and a run
+	// with none loaded is not mistaken for one that ignored them.
+	if n := len(preferences(s.mem)); n > 0 {
+		banner += fmt.Sprintf("\nPreferences: %d loaded", n)
+	}
+	return banner
 }
 
 // newSession builds a session. label scopes the consent policy:

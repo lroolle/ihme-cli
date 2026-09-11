@@ -1,0 +1,81 @@
+#+TITLE: Preferences load themselves
+#+DATE: 2026-09-10
+
+* Tension
+
+A real run, driven from Claude Code through =ihme mcp=: the user had a
+standing preference on disk ("dots between words") under the
+=preferences= page, the agent recalled the service only, proposed the
+hyphenated candidate, and had to be corrected. The =remember= result
+then reported =alwaysLoaded: false= for the very page that holds the
+preference.
+
+* Observation
+
+Three separate gaps, all on the reading side. The write side was fine.
+
+1. =preferences= was an on-demand page. The =remember= tool offered it
+   as the topic "for a general preference", but only =flashcards= was
+   injected. A model cannot recall what it has no reason to think
+   exists; "recall the service" was the only recall instruction.
+2. The direct MCP path (=ihme mcp= configured in Claude Code or Codex)
+   injected nothing at all — not even flashcards. =memoryContext= was
+   folded into the task turn on the embedded and =--via= paths only,
+   and a direct guest has no task turn we compose.
+3. Even a loaded preference would have lost: SKILL.md ranks separator
+   style as "a distant tiebreaker, never override a better image", and
+   the system prompt said the same. The user's actual preference is
+   "dots even over a cleaner hyphenated one" — above image.
+
+* Decision
+
+Preferences are the user's direction, not the agent's notes, and they
+must be present where the choice is made, on every adapter.
+
+- =preferences= becomes the second always-loaded page, in its own
+  =<preferences>= block ahead of =<memory>=. The framing is different
+  on purpose: =<memory>= says "not a new instruction"; =<preferences>=
+  says "the user's standing direction, ranks passing candidates above
+  the rubric's tiebreakers, never rescues a defect, the current
+  request outranks it". Ranks, does not veto — the user's own words.
+- The pool carries it. =generate_candidates= results and =ihme new
+  --json= both gain a =preferences= field when any are recorded. This
+  is the one mechanism that reaches all four adapters (embedded,
+  =--via= harness, direct MCP, shell), and it puts the preference next
+  to the candidates it ranks instead of twelve turns back.
+- The MCP =initialize= reply carries =memoryContext= as =instructions=
+  — the spec's slot for exactly this. Clients that ignore it still
+  get preferences on every pool.
+- Surfaces: =remember(topic: preferences)= reports =alwaysLoaded:
+  true=; the run banner adds =Preferences: N loaded=; the TUI's
+  generate step adds =N preference(s) in play=; =ihme memory prefer
+  <note>= is the shell write; =ihme memory= counts preferences.
+- SKILL.md and the system prompt say the ranking rule in the same
+  words, since the model reads both.
+
+* Tradeoff
+
+- Two always-loaded pages instead of one. Kept because the authority
+  differs: a user preference outranks the rubric; an agent pin does
+  not. Merging them would lose that distinction in the framing.
+- On the embedded path the preference text appears twice (block +
+  pool). A few bullets; the freshness of the pool copy (a =remember=
+  mid-run shows up on the next generate) is worth it.
+- The banner says "loaded", not "applied". Code knows what it
+  injected; whether the model honored it is visible only in the pick
+  and its rationale.
+
+* Not verified here
+
+- Whether Claude Code and Codex surface MCP server =instructions= into
+  the model's context. Pattern-match says yes for both; the pool
+  field is the fallback either way.
+- A live =ihme new --agent= run with a preference recorded, on the Mac
+  where the real memory graph lives. The container has no Apple
+  session and no memory directory.
+
+* Next
+
+Run one real creation on the Mac with the existing =preferences= page
+and confirm the banner line, the =<preferences>= block in the
+transcript, and a dotted pick over a hyphenated one when both pass.

@@ -124,3 +124,35 @@ func TestSkillStaysInSyncWithEmbeddedTools(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateCandidatesCarriesStandingPreferences(t *testing.T) {
+	mem := memory.At(t.TempDir())
+	var gen agentkit.Tool
+	for _, tool := range tools(app.New(&fakeHmeAPI{}), newRunState("github"), "a@b", nil, mem) {
+		if tool.Name() == "generate_candidates" {
+			gen = tool
+		}
+	}
+	if gen == nil {
+		t.Fatal("generate_candidates tool not built")
+	}
+	out, err := gen.Execute(context.Background(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "preferences") {
+		t.Errorf("no preferences recorded, none should ride along: %s", out)
+	}
+	if err := mem.PageAppend(memory.PreferencesPage, "dots over hyphens"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = gen.Execute(context.Background(), json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The MCP guest and the shell adapter never see the injected
+	// context block; the pool itself must carry the user's direction.
+	if !strings.Contains(string(out), `"preferences":["dots over hyphens"]`) {
+		t.Errorf("candidate pool must carry standing preferences: %s", out)
+	}
+}

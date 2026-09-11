@@ -198,3 +198,70 @@ func TestMemoryContextBoundsFlashcards(t *testing.T) {
 		t.Error("budget dropped the newest card")
 	}
 }
+
+func TestPreferencesLoadEveryRunAsTheUsersDirection(t *testing.T) {
+	mem := memory.At(t.TempDir())
+	if got := memoryContext(mem); got != "" {
+		t.Fatalf("cold graph should inject nothing, got %q", got)
+	}
+	if preferences(nil) != nil || preferences(mem) != nil {
+		t.Fatal("no store or no page must read as no preferences")
+	}
+
+	// The model files a preference and is told it bought permanent context.
+	remember := memTool(t, mem, "remember")
+	out, err := remember.Execute(context.Background(), json.RawMessage(`{"topic":"preferences","fact":"dots between words, even over a cleaner hyphenated candidate"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), `"alwaysLoaded":true`) {
+		t.Errorf("preferences must be flagged always-loaded — the gap this closes was a preference the model thought needed recall: %s", out)
+	}
+
+	got := memoryContext(mem)
+	if !strings.HasPrefix(got, "<preferences>") || !strings.Contains(got, "cleaner hyphenated") {
+		t.Fatalf("preferences must lead the injected context: %q", got)
+	}
+	if strings.Contains(got, "<memory>") {
+		t.Errorf("no flashcards or journal yet, so no <memory> block: %q", got)
+	}
+	// Direction, not notes: the framing must say it outranks the
+	// rubric's tiebreakers and still never rescues a defect.
+	for _, want := range []string{"standing preferences", "tiebreakers", "active defect", "outranks"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("preferences framing lacks %q: %q", want, got)
+		}
+	}
+
+	// With continuity present, preferences come first and the memory
+	// block keeps its own framing.
+	if err := mem.JournalAppend("- reserved x for [[github]]"); err != nil {
+		t.Fatal(err)
+	}
+	got = memoryContext(mem)
+	if strings.Index(got, "<preferences>") > strings.Index(got, "<memory>") {
+		t.Errorf("preferences must precede the memory block: %q", got)
+	}
+	if got := preferences(mem); len(got) != 1 || !strings.HasPrefix(got[0], "dots between words") {
+		t.Errorf("preferences list = %v", got)
+	}
+}
+
+func TestPreferencesContextKeepsTheNewestWithinBudget(t *testing.T) {
+	mem := memory.At(t.TempDir())
+	for i := 0; i < 100; i++ {
+		if err := mem.PageAppend(memory.PreferencesPage, strings.Repeat("old ", 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mem.PageAppend(memory.PreferencesPage, "the-latest-correction"); err != nil {
+		t.Fatal(err)
+	}
+	got := preferencesContext(mem)
+	if len(got) > preferencesBudget+500 {
+		t.Errorf("preferences injection unbounded: %d bytes", len(got))
+	}
+	if !strings.Contains(got, "the-latest-correction") {
+		t.Error("budget dropped the newest preference — a later correction must win")
+	}
+}

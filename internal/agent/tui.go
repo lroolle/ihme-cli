@@ -628,15 +628,21 @@ func toolStep(event agentkit.ToolEnd) (tuiStep, bool) { //nolint:gocyclo
 
 	case "generate_candidates":
 		var result struct {
-			Candidates []string `json:"candidates"`
-			Round      int      `json:"round"`
-			RoundsLeft int      `json:"roundsLeft"`
+			Candidates  []string `json:"candidates"`
+			Round       int      `json:"round"`
+			RoundsLeft  int      `json:"roundsLeft"`
+			Preferences []string `json:"preferences"`
 		}
 		_ = json.Unmarshal(event.Result, &result)
 		if result.RoundsLeft == 0 {
 			step.text = fmt.Sprintf("Reviewed %d rounds of address ideas", result.Round)
 		} else {
 			step.text = fmt.Sprintf("Reviewed address ideas · round %d", result.Round)
+		}
+		// Name what shaped the ranking: the user can tell a pick that
+		// honored a standing preference from one made on the rubric alone.
+		if n := len(result.Preferences); n > 0 {
+			step.text += fmt.Sprintf(" · %d preference%s in play", n, pluralS(n))
 		}
 		// The spread is on screen before any consent card arrives:
 		// the user judges the pick against what it beat.

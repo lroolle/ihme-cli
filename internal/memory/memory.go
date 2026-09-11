@@ -24,6 +24,15 @@ import (
 // must earn their permanent context cost.
 const FlashcardsPage = "flashcards"
 
+// PreferencesPage is the second always-loaded page, with a different
+// authority: flashcards are the agent's own pins, preferences are the
+// USER's standing direction ("dots over hyphens", "this is a work
+// account"). Loaded into every run and handed to the model alongside
+// each candidate pool, so a preference is present where the choice is
+// made instead of waiting for a recall the model has no reason to
+// issue.
+const PreferencesPage = "preferences"
+
 // Store reads and appends one memory graph rooted at a directory.
 // Every write is append-only, and callers treat writes as
 // best-effort: memory must never fail the task that feeds it.
@@ -89,6 +98,28 @@ func (s *Store) ReadPage(title string) (string, bool) {
 		return "", false
 	}
 	return string(raw), true
+}
+
+// Bullets returns a page's bullets as plain sentences in file order,
+// without the "- " marker; blank and non-bullet lines are skipped.
+// Pages are append-only bullet lists, so this is the page as a list
+// of facts. Nil when the page does not exist.
+func (s *Store) Bullets(title string) []string {
+	page, ok := s.ReadPage(title)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(page, "\n") {
+		t := strings.TrimSpace(line)
+		if !strings.HasPrefix(t, "- ") {
+			continue
+		}
+		if fact := strings.TrimSpace(t[2:]); fact != "" {
+			out = append(out, fact)
+		}
+	}
+	return out
 }
 
 // RecentJournals returns the newest journal files, oldest first so
@@ -242,23 +273,19 @@ func (s *Store) Graph() []Node {
 
 // Stats summarizes the graph for `ihme memory`.
 type Stats struct {
-	Root       string `json:"root"`
-	Journals   int    `json:"journals"`
-	Pages      int    `json:"pages"`
-	Flashcards int    `json:"flashcards"`
+	Root        string `json:"root"`
+	Journals    int    `json:"journals"`
+	Pages       int    `json:"pages"`
+	Flashcards  int    `json:"flashcards"`
+	Preferences int    `json:"preferences"`
 }
 
 func (s *Store) Stats() Stats {
 	st := Stats{Root: s.root}
 	st.Journals = len(s.list("journals"))
 	st.Pages = len(s.list("pages"))
-	if cards, ok := s.ReadPage(FlashcardsPage); ok {
-		for _, line := range strings.Split(cards, "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "- ") {
-				st.Flashcards++
-			}
-		}
-	}
+	st.Flashcards = len(s.Bullets(FlashcardsPage))
+	st.Preferences = len(s.Bullets(PreferencesPage))
 	return st
 }
 

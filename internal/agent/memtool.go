@@ -17,10 +17,14 @@ import (
 // doctrine: code writes the episodic record the moment a fact
 // happens (writeReservation, below — uniform across one-shot, REPL,
 // and TUI), the model records only judgment it alone knows (the
-// remember tool), recall is on demand (recall_memory), and the
-// flashcards page is the one always-loaded keeper layer (injected by
-// memoryContext). Nothing here is gated: it touches only the user's
-// own local notebook, never Apple and never the network.
+// remember tool), recall is on demand (recall_memory), and two pages
+// are always loaded (injected by memoryContext): flashcards, the
+// agent's own pins, and preferences, the user's standing direction.
+// Preferences also ride along every candidate pool (see
+// preferences, below) so the MCP and shell adapters, which never see
+// the injected block, still have them where the choice is made.
+// Nothing here is gated: it touches only the user's own local
+// notebook, never Apple and never the network.
 
 const (
 	// recentJournalBudget bounds the always-injected journal tail so
@@ -31,6 +35,10 @@ const (
 	// is capped, so an over-pinned flashcards page cannot grow every
 	// future run's context without limit.
 	flashcardsBudget = 1200
+	// preferencesBudget bounds the always-injected preferences slice
+	// the same way. Newest bullets win: a later correction ("dots,
+	// even over a cleaner hyphenated one") supersedes an earlier hint.
+	preferencesBudget = 800
 	// recallLimit caps recall_memory hits per call.
 	recallLimit = 8
 )
@@ -61,10 +69,10 @@ func memoryTools(mem *memory.Store) []agentkit.Tool {
 		},
 		agentkit.FuncTool{
 			ToolName: "remember",
-			Desc: fmt.Sprintf("Save one durable fact you want future runs to know — a lasting user preference or a note about a service. Write to the %q topic page to have it loaded into EVERY future run (use sparingly); any other topic is recalled on demand. Reservations are journaled automatically — do not record those here. Never store secrets.",
-				memory.FlashcardsPage),
+			Desc: fmt.Sprintf("Save one durable fact you want future runs to know. A lasting user preference about addresses or accounts goes under %q: it is loaded into EVERY future run as the user's standing direction and shown beside every candidate pool. A note about a service goes under the service name (recalled on demand). %q pins your own note into every run (use sparingly). Reservations are journaled automatically — do not record those here. Never store secrets.",
+				memory.PreferencesPage, memory.FlashcardsPage),
 			Params: schema.Object(
-				schema.Property("topic", schema.String(fmt.Sprintf("the page to file under: a service name, %q for a general preference, or %q to pin into every run", "preferences", memory.FlashcardsPage))).Required(),
+				schema.Property("topic", schema.String(fmt.Sprintf("the page to file under: %q for a user preference (loaded every run), a service name for a note about it, or %q to pin your own note into every run", memory.PreferencesPage, memory.FlashcardsPage))).Required(),
 				schema.Property("fact", schema.String("one durable sentence, in your own words")).Required(),
 			),
 			Fn: func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
@@ -86,22 +94,79 @@ func memoryTools(mem *memory.Store) []agentkit.Tool {
 				return marshal(map[string]any{
 					"remembered":   args.Topic,
 					"status":       status,
-					"alwaysLoaded": strings.EqualFold(args.Topic, memory.FlashcardsPage),
+					"alwaysLoaded": alwaysLoaded(args.Topic),
 				})
 			},
 		},
 	}
 }
 
-// memoryContext is the continuity block injected once at the top of
-// a session: the always-loaded flashcards plus a bounded tail of
-// recent journal entries. Empty on a cold graph. It is framed as the
-// agent's own notes, not a live instruction — the addresses inside
-// are records.
+// alwaysLoaded reports whether a topic page is injected into every
+// run, so a remember call can tell the model (and the UI) what its
+// write actually bought.
+func alwaysLoaded(topic string) bool {
+	return strings.EqualFold(topic, memory.FlashcardsPage) || strings.EqualFold(topic, memory.PreferencesPage)
+}
+
+// preferences returns the user's standing preferences as a list, nil
+// when none are recorded or no store is available. Tool results
+// attach it to every candidate pool: the MCP guest and the shell
+// adapter never see the injected context block, and even the
+// embedded model is better served by the preference sitting next to
+// the candidates it ranks than by a block it read twelve turns ago.
+func preferences(mem *memory.Store) []string {
+	if mem == nil {
+		return nil
+	}
+	return mem.Bullets(memory.PreferencesPage)
+}
+
+// memoryContext is the block injected once at the top of a session:
+// the user's standing preferences, then the agent's continuity (the
+// always-loaded flashcards plus a bounded tail of recent journal
+// entries). Empty on a cold graph. The two halves are framed
+// differently on purpose: preferences ARE direction from the user,
+// the rest is the agent's own notes — the addresses inside are
+// records, not a request to repeat them.
 func memoryContext(mem *memory.Store) string {
 	if mem == nil {
 		return ""
 	}
+	var parts []string
+	if p := preferencesContext(mem); p != "" {
+		parts = append(parts, p)
+	}
+	if c := continuityContext(mem); c != "" {
+		parts = append(parts, c)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// preferencesContext frames the preferences page as what it is: the
+// user's standing direction, outranking the skill's default
+// tiebreakers when ranking candidates that pass the taste test — but
+// a ranking signal, never a filter (a defect still rejects), and
+// below whatever the user says in the task at hand.
+func preferencesContext(mem *memory.Store) string {
+	prefs, ok := mem.ReadPage(memory.PreferencesPage)
+	if !ok {
+		return ""
+	}
+	prefs = lastLinesWithin(strings.TrimSpace(prefs), preferencesBudget)
+	if prefs == "" {
+		return ""
+	}
+	return "<preferences>\nThe user's standing preferences from earlier runs — their direction,\n" +
+		"not your notes. Rank candidates that pass the taste test by these, above\n" +
+		"the skill's default tiebreakers (separator style, euphony, image). A\n" +
+		"preference never rescues a candidate with an active defect, and what\n" +
+		"the user says in this task outranks it.\n\n" +
+		prefs + "\n</preferences>"
+}
+
+// continuityContext is the agent's own memory: flashcards and the
+// recent journal tail.
+func continuityContext(mem *memory.Store) string {
 	var b strings.Builder
 	if cards, ok := mem.ReadPage(memory.FlashcardsPage); ok {
 		if cards = lastLinesWithin(strings.TrimSpace(cards), flashcardsBudget); cards != "" {

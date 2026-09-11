@@ -43,11 +43,13 @@ func ServeMCP(ctx context.Context, svc *app.Service, appleID, version string, gr
 	if grant == "" {
 		grant = GrantAsk
 	}
+	mem := memory.Open()
 	srv := &mcpServer{
 		version: version,
-		tools:   tools(svc, st, appleID, nil, memory.Open()),
+		tools:   tools(svc, st, appleID, nil, mem),
 		gate:    gate(grant, st, ask),
 		enc:     json.NewEncoder(out),
+		mem:     mem,
 	}
 	return srv.serve(ctx, in)
 }
@@ -67,6 +69,7 @@ type mcpServer struct {
 	version string
 	tools   []agentkit.Tool
 	gate    agentkit.Gate // nil = GrantAuto
+	mem     *memory.Store // nil = no memory; instructions then omitted
 	enc     *json.Encoder
 	mu      sync.Mutex // one writer: responses come from the serve loop only
 }
@@ -126,11 +129,21 @@ func (s *mcpServer) handle(ctx context.Context, msg rpcIn) {
 		if !mcpVersions[v] {
 			v = mcpLatest
 		}
-		s.reply(msg.ID, map[string]any{
+		init := map[string]any{
 			"protocolVersion": v,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "ihme", "version": s.version},
-		}, nil)
+		}
+		// A direct MCP guest (Claude Code, Codex with `ihme mcp`
+		// configured) has no task turn we compose, so the memory
+		// block the embedded and harnessed paths inject rides here as
+		// server instructions — the spec's slot for exactly this.
+		// Clients that ignore instructions still get preferences on
+		// every generate_candidates result.
+		if ctx := memoryContext(s.mem); ctx != "" {
+			init["instructions"] = ctx
+		}
+		s.reply(msg.ID, init, nil)
 
 	case "notifications/initialized", "notifications/cancelled":
 		// Nothing to do; notifications never get responses.

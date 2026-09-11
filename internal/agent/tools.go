@@ -159,7 +159,7 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 		},
 		agentkit.FuncTool{
 			ToolName: "generate_candidates",
-			Desc: fmt.Sprintf("Generate fresh candidate addresses from Apple. Hard limit: %d rounds per run.",
+			Desc: fmt.Sprintf("Generate fresh candidate addresses from Apple. The result carries the user's standing preferences when any are recorded — rank the candidates that pass the taste test by them. Hard limit: %d rounds per run.",
 				maxGenerateRounds),
 			Params: schema.Object(
 				schema.Property("count", schema.Int("how many candidates (default 3)")),
@@ -180,11 +180,18 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 				if err != nil {
 					return nil, err
 				}
-				return marshal(map[string]any{
+				out := map[string]any{
 					"candidates": candidates,
 					"round":      st.generateRounds,
 					"roundsLeft": maxGenerateRounds - st.generateRounds,
-				})
+				}
+				// The user's direction sits next to the pool it ranks:
+				// this is the one moment the preference matters, and the
+				// one payload every adapter sees.
+				if prefs := preferences(mem); len(prefs) > 0 {
+					out["preferences"] = prefs
+				}
+				return marshal(out)
 			},
 		},
 		agentkit.FuncTool{

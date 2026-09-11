@@ -61,7 +61,8 @@ and `webservices`; they may omit a `success` boolean.
 ```
 list --json     → {"addresses":[{anonymousId,label,hme,isActive,createTimestamp,note,...}],"count":N,"hints":{...}}
 view --json     → {"result":{anonymousId,label,hme,forwardToEmail,isActive,...},"hints":{...}}
-new --json      → {"candidates":["a@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
+new --json      → {"candidates":["a@icloud.com",...],"label":"...","preferences":["..."],"hint":"ihme new <label> --address <addr>"}
+                  (preferences: the user's standing preferences, present only when any are recorded)
 new -y --json   → {anonymousId,label,hme,isActive,...}
 forward --json  → {"forwardTo":"...","available":[...],"hint":"ihme forward set <email>"}
 auth status     → {"loggedIn":true,"appleId":"...","expired":false,"canAccessICloud":true,"rawResponse":{...},...}
@@ -162,8 +163,18 @@ Secondary signals (tiebreakers, not filters):
 - **Euphony**: read it aloud. Pleasant vowel/consonant rhythm and natural stress
   help recognition in a list of 300+.
 - **No leading digits**: `65.ampere` reads like a form field. Letters first.
-- **Separator style**: a distant tiebreaker. Never override a better image for a
-  preferred separator. `hilltop-desert` beats `relay_strop` regardless of format.
+- **Separator style**: a distant tiebreaker by default. Never override a better
+  image for a separator nobody asked for. `hilltop-desert` beats `relay_strop`
+  regardless of format.
+
+A recorded user preference changes the order above. The candidates payload
+carries `preferences` (embedded: the `<preferences>` block and every
+`generate_candidates` result; shell: the `preferences` field of `ihme new
+--json`) — that is the user's standing direction, not a tiebreaker: rank the
+candidates that pass the taste test by it, above image, euphony, and separator
+defaults. "Dots between words" then beats a cleaner hyphenated candidate. A
+preference never rescues a candidate with an active defect, and what the user
+says in the current request outranks it.
 
 The best HME addresses feel like they could be a place on a map, a cocktail name,
 or an album title — evocative without trying.
@@ -226,6 +237,8 @@ Apple kept refusing: only an interactive login fixes it.
    ```bash
    ihme new <label> --json
    ```
+   When the payload carries `preferences`, rank the passing candidates by
+   them first (see "Choosing an address").
    Evaluate each candidate individually — don't let bad neighbors taint a good
    one. A pool with two duds and one strong image is not a "weak pool."
    Reserve the best immediately — rotation and questions are for pools where
@@ -295,8 +308,17 @@ Suggest pruning dead services quarterly.
 ### Memory
 
 You keep a memory across runs — a plain markdown graph (journals for
-what you did, pages per topic, a flashcards page loaded into every
-run). Use it for continuity:
+what you did, pages per topic, and two pages loaded into every run:
+`preferences`, the user's standing direction, and `flashcards`, your
+own pins). Use it for continuity:
+
+- **Preferences load themselves.** The `preferences` page is injected
+  into every run and repeated beside every candidate pool — you never
+  have to recall it. When the user states a lasting preference about
+  addresses or accounts ("dots over hyphens", "this is a work
+  account"), record it there so the next run ranks by it. Shell:
+  `ihme memory prefer <note>`. Embedded: `remember` with topic
+  `preferences`.
 
 - **Recall before creating.** Search memory for the service first;
   you may have reserved for it before, and the past note carries the
@@ -305,10 +327,10 @@ run). Use it for continuity:
 - **Reservations journal themselves.** Every reserve is written to
   memory automatically, linked to its service page. Never hand-record
   a reservation.
-- **Remember durable learnings, sparingly.** When you learn a lasting
-  preference or a fact about a service worth carrying forward, save
-  one note. Pin it to the `flashcards` topic to have it loaded into
-  every future run; use any other topic for on-demand recall. Never
+- **Remember durable learnings, sparingly.** When you learn a fact
+  about a service worth carrying forward, save one note under the
+  service name for on-demand recall. Pin a note of your own to the
+  `flashcards` topic only when every future run needs it. Never
   store secrets. Shell: `ihme memory card <note>`. Embedded:
   `remember`.
 
@@ -342,6 +364,7 @@ shell — operations map to in-process tools:
 | `ihme deactivate <ref> --json` | `deactivate_address` |
 | `ihme edit <ref> ...` | `edit_note` |
 | `ihme memory search <query>` | `recall_memory` |
+| `ihme memory prefer <note>` | `remember` (topic `preferences`) |
 | `ihme memory card <note>` (or editing a page) | `remember` |
 
 Embedded runs enforce the rotation cap (3 generation rounds) and
