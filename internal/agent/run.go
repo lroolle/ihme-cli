@@ -242,8 +242,10 @@ func hintErr(err error) error {
 	msg := err.Error()
 	if strings.Contains(msg, "reasoning_effort") && strings.Contains(msg, "responses") {
 		// Only reachable when the config PINS "api": "completions" —
-		// auto mode flips and persists instead of erroring.
-		return fmt.Errorf("%w\n\nThis model requires the responses API for tool use, but agent.json pins \"api\": \"completions\".\nFix: set \"api\": \"auto\" (or \"responses\") in %s/agent.json", err, configDir())
+		// auto mode flips and remembers instead of erroring. Before
+		// v0.6.4 ihme itself wrote that pin when it learned an
+		// earlier model's protocol, so the user may never have set it.
+		return fmt.Errorf("%w\n\nThis model requires the responses API for tool use, but agent.json pins \"api\": \"completions\" (older ihme versions wrote that pin themselves after learning another model's protocol).\nFix: remove \"api\" or set it to \"auto\" in %s/agent.json", err, configDir())
 	}
 	return err
 }

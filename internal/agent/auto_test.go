@@ -2,7 +2,11 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
@@ -161,6 +165,12 @@ func TestGuessAPI(t *testing.T) {
 	cases := map[string]string{
 		"gpt-5.6-sol":       "responses",
 		"gpt-5-mini":        "responses",
+		"gpt-6-astra":       "responses",
+		"gpt-7":             "responses",
+		"gpt-12-nova":       "responses",
+		"GPT-6-Astra":       "responses",
+		"o1":                "responses",
+		"deepseek-v5-pro":   "responses",
 		"o3-pro":            "responses",
 		"o4-mini":           "responses",
 		"codex-mini":        "responses",
@@ -168,6 +178,8 @@ func TestGuessAPI(t *testing.T) {
 		"claude-sonnet-4-5": "anthropic",
 		"deepseek-v4-flash": "responses",
 		"gpt-4o-mini":       "completions",
+		"gpt-4.1":           "completions",
+		"gpt-oss-120b":      "completions",
 		"deepseek-chat":     "completions",
 		"deepseek-v3.2":     "completions",
 		"gemini-2.5-flash":  "completions",
@@ -225,5 +237,93 @@ func TestAnthropicEffortMapsSharedVocabulary(t *testing.T) {
 		if got := anthropicEffort(effort); got != want {
 			t.Fatalf("anthropicEffort(%q) = %q, want %q", effort, got, want)
 		}
+	}
+}
+
+// The regression behind gpt-6-astra: a discovery learned from one
+// model used to be written into the "api" pin, which then locked
+// every later model to that answer. Learned protocols are per
+// model, and a learned value is a starting point that still heals.
+func TestLearnedAPIIsPerModelAndNotPinned(t *testing.T) {
+	cfg := Config{Model: "gpt-6-astra", BaseURL: "https://gw.example.com/v1", API: "auto",
+		APIs: map[string]string{"deepseek-v4-flash": "completions"}}
+	a := newAutoStreamer(cfg, "k")
+	if a.locked {
+		t.Fatal("auto mode must never lock")
+	}
+	if a.api != "responses" {
+		t.Fatalf("another model's memory must not apply; got %q", a.api)
+	}
+
+	cfg.APIs["gpt-6-astra"] = "completions" // a stale memory for this model
+	a = newAutoStreamer(cfg, "k")
+	if a.api != "completions" || a.locked {
+		t.Fatalf("learned value should start the run unlocked; api=%q locked=%v", a.api, a.locked)
+	}
+	completions := &fakeStreamer{err: needsResponses}
+	responses := &fakeStreamer{msg: agentkit.AssistantMessage{Text: "ok", StopReason: agentkit.StopEnd}}
+	var persisted []string
+	a.make = func(api string) agentkit.Streamer {
+		return map[string]agentkit.Streamer{"completions": completions, "responses": responses}[api]
+	}
+	a.persist = func(api string) { persisted = append(persisted, api) }
+	if _, err := a.Stream(context.Background(), agentkit.Request{}, func(agentkit.StreamEvent) error { return nil }); err != nil {
+		t.Fatalf("stale memory must heal: %v", err)
+	}
+	if len(persisted) != 1 || persisted[0] != "responses" {
+		t.Fatalf("persisted = %v", persisted)
+	}
+
+	// An explicit pin still wins over any memory.
+	cfg.API = "completions"
+	if a = newAutoStreamer(cfg, "k"); !a.locked || a.api != "completions" {
+		t.Fatalf("pin must lock; api=%q locked=%v", a.api, a.locked)
+	}
+}
+
+func TestPersistAPIWritesPerModelAndKeepsPin(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path := filepath.Join(configDir(), "agent.json")
+	if err := os.MkdirAll(configDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"model":"gpt-6-astra","effort":"low"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	persistAPI("gpt-6-astra", "responses")
+	persistAPI("deepseek-v4-flash", "completions")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg Config
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.API != "" {
+		t.Fatalf("persist must never write the pin; api=%q", cfg.API)
+	}
+	if cfg.Model != "gpt-6-astra" || cfg.Effort != "low" {
+		t.Fatalf("other fields must survive: %+v", cfg)
+	}
+	if cfg.APIs["gpt-6-astra"] != "responses" || cfg.APIs["deepseek-v4-flash"] != "completions" {
+		t.Fatalf("apis = %v", cfg.APIs)
+	}
+}
+
+func TestBothProtocolsRefusedSaysSo(t *testing.T) {
+	completions := &fakeStreamer{err: needsResponses}
+	responses := &fakeStreamer{err: &openai.APIError{Status: 404, Body: "404 page not found"}}
+	a := autoWith("completions", false, map[string]*fakeStreamer{
+		"completions": completions, "responses": responses,
+	}, nil)
+	a.model = "gpt-6-astra"
+	_, err := a.Stream(context.Background(), agentkit.Request{}, func(agentkit.StreamEvent) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "gpt-6-astra needs the responses API, but this endpoint does not serve it") {
+		t.Fatalf("err = %v", err)
+	}
+	var apiErr *openai.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 404 {
+		t.Fatalf("underlying refusal must stay unwrappable: %v", err)
 	}
 }

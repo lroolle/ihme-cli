@@ -107,25 +107,37 @@ func TestDerivePasswordDefaultProtocol(t *testing.T) {
 }
 
 // Apple started answering 409 to a VALID security code around
-// mid-2026 (rclone#9488). The tell that it was accepted is the fresh
-// session token; without one, a 409 is still a failure.
+// mid-2026 (rclone#9488). The tells that it was accepted are a fresh
+// session token, or the body's own securityCode.valid=true when the
+// 409 carries no token (rclone#9730); a bare 409 is still a failure.
 func TestCodeAcceptedDespiteConflict(t *testing.T) {
 	withToken := &http.Response{StatusCode: 409, Header: http.Header{"X-Apple-Session-Token": []string{"fresh"}}}
-	if !codeAcceptedDespiteConflict(withToken) {
+	if !codeAcceptedDespiteConflict(withToken, nil) {
 		t.Error("409 carrying a session token means the code was accepted")
 	}
 
 	bare := &http.Response{StatusCode: 409, Header: http.Header{}}
-	if codeAcceptedDespiteConflict(bare) {
-		t.Error("409 without a session token is not an acceptance")
+	if codeAcceptedDespiteConflict(bare, nil) {
+		t.Error("409 without a session token or a valid verdict is not an acceptance")
+	}
+
+	validBody := []byte(`{"securityCode":{"code":"******","tooManyCodesSent":false,"valid":true},"authenticationType":"hsa2"}`)
+	if !codeAcceptedDespiteConflict(bare, validBody) {
+		t.Error("409 whose body says securityCode.valid=true means the code was accepted (rclone#9730)")
+	}
+	if codeAcceptedDespiteConflict(bare, []byte(`{"securityCode":{"code":"******","valid":false}}`)) {
+		t.Error("valid=false must not read as acceptance")
+	}
+	if codeAcceptedDespiteConflict(bare, []byte(`not json`)) {
+		t.Error("garbage body must not read as acceptance")
 	}
 
 	ok := &http.Response{StatusCode: 200, Header: http.Header{"X-Apple-Session-Token": []string{"fresh"}}}
-	if codeAcceptedDespiteConflict(ok) {
+	if codeAcceptedDespiteConflict(ok, validBody) {
 		t.Error("only 409 takes this path")
 	}
 
-	if codeAcceptedDespiteConflict(nil) {
+	if codeAcceptedDespiteConflict(nil, validBody) {
 		t.Error("nil response must not read as acceptance")
 	}
 }

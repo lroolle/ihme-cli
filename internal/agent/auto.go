@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/lroolle/ihme-cli/pkg/agentkit"
@@ -22,6 +24,7 @@ import (
 // answer so the wrong first call happens at most once per model —
 // never per run.
 type autoStreamer struct {
+	model    string
 	api      string
 	locked   bool // explicit config: never switch
 	switched bool // at most one flip per process
@@ -31,6 +34,7 @@ type autoStreamer struct {
 
 func newAutoStreamer(cfg Config, key string) *autoStreamer {
 	a := &autoStreamer{
+		model: cfg.Model,
 		make: func(api string) agentkit.Streamer {
 			switch api {
 			case "responses":
@@ -61,8 +65,12 @@ func newAutoStreamer(cfg Config, key string) *autoStreamer {
 	switch cfg.API {
 	case "completions", "responses", "anthropic":
 		a.api, a.locked = cfg.API, true
-	default: // "auto"
-		a.api = guessAPI(cfg.Model, cfg.BaseURL)
+	default: // "auto": what this model taught us last time, else a guess
+		if learned := cfg.APIs[cfg.Model]; learned != "" {
+			a.api = learned
+		} else {
+			a.api = guessAPI(cfg.Model, cfg.BaseURL)
+		}
 	}
 	return a
 }
@@ -121,7 +129,14 @@ func (a *autoStreamer) Stream(ctx context.Context, req agentkit.Request, emit fu
 	if a.persist != nil {
 		a.persist(next)
 	}
-	return a.make(a.api).Stream(ctx, req, emit)
+	msg, err = a.make(a.api).Stream(ctx, req, emit)
+	if _, again := misroute(a.api, err); again && !meaningful {
+		// Both protocols refused: the model wants one the gateway
+		// does not serve. Say that instead of surfacing the second
+		// refusal as if it were the only problem.
+		return msg, fmt.Errorf("%s needs the %s API, but this endpoint does not serve it: %w", a.model, a.api, err)
+	}
+	return msg, err
 }
 
 // misroute classifies "wrong API for this model" errors.
@@ -189,35 +204,70 @@ func apiFailure(err error) (int, string, bool) {
 // family. Anthropic's own host always speaks the Messages API;
 // claude models elsewhere start native and self-heal to completions
 // when the gateway has no /v1/messages. Reasoning-first OpenAI
-// families need /responses for function tools; deepseek-v4 ships
-// native /responses support (earlier deepseek generations stay on
-// completions); everything else speaks /chat/completions. Wrong
+// families need /responses for function tools — gpt-5 and every
+// later generation (gpt-6-astra, ...), the o-series, codex — and
+// deepseek ships native /responses from v4 on; earlier generations
+// of both stay on /chat/completions, as does everything else. Wrong
 // guesses self-heal via misroute detection.
 func guessAPI(model, baseURL string) string {
 	if strings.Contains(baseURL, "anthropic.com") {
 		return "anthropic"
 	}
 	m := strings.ToLower(model)
-	if strings.HasPrefix(m, "claude") {
+	switch {
+	case strings.HasPrefix(m, "claude"):
 		return "anthropic"
-	}
-	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4", "codex", "deepseek-v4"} {
-		if strings.HasPrefix(m, prefix) {
-			return "responses"
-		}
+	case generation(m, "gpt-") >= 5, generation(m, "deepseek-v") >= 4:
+		return "responses"
+	case strings.HasPrefix(m, "codex"), oSeries.MatchString(m):
+		return "responses"
 	}
 	return "completions"
 }
 
-// persistAPI records the discovered protocol in agent.json so the
-// next run starts on the right API, and tells the user once.
+// oSeries matches OpenAI's reasoning line: o1, o3-pro, o4-mini.
+var oSeries = regexp.MustCompile(`^o[1-9]`)
+
+// generation reads the major version that follows a family prefix:
+// "gpt-6-astra" is generation 6 of "gpt-", "gpt-4o-mini" is 4.
+// Returns -1 when the model is not in that family or carries no
+// leading number, so a comparison against it is always false.
+func generation(model, prefix string) int {
+	rest, ok := strings.CutPrefix(model, prefix)
+	if !ok {
+		return -1
+	}
+	end := 0
+	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return -1
+	}
+	n, err := strconv.Atoi(rest[:end])
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+// persistAPI records the discovered protocol in agent.json, keyed
+// by model, so the next run of THIS model starts on the right API,
+// and tells the user once. It never touches the top-level "api"
+// pin: that field is the user's, and a discovery written there
+// once locked every later model to the first model's answer.
 func persistAPI(model, api string) {
 	path := filepath.Join(configDir(), "agent.json")
 	cfg := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(raw, &cfg) // best effort: unreadable -> rewrite minimal
 	}
-	cfg["api"] = api
+	apis, _ := cfg["apis"].(map[string]any)
+	if apis == nil {
+		apis = map[string]any{}
+	}
+	apis[model] = api
+	cfg["apis"] = apis
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return
@@ -227,5 +277,5 @@ func persistAPI(model, api string) {
 		fmt.Fprintf(os.Stderr, "\n(%s speaks the %s API — switched for this run, but saving %s failed: %v)\n", model, api, path, err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\n(%s speaks the %s API — switched automatically and saved to %s)\n", model, api, path)
+	fmt.Fprintf(os.Stderr, "\n(%s speaks the %s API — switched automatically and remembered in %s)\n", model, api, path)
 }

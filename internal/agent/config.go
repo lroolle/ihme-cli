@@ -24,9 +24,15 @@ type Config struct {
 
 	// API selects the wire protocol: "auto" (default — guess by
 	// model family and base URL, flip on the endpoint's misroute
-	// signal, persist the discovery), or pin one explicitly:
-	// "completions", "responses", or "anthropic".
+	// signal, remember the discovery in APIs), or pin one
+	// explicitly: "completions", "responses", or "anthropic". A pin
+	// applies to every model and never flips.
 	API string `json:"api"`
+	// APIs is what auto mode learned, keyed by model name. Written
+	// by ihme, not the user: switching models never inherits another
+	// model's answer, and a remembered answer is still a starting
+	// point, not a pin — the misroute signal can correct it.
+	APIs map[string]string `json:"apis,omitempty"`
 	// Effort sets reasoning effort ("low"/"medium"/"high"). The
 	// responses and chat-completions APIs pass it through (as
 	// reasoning_effort); the Anthropic API maps it to an

@@ -361,7 +361,7 @@ func (c *Client) handle2FASMS(phones []TrustedPhoneNumber, otpCallback TwoFactor
 	switch {
 	case resp.StatusCode == 200 || resp.StatusCode == 204:
 		return nil
-	case codeAcceptedDespiteConflict(resp):
+	case codeAcceptedDespiteConflict(resp, respBody):
 		return nil
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		return fmt.Errorf("incorrect verification code")
@@ -392,7 +392,7 @@ func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
 	switch {
 	case resp.StatusCode == 200 || resp.StatusCode == 204:
 		return nil
-	case codeAcceptedDespiteConflict(resp):
+	case codeAcceptedDespiteConflict(resp, respBody):
 		return nil
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		return fmt.Errorf("incorrect verification code")
@@ -403,17 +403,29 @@ func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
 
 // codeAcceptedDespiteConflict reports whether Apple accepted a
 // security code while answering 409. Since ~mid-2026 the
-// securitycode endpoints answer 409 even for a valid code; the body
-// says securityCode.valid=true and — the part worth trusting —
-// Apple issues a fresh X-Apple-Session-Token, which it only does on
-// success. doAuthRequest has already absorbed those headers by the
-// time this runs, so accepting here continues straight to the trust
-// step. Verified against rclone's fix for the same break
-// (backend/iclouddrive/api/session.go, rclone#9488, 2026-07-29).
-func codeAcceptedDespiteConflict(resp *http.Response) bool {
-	return resp != nil &&
-		resp.StatusCode == 409 &&
-		resp.Header.Get("X-Apple-Session-Token") != ""
+// securitycode endpoints answer 409 even for a valid code. Two
+// tells, either suffices: a fresh X-Apple-Session-Token (issued
+// only on success; doAuthRequest has already absorbed it, so
+// accepting continues straight to the trust step — rclone#9488,
+// 2026-07-29), or securityCode.valid=true in the body — some
+// non-ADP accounts get the 409 with no token at all and the SRP
+// session token carries through (rclone#9730, 2026-08-04). A wrong
+// code never says valid=true, and the trust step that follows
+// rejects a session Apple did not actually verify, so trusting the
+// body cannot mint a session Apple would not.
+func codeAcceptedDespiteConflict(resp *http.Response, body []byte) bool {
+	if resp == nil || resp.StatusCode != 409 {
+		return false
+	}
+	if resp.Header.Get("X-Apple-Session-Token") != "" {
+		return true
+	}
+	var verdict struct {
+		SecurityCode struct {
+			Valid bool `json:"valid"`
+		} `json:"securityCode"`
+	}
+	return json.Unmarshal(body, &verdict) == nil && verdict.SecurityCode.Valid
 }
 
 func (c *Client) getTrust() error {
