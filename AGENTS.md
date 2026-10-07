@@ -4,7 +4,7 @@
 
 ## What this tool does
 
-`ihme` manages iCloud Hide My Email addresses: create, list, search, edit, deactivate, reactivate, delete, export. It authenticates via Apple's SRP-6a protocol with 2FA support and persists session tokens locally.
+`ihme` manages iCloud Hide My Email addresses: create, list, search, edit, deactivate, reactivate, delete, export, and share one address's inbox on a plain web page. It authenticates via Apple's SRP-6a protocol with 2FA support and persists session tokens locally.
 
 ## Prerequisites
 
@@ -105,6 +105,15 @@ ihme forward --json                       # show current forward-to
 ihme forward set user@icloud.com          # change it
 ```
 
+### Share an inbox
+
+```bash
+ihme share github.com --json              # one key per address; printed once
+ihme share list --json                    # shared addresses (no keys)
+ihme share revoke github.com --json       # --all revokes every key
+ihme serve                                # long-running web server; see docs/usage.md
+```
+
 ## Reference resolution
 
 The `<ref>` argument resolves in this order:
@@ -127,6 +136,10 @@ new -y --json    {anonymousId,label,hme,isActive,...}
 forward --json   {"forwardTo":"...","available":[...],"hint":"..."}
 deactivate       {"status":"deactivated","hme":"...","id":"...","hints":{...}}
 reactivate       {"status":"reactivated","hme":"...","id":"...","hint":"..."}
+delete --yes     {"status":"deleted","hme":"...","id":"..."}
+share --json     {"address":"...","label":"...","key":"...","link":"...","rotated":false,"hints":{...}}
+share list       [{"address":"...","label":"...","anonymousId":"...","createdAt":"..."}]
+share revoke     {"revoked":["address",...]}
 ```
 
 JSON output includes `hints` with suggested follow-up commands.
@@ -170,6 +183,10 @@ keeps refusing exits 2. Error text carries no account identifiers
 ## Conventions
 
 - stdout is data, stderr is status — safe to pipe
+- An omitted `<ref>` opens a picker only at a terminal. Without a TTY,
+  or with `--json`, it is the usage error above, never a prompt. A
+  harness that runs ihme in a pseudo-terminal sets `IHME_NO_PROMPT=1`.
+  `delete` without a terminal needs `--yes`; it refuses rather than guess
 - `--yes` skips all interactive confirmation prompts
 - `--verbose` / `-v` logs HTTP requests to stderr
 - Session stored at `~/.config/ihme/session.json` (respects `$XDG_CONFIG_HOME`)

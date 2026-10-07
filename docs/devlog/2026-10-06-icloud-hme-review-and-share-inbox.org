@@ -1,0 +1,217 @@
+#+TITLE: icloud-hme review, cookie hygiene, and a shared inbox
+#+DATE: 2026-10-06
+
+* Tension
+
+[[https://github.com/xiaozhou26/icloud-hme][xiaozhou26/icloud-hme]] (Go, a self-hosted web panel, last commit
+2026-09-03) talks to the same private
+iCloud APIs we do. The ask: read it line by line against =api/=, take
+anything newer than what we have, polish CLI rough edges, and design a
+public web view where one person can read the mail one address
+received without seeing the rest.
+
+* Observation
+
+Compared hme/client.go, hme/auth.go, mail/web_client.go, and
+mail/client.go with our api/, plus the newest Apple-behavior fixes in
+pyicloud (2026-10-04/05) and rclone.
+
+Where icloud-hme is behind us (no action):
+
+- 2FA: device code only, and only HTTP 204 counts as success. Apple has
+  answered valid codes with 409 since mid-2026 (rclone#9488,
+  pyicloud#372), so its login breaks where ours does not. No SMS path.
+- accountLogin hard-codes =accountCountryCode: "USA"=; we send the
+  country Apple told us.
+- Retries every non-2xx 3 times, including =reserve=. We classify
+  transient vs rejection and recover a 401 exactly once.
+- Its cookie-mode "mail for this alias" (mailws2 thread/search) filters
+  on a To field the thread digest never carries, so it can only match
+  subject or sender. Its IMAP mode (search TO header) is the one that
+  works, which is the evidence our inbox search builds on.
+- Chrome TLS fingerprinting via tls-client. rclone (plain Go TLS)
+  works against the same hosts; not adopted.
+
+Where it, or the comparison, found something we lacked (fixed):
+
+| Finding                                                    | Source                       | Fix                                       |
+|------------------------------------------------------------+------------------------------+-------------------------------------------|
+| Cookies rotated on a normal call were lost at exit         | icloud-hme f971ee0           | mergeCookies reports change -> OnSessionUpdate |
+| Expired cookies (empty/Max-Age<=0/past Expires) kept       | rclone mergeCookies          | removed on merge                          |
+| Duplicate names: merge updated last copy, header sent first | found in our code by review  | header sends the last copy                |
+| Quoted cookie values replayed unquoted                     | icloud-hme quoting           | =SavedCookie.Quoted=; jar already keeps it |
+| Webservice advertised without a URL                        | pyicloud#337                 | named error                               |
+| Locked account (-20209) read as a generic failure          | pyicloud#368                 | =ErrAccountLocked= + unlock URL           |
+| Build number 2602Build17                                   | icloud-hme capture           | 2624Build22 (decoration; see endpoints.go)|
+
+"Latest unpublished API": the only surface icloud-hme uses that we do
+not is mccgateway mailws2 (=thread/search=, and in Go-iClient
+=thread/get=, =message/get=). It reads mail with the web session. It
+has no recipient filter, so per-alias lookup is one thread/get per
+thread. The HME endpoints themselves are unchanged: v2 list, v1
+generate/reserve/updateMetaData/deactivate/reactivate/delete.
+pyicloud also calls v2 =get=, which our list already covers.
+
+Unverified, needs a live account: the -20209 body shape outside
+pyicloud's fixtures. (Quoted cookie replay was confirmed live on
+2026-10-07; see Live check.)
+
+Dropped (2026-10-07): sending the .cn Origin/Referer to .cn hosts, as
+pyicloud and icloud-hme do. Nobody here has a CN account to check it,
+so an unverifiable header change stays out; every service call keeps
+=https://www.icloud.com=, as before.
+
+* Decision
+
+1. API: replay cookies the way a browser does, and say what Apple
+   said at sign-in. Tests for each finding above.
+2. CLI: an omitted =<ref>= at a terminal opens a newest-first picker
+   (Enter = the address just made); without a TTY or with =--json= it
+   stays the usage error. Applies to deactivate, reactivate, delete,
+   view, copy, edit, share.
+3. Shared inbox: =ihme share= + =ihme serve=, with these choices:
+   - Per-address key (128-bit, only SHA-256 stored), not
+     address+password accounts. One key per address; re-share
+     rotates. The key doubles as the "per address pass" the form asks
+     for, and as a link.
+   - No super-admin password. Admin is =ihme share= on the host. A
+     public server with no admin surface has nothing to brute-force
+     that unlocks more than one address.
+   - IMAP + app-specific password, not mailws2 + session cookies. The
+     credential on the public box reads mail and can do nothing else.
+     IMAP searches recipients on the server. It also reaches a
+     non-iCloud forward-to mailbox.
+   - Server-rendered, zero JS, CSP =default-src 'none'=; HTML mail
+     becomes text server-side; only http(s) URLs become links.
+   - Every row and body passes an exact To/Cc check: IMAP header
+     search is a substring match, and walking UIDs must reveal nothing.
+
+* Review round
+
+An independent review of the diff found no way past the access
+boundary and these, all fixed with a regression test each (each test
+was checked to fail on the old code):
+
+- HTML-only mail could render blank: an unclosed =<head>= skipped the
+  whole body, and text after an unclosed =<a>= was lost. Raw-text
+  elements are now skipped as the tokenizer hands them over, with no
+  depth count.
+- One key holder could stall every viewer: concurrent requests each
+  ran an IMAP search, and a dead link mid-command held the shared
+  mutex until the kernel timed the socket out. Now singleflight and a
+  short cache per page, plus a 45 s watchdog that closes the
+  connection.
+- =--days= filtered the list, but =Get= opened any UID addressed
+  there. =Get= now enforces the window, on the same UTC day boundary
+  as IMAP's SINCE.
+- Raw UIDs in links leaked mailbox volume, and timing told "absent"
+  from "someone else's". Links are now AES-GCM tokens bound to the
+  address, so a request for anything not listed never reaches IMAP.
+- Bidi controls survived into subjects and URLs; stripped.
+- A SELECT failure read as "No such message"; it now surfaces as an
+  upstream error, and the junk folder is only skipped when the
+  server refuses it.
+- Cookie deletions on non-2xx responses could clear a name every
+  host uses (we store by name, not host); deletions now need a 2xx.
+- A refusal at signin/init no longer blames the password.
+  =IHME_NO_PROMPT= is an escape for PTY-driven harnesses.
+
+* Tradeoff
+
+- Bcc'd mail does not show: a delivered message has no Bcc header to
+  attribute it to the address.
+- A leaked key reads one address until revoked; there is no expiry
+  per key yet. Cookie lifetime is 7 days. Message links die on
+  restart (the sealing key is in memory).
+- Session saves now happen on every cookie rotation. Two ihme
+  processes (or two machines) sharing one session.json hit the
+  existing "last writer wins" gap (lock file on the roadmap) a little
+  more often.
+- A second dependency tree (go-imap v2 beta.8, go-message, go-sasl,
+  x/text) for one feature; em, a sibling mail client, already runs
+  the same stack against
+  iCloud.
+
+* Live check (2026-10-07)
+
+=ihme serve= now takes its IMAP login from em's
+=~/.config/em/accounts.json= when no =IHME_IMAP_*= is set
+(=--account= picks among several; half-set env vars are an error,
+never a quiet fall back). Run against a real account, read-only
+(EXAMINE, BODY.PEEK):
+
+- Session: validate passed on the new cookie replay; Apple sent 12
+  quoted cookies and accepted them back quoted; the two it rotated
+  (=X-APPLE-WEBAUTH-TOKEN=, =-VALIDATE=) reached disk. =ihme list=
+  succeeded on the replayed cookies.
+- Recipient matching: over 30 days of INBOX and Junk, several hundred
+  messages carried =X-ICLOUD-HME=; every one had its alias in To or
+  Cc, zero misses. The exact To/Cc check holds on real relayed mail.
+- Product path: =ihme share= one alias, =ihme serve= with no env set
+  (login from the em file), key link -> 303 -> inbox of 50 rows with
+  Junk marked; 13 message pages 200, about 1.7 s each over real IMAP
+  (about 2.5 s for the inbox); the owner's address on none of them;
+  zero remote references; a forged token 404s. The one other
+  @icloud.com address shown is the From line: Apple rewrites the
+  sender to a per-sender relay address, as any mail client shows it.
+- Not covered: mail a rule or the owner moves to another folder
+  (Archive, a custom one) drops off the shared page, which reads
+  INBOX and Junk only.
+
+* Pre-release review (2026-10-07)
+
+Two independent reviewers: CLI behavior + API, and the share/serve
+privacy boundary. Fixed, each checked by reproduction or mutation:
+
+- Blocker: =delete --force --yes= with no ref was one Enter from
+  deleting the newest address (picker default + =--yes= skipping the
+  question); reproduced against the fake HME server. A picked address
+  is now always confirmed. Without a terminal, delete needs =--yes=
+  instead of reading EOF as "no" and exiting 0; =--json= prints a
+  result, as SKILL.md already told agents.
+- The no-prompt guard test passed with every guard deleted (=go
+  test= has no TTY, so =CanPrompt= returned false first). An
+  =isTerminal= seam now lets each guard be tested alone.
+- =Ago= formatted in the sender's zone: a 01:00 +0800 New Year's
+  mail read in UTC showed "Jan 01" of the wrong year.
+- Ctrl-D at "Apple ID [last]:" signed in as the last ID; EOF now stops.
+
+Privacy boundary: no break (tokens, key storage, escaping, CSP, the
+To/Cc and window checks all held). Availability, fixed:
+
+- One key holder could stall every visitor: the 32-entry message
+  cache is shared, so reading 33+ messages in a loop missed it every
+  time, each miss queued an up-to-8 MB fetch on the one connection,
+  and abandoned requests still ran. Now one upstream call per
+  address at a time (=turn=), waiting on the request's context; a
+  visitor who leaves leaves the queue. singleflight became redundant
+  and is gone (x/sync back to indirect).
+- MIME parsing ran inside the IMAP lock and under the watchdog;
+  thousands of nested multiparts parsed for minutes. Parsing now
+  happens after the lock, and more than 64 =multipart/= is refused
+  as "nested too deeply".
+- =trimURL= counted parentheses inside its loop: quadratic on a
+  =)))...= tail, on every page view. Counted once now.
+- U+061C escaped the bidi strip; attachment names were not cleaned.
+- Page times used the server's zone (the owner's); now UTC.
+- The key cookie is always Secure when =IHME_SERVE_URL= is https,
+  so a proxy without X-Forwarded-Proto cannot leak it over HTTP.
+- The startup "wrong password" hint showed on DNS/TLS/timeout
+  errors; now only for a server's refusal (=*imap.Error=). Not-found
+  says "or older than N days". Ctrl-C during a fetch exits 0.
+
+Live re-check after the fixes (real mailbox, read-only): inbox 200,
+six messages opened at once by one visitor all 200, served in turn
+about 1.2 s apart; dates in UTC.
+
+Known, left:
+- A picked command lists addresses twice (the picker, then the
+  command's own resolve). One extra GET, interactive path only.
+- =shares.json= has no lock: a =share revoke= racing a =share= can
+  lose the revoke. Same last-writer-wins gap as session.json; the
+  lock file on the roadmap covers both. Documented in SECURITY.md.
+
+* Next
+
+- Maybe: OTP extraction on the list row, per-key expiry, more
+  folders if moved mail turns out to matter.

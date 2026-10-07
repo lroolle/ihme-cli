@@ -1,6 +1,40 @@
 # Roadmap
 
-Current: **v0.6.4** · [MIT](LICENSE)
+Current: **v0.7.0** · [MIT](LICENSE)
+
+## Shipped in v0.7.0 — share one inbox, pick instead of typing
+
+- **`ihme share` + `ihme serve`.** One address's mail on a plain
+  web page. One key per address: only its hash is stored, sharing
+  again rotates it, `share revoke` bites on the next request. No
+  admin page; the CLI is the admin. Mail comes over IMAP with an
+  app-specific password (`IHME_IMAP_*`, or em's accounts file;
+  `--account` picks), never the iCloud session. Exact To/Cc match
+  per message, `--days` enforced per message, sealed message links,
+  other recipients hidden. Zero JS, CSP `default-src 'none'`, mail
+  HTML turned to text on the server. INBOX + Junk, any charset. One
+  upstream call per address at a time, so one visitor cannot stall
+  the others; MIME is parsed off the shared connection and refused
+  past 64 levels; a watchdog hangs up on a stalled mailbox. Times
+  shown in UTC.
+- **Omit `<ref>`, get a picker.** `deactivate`, `reactivate`,
+  `delete`, `view`, `copy`, `edit`, `share` list the addresses that
+  fit, newest first; Enter takes the newest. No prompt without a
+  terminal, with `--json`, or with `IHME_NO_PROMPT`. A picked
+  address is always confirmed before `delete`, even with `--yes`.
+- **`delete` stops guessing.** Without a terminal it needs `--yes`
+  (it used to read EOF as "no" and exit 0); `--json` now prints
+  `{"status":"deleted",...}` as SKILL.md already promised.
+- **Cookies replay like a browser.** Quoted values keep their
+  quotes; expired cookies stop being sent; a duplicated name sends
+  its fresh copy; a cookie rotated on an ordinary call is saved.
+  Deletions count only on a 2xx.
+- **Sign-in says what Apple said.** A locked account (-20209)
+  points at iforgot.apple.com; a wrong password reads as one, with
+  Apple's sentence.
+- **Small.** `auth login` offers the last Apple ID; a trust token is
+  only reused for its own account; `ihme edit` with no flag says so;
+  a webservice advertised without a URL gets a named error.
 
 ## Shipped in v0.6.4 — preferences load themselves
 
@@ -208,7 +242,7 @@ Not on the original roadmap; it emerged and took the release:
 
 ## Strategic position
 
-Only open-source CLI for iCloud Hide My Email that works end-to-end. pyicloud doesn't do HME. rclone does storage. Go-iClient is a library.
+Only open-source CLI for iCloud Hide My Email that works end-to-end. pyicloud (timlaing, 2.7+) has an HME service but no CLI for it. rclone does storage. Go-iClient is a library. xiaozhou26/icloud-hme is a self-hosted web panel built on cookies and an older auth flow.
 
 The moat is operational knowledge of Apple's undocumented auth protocol — SRP-6a with custom modifications, mandatory 2FA, trust tokens, CN routing. This breaks without warning and requires re-reverse-engineering.
 

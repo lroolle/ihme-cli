@@ -12,6 +12,15 @@ Session writes are atomic and request owner-only file permissions (`0600` on Uni
 
 The Apple ID password and 2FA codes are not saved. Authentication uses SRP-6a; the password itself is not transmitted. Trust tokens can allow later sign-ins without a new 2FA challenge; Apple controls their lifetime.
 
+## Shared inboxes
+
+- `shares.json`, beside the session file (`IHME_SHARES_PATH`): each shared address, its label, and the SHA-256 of its key. Never the key. Atomic writes, `0600`.
+- `ihme serve` reads mail with an IMAP app-specific password: `IHME_IMAP_PASSWORD`, or the one em saved in `~/.config/em/accounts.json` (em writes it `0600`; ihme only reads it). That password reads the whole mailbox: keep it out of shell history and logs. The server never touches the iCloud session.
+- A key opens one address. A message shows only if its envelope says it was sent To or Cc that address, inside `--days`. Message links are sealed with a per-process key and bound to the visitor's address.
+- The browser holds the key in an HttpOnly, SameSite=Lax cookie for 7 days. It is Secure when the request came over TLS or with `X-Forwarded-Proto: https`, and always when `IHME_SERVE_URL` is an https URL.
+- A share link carries the key in its path (`/k/<key>`): it lands in browser history and in any access log that records paths.
+- `ihme share revoke` takes effect on the next request. Two share commands run at the same instant can lose one's write (no file lock yet); check `ihme share list` after scripting several.
+
 ## Agent mode
 
 Model keys may be stored in the local ihme configuration or environment. Agent memory contains aliases, labels, notes, preferences, and task history in plain Markdown files. Treat both as private.

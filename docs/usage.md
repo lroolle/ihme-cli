@@ -37,13 +37,19 @@ AGENT (built-in, BYOK)
   ihme memory search <query>     Search journals and pages
   ihme memory graph              Show topic pages and backlinks
 
-MANAGE
+MANAGE (omit <ref> at a terminal to pick, newest first)
   ihme view <ref>                View details
   ihme edit <ref>                Edit label, note, tags
   ihme copy <ref>                Copy address to clipboard
   ihme deactivate <ref>          Stop receiving mail
   ihme reactivate <ref>          Resume receiving mail
   ihme delete <ref> [--yes]      Permanent deletion (confirms first)
+
+SHARE AN INBOX
+  ihme share <ref>               Access key + link for one address
+  ihme share list                Addresses with a live key
+  ihme share revoke <ref>        Stop a key working (--all: every key)
+  ihme serve                     Plain web inbox for shared addresses
 
 EXPORT
   ihme export                    CSV to stdout
@@ -57,6 +63,8 @@ FORWARD
 ```
 
 `<ref>` resolves by: anonymousId (full or 6+ char prefix) > email > label (exact) > label (fuzzy).
+
+Leave `<ref>` out at a terminal and ihme asks which address, newest first; Enter takes the one created most recently. `ihme new netflix`, then `ihme copy` and Enter, copies the new address. Pipes, scripts, and `--json` never get a prompt: they get the usage error. A harness that runs ihme inside a pseudo-terminal can set `IHME_NO_PROMPT` (any value) for the same behavior.
 
 ## JSON and jq
 
@@ -99,7 +107,34 @@ ihme reactivate example.com     # resume forwarding
 ihme delete example.com --yes   # permanently delete an inactive address
 ```
 
-Deactivate an address before deleting it. Deactivation and reactivation take effect immediately; deletion asks for confirmation unless `--yes` is set.
+Deactivate an address before deleting it. Deactivation and reactivation take effect immediately; deletion asks for confirmation unless `--yes` is set. A picked address is always confirmed, even with `--yes`; without a terminal, `--yes` is required.
+
+## Share an inbox
+
+One address's mail on a plain web page. Hand someone its key: they read that address and nothing else. Netflix codes for family; your own codes on a phone.
+
+```bash
+ihme share netflix          # key + link, printed once
+ihme serve                  # http://127.0.0.1:8025
+ihme share list             # what is shared
+ihme share revoke netflix   # locked out on the next request
+```
+
+IMAP login, first match wins:
+
+- `--account <email>`: that account in em's `~/.config/em/accounts.json` (read only)
+- `IHME_IMAP_USER` + `IHME_IMAP_PASSWORD`: your @icloud.com address and an [app-specific password](https://support.apple.com/102654). `IHME_IMAP_SERVER` (host:port, TLS) if your addresses forward to a non-iCloud mailbox
+- em's accounts file, when it holds exactly one account
+
+What the visitor gets:
+
+- INBOX and Junk mail sent To or Cc their address in the last 30 days (`--days`). Older mail does not open even by URL. Bcc-only mail does not show.
+- Plain text. No scripts, images, or fonts; mail HTML becomes text on the server. Other recipients are never shown.
+- Message links sealed to their address. They die on restart and cannot be guessed, counted, or opened with another key.
+
+What the server can do: read mail. Not create, delete, or redirect addresses; viewing does not mark mail read. ihme stores key hashes only; sharing an address again rotates its key.
+
+Going public: there is no admin page, shares are managed with `ihme share` on the server's machine. Put HTTPS in front and set `IHME_SERVE_URL=https://...` for both commands: `ihme share` prints working links, and `ihme serve` always marks the key cookie Secure. Have the proxy send `X-Forwarded-Proto: https` too (Caddy does; nginx: `proxy_set_header X-Forwarded-Proto $scheme;`). `/k/<key>` paths carry the key: keep them out of access logs.
 
 ## Authentication and errors
 

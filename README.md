@@ -1,17 +1,18 @@
 # ihme
 
-iCloud Hide My Email from the terminal. Make an address for a signup, find it later, turn it off when you are done with it.
+iCloud Hide My Email from the terminal. One address per signup. Find it later. Deactivate when done.
 
 ```bash
-ihme new github.com          # Apple offers a few addresses, you pick one
-ihme list --search github    # find it by label, address, or note
-ihme deactivate github.com   # stop the mail
-ihme export -o backup.csv    # keep your own copy
+ihme new github.com          # pick from Apple's candidates
+ihme list --search github    # by label, address, or note
+ihme deactivate              # no address: pick one, newest first
+ihme share netflix           # grant read of that address
+ihme export -o backup.csv    # your own copy
 ```
 
-You need iCloud+ and an Apple ID with two-factor authentication. Apple has no public API for this. ihme uses the same web API as icloud.com, and Apple can change it or block it. That is the deal.
+Needs iCloud+ and an Apple ID with 2FA. Unofficial: ihme uses the same web API as icloud.com. Apple can change it or block it.
 
-[中文说明](README.zh.md)
+[中文](README.zh.md)
 
 ## Install
 
@@ -23,41 +24,46 @@ tar -xzf ihme.tar.gz ihme
 sudo install -m 755 ihme /usr/local/bin/ihme
 ```
 
-Builds for macOS Intel, Linux, and Windows, on arm64 and x86-64, are on the [releases page](https://github.com/lroolle/ihme-cli/releases/latest) with SHA-256 checksums. With Go: `go install github.com/lroolle/ihme-cli/cmd/ihme@latest`.
-
-Then sign in:
+macOS Intel, Linux, Windows (arm64, x86-64): [releases](https://github.com/lroolle/ihme-cli/releases/latest), with SHA-256 checksums. Go: `go install github.com/lroolle/ihme-cli/cmd/ihme@latest`.
 
 ```bash
-ihme auth login    # Apple ID, password, 2FA code. The session is saved, the password and code are not.
+ihme auth login    # Apple ID, password, 2FA. Saves session, not password or code.
 ihme list
 ```
 
 ## Scripts
 
-Every address command takes `--json`. `--jq` runs an installed jq on the result.
+Every address command takes `--json`. `--jq` runs installed jq on it. No prompts without a terminal.
 
 ```bash
 ihme new github.com --json                        # candidates only, reserves nothing
-ihme new github.com --address <candidate> --json  # reserve one of them
-ihme new github.com --yes --json                  # reserve the first one
+ihme new github.com --address <candidate> --json  # reserve one
+ihme new github.com --yes --json                  # reserve the first
 ihme list --json --jq '.addresses[].hme'
 ```
 
-Exit code 2 means sign in again. 1 is everything else.
+Exit 2: sign in again. Exit 1: anything else.
+
+## Share one inbox
+
+```bash
+ihme share netflix    # prints a key and a link, once
+ihme serve            # http://127.0.0.1:8025
+```
+
+The key opens one address's mail: INBOX and Junk, last 30 days, as plain text. No other address, no other recipients, nothing loaded from anywhere else. The server reads mail over IMAP with an app-specific password, never your iCloud session. `ihme share revoke netflix` ends it. [Details](docs/usage.md#share-an-inbox).
 
 ## Agents
 
-ihme is also a tool for agents. Three ways:
+- `ihme agent "find my github address"`: built-in assistant on your model key (Anthropic, DeepSeek, any OpenAI-compatible endpoint).
+- `ihme agent --via codex "find my github address"`: a coding agent you are already signed in to. Also `claude`, `opencode`. No API key.
+- `npx skills add lroolle/ihme-cli -g`: the [skill](skill/SKILL.md) for an outside agent. `ihme mcp`: a stdio MCP server.
 
-- `ihme agent "find my github address"` runs the built-in assistant on your own model key: Anthropic, DeepSeek, or any OpenAI-compatible endpoint.
-- `ihme agent --via codex "find my github address"` uses a coding agent you are already signed in to. Also `claude` and `opencode`. No API key.
-- `npx skills add lroolle/ihme-cli -g` gives an outside agent the [skill](skill/SKILL.md). `ihme mcp` is a stdio MCP server.
-
-Anything that changes your account asks you first. The assistant keeps preferences in plain Markdown files. `ihme memory` shows them. An agent run sends the task and the results to the model you picked. Plain commands never talk to a model.
+Account changes ask first. Preferences live in plain Markdown; `ihme memory` shows them. An agent run sends the task and results to the model you picked. Plain commands never talk to a model.
 
 ## Docs
 
-- [Commands](docs/usage.md): search, create, edit, tags, export, JSON, errors
+- [Commands](docs/usage.md): search, create, edit, tags, share, export, JSON, errors
 - [Agents](docs/agents.md): providers, consent, memory, MCP
 - [Roadmap and release notes](ROADMAP.md)
 - [Security](SECURITY.md): what is stored, and where
@@ -67,7 +73,7 @@ Anything that changes your account asks you first. The assistant keeps preferenc
 
 ```bash
 make check    # vet, test, build
-make site     # build the website into _site/
+make site     # website into _site/
 ```
 
 Built with [Cobra](https://github.com/spf13/cobra) and [Charm](https://charm.sh/). [MIT](LICENSE). Not affiliated with Apple.

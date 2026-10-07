@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="iCloud Hide My Email from the terminal. Create, find, deactivate, and export addresses. A Go command-line tool for people, scripts, and agents. MIT licensed."
+      content="iCloud Hide My Email from the terminal. Create, find, deactivate, share, and export addresses. A Go command-line tool for people, scripts, and agents. MIT licensed."
     />
     <meta name="theme-color" content="#f6f5ef" />
     <meta property="og:title" content="ihme: iCloud Hide My Email from the terminal" />
     <meta
       property="og:description"
-      content="Make an address for a signup, find it later, turn it off when you are done with it."
+      content="One address per signup. Find it later. Deactivate when done."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://lroolle.github.io/ihme-cli/" />
@@ -37,28 +37,33 @@
       <main>
         <h1>ihme</h1>
         <p class="lede">iCloud Hide My Email from the terminal.</p>
-        <p>ihme is a command-line tool for iCloud Hide My Email. It makes an address for a signup, finds it again by label, and turns it off when you are done with it. It also exports your addresses to CSV or JSON.</p>
-        <pre><code>ihme new github.com          <span class="c"># Apple offers a few addresses, you pick one</span>
-ihme list --search github    <span class="c"># find it by label, address, or note</span>
-ihme deactivate github.com   <span class="c"># stop the mail</span>
-ihme export -o backup.csv    <span class="c"># keep your own copy</span></code></pre>
+        <p>One address per signup. Find it later. Deactivate when done.</p>
+        <pre><code>ihme new github.com          <span class="c"># pick from Apple's candidates</span>
+ihme list --search github    <span class="c"># by label, address, or note</span>
+ihme deactivate              <span class="c"># no address: pick one, newest first</span>
+ihme share netflix           <span class="c"># grant read of that address</span>
+ihme export -o backup.csv    <span class="c"># your own copy</span></code></pre>
         <p>It works three ways. By hand: run a command, pick an address. From a script: every command takes <code>--json</code>. Through an agent: the built-in assistant runs on your own model key or on a coding agent you already use. It asks before it changes anything in your account.</p>
-        <p class="note">You need iCloud+ and an Apple ID with two-factor authentication. Apple has no public API for this. ihme uses the same web API as icloud.com, and Apple can change it or block it. That is the deal.</p>
+        <p class="note">Needs iCloud+ and an Apple ID with 2FA. Unofficial: ihme uses the same web API as icloud.com. Apple can change it or block it.</p>
 
         <h2 id="install">Install</h2>
         <p>macOS on Apple Silicon:</p>
         <pre><code>curl -fL https://github.com/lroolle/ihme-cli/releases/latest/download/ihme_macOS_arm64.tar.gz -o ihme.tar.gz
 tar -xzf ihme.tar.gz ihme
 sudo install -m 755 ihme /usr/local/bin/ihme</code></pre>
-        <p>Builds for macOS Intel, Linux, and Windows, on arm64 and x86-64, are on the <a href="https://github.com/lroolle/ihme-cli/releases/latest">releases page</a> with SHA-256 checksums. With Go: <code>go install github.com/lroolle/ihme-cli/cmd/ihme@latest</code>.</p>
-        <p>Then sign in:</p>
-        <pre><code>ihme auth login    <span class="c"># Apple ID, password, 2FA code. The session is saved, the password and code are not.</span>
+        <p>macOS Intel, Linux, Windows (arm64, x86-64): <a href="https://github.com/lroolle/ihme-cli/releases/latest">releases</a>, with SHA-256 checksums. Go: <code>go install github.com/lroolle/ihme-cli/cmd/ihme@latest</code>.</p>
+        <pre><code>ihme auth login    <span class="c"># Apple ID, password, 2FA. Saves session, not password or code.</span>
 ihme list</code></pre>
+
+        <h2 id="share">Share one inbox</h2>
+        <pre><code>ihme share netflix    <span class="c"># prints a key and a link, once</span>
+ihme serve            <span class="c"># http://127.0.0.1:8025</span></code></pre>
+        <p>The key opens one address's mail: INBOX and Junk, last 30 days, as plain text. No other address, no other recipients, nothing loaded from anywhere else. The server reads mail over IMAP with an app-specific password, never your iCloud session. <code>ihme share revoke netflix</code> ends it. <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md#share-an-inbox">Details</a>.</p>
 
         <h2 id="docs">Docs</h2>
         <ul class="docs">
           <li><a href="README.md">README</a><span>the whole thing: install, scripts, agents</span></li>
-          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">Commands</a><span>search, create, edit, tags, export, JSON, errors</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">Commands</a><span>search, create, edit, tags, share, export, JSON, errors</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md">Agents</a><span>providers, consent, memory, MCP</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/ROADMAP.md">Roadmap and release notes</a><span></span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/SECURITY.md">Security</a><span>what is stored, and where</span></li>
