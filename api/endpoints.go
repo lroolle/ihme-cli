@@ -15,9 +15,11 @@ const (
 	// sends no client params whatsoever. They are kept because the
 	// iCloud web client sends them and blending in costs nothing —
 	// but a 401 is never a stale build number, so do not "fix" one
-	// by bumping these.
-	ClientBuildNumber     = "2602Build17"
-	ClientMasteringNumber = "2602Build17"
+	// by bumping these. Current value: the maildomainws build the
+	// iCloud web client sent in xiaozhou26/icloud-hme's 2026-09
+	// browser capture.
+	ClientBuildNumber     = "2624Build22"
+	ClientMasteringNumber = "2624Build22"
 )
 
 var authHeaders = map[string]string{

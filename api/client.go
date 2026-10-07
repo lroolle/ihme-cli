@@ -26,10 +26,12 @@ type Client struct {
 	// production (the region constants decide); set by tests.
 	setupBase string
 	Verbose   bool
-	// OnSessionUpdate, when set, is called after the client re-mints
-	// a session mid-command. The session lives longer than the
-	// process, so whoever owns the file gets a chance to persist the
-	// fresh cookies instead of losing them at exit.
+	// OnSessionUpdate, when set, is called whenever the session
+	// changes mid-command: Apple rotated or expired a cookie on a
+	// service response, or the client re-minted the session. The
+	// session lives longer than the process, so whoever owns the
+	// file gets a chance to persist the fresh cookies instead of
+	// losing them at exit.
 	OnSessionUpdate func(*SessionData)
 }
 
@@ -76,58 +78,90 @@ func (c *Client) Session() *SessionData {
 // cookieString builds the Cookie header value from stored session cookies.
 // Bypasses Go's cookie jar domain matching — cookies go to every service
 // request regardless of subdomain. This is how rclone handles it.
-// Deduplicates by name (last value wins) to handle legacy sessions that
-// accumulated copies across domains.
+// A name stored twice (legacy sessions accumulated copies across
+// domains) is sent once, with its LAST value: mergeCookies updates
+// the last copy, so the first one is the stale one.
+//
+// Values Apple set in double quotes go back in double quotes, the
+// way a browser replays them. Go's cookie parser strips the quotes
+// into Cookie.Quoted; dropping that bit sends a different byte
+// string than Apple issued.
 func (c *Client) cookieString() string {
-	seen := make(map[string]struct{}, len(c.session.Cookies))
+	last := make(map[string]int, len(c.session.Cookies))
+	for i, ck := range c.session.Cookies {
+		last[ck.Name] = i
+	}
 	var b strings.Builder
-	first := true
-	for _, ck := range c.session.Cookies {
-		if ck.Value == "" {
+	for i, ck := range c.session.Cookies {
+		if ck.Value == "" || last[ck.Name] != i {
 			continue
 		}
-		if _, dup := seen[ck.Name]; dup {
-			continue
-		}
-		seen[ck.Name] = struct{}{}
-		if !first {
+		if b.Len() > 0 {
 			b.WriteString("; ")
 		}
-		first = false
 		b.WriteString(ck.Name)
 		b.WriteByte('=')
-		b.WriteString(ck.Value)
+		if ck.Quoted {
+			b.WriteByte('"')
+			b.WriteString(ck.Value)
+			b.WriteByte('"')
+		} else {
+			b.WriteString(ck.Value)
+		}
 	}
 	return b.String()
 }
 
-// mergeCookies merges response cookies into the session cookie list.
-// Updates existing cookies by name, appends new ones.
-func (c *Client) mergeCookies(cookies []*http.Cookie) {
-	if len(cookies) == 0 {
-		return
-	}
-	idx := make(map[string]int, len(c.session.Cookies))
-	for i, ck := range c.session.Cookies {
-		idx[ck.Name] = i
-	}
+// mergeCookies merges response cookies into the session cookie list
+// and reports whether anything changed. A cookie Apple expires (empty
+// value, Max-Age<=0, or an Expires in the past) is removed, not kept:
+// replaying a cookie the server deleted is a request a browser would
+// never send. Re-sending the same value (a fresh expiry) is not a
+// change, so steady-state responses never cost a session write.
+//
+// Deletions apply only when ok (a 2xx). Cookies are stored by name,
+// not by host, so one partition host clearing a name while it answers
+// 421 or 5xx would otherwise drop the copy every other host relies on.
+func (c *Client) mergeCookies(cookies []*http.Cookie, ok bool) bool {
+	now := time.Now()
+	changed := false
 	for _, ck := range cookies {
-		if ck.Value == "" {
-			continue
+		expired := ck.Value == "" || ck.MaxAge < 0 ||
+			(!ck.Expires.IsZero() && ck.Expires.Before(now))
+		// The last copy is the live one (see cookieString).
+		i := -1
+		for j, have := range c.session.Cookies {
+			if have.Name == ck.Name {
+				i = j
+			}
 		}
-		sc := SavedCookie{
-			Name:   ck.Name,
-			Value:  ck.Value,
-			Domain: ck.Domain,
-			Path:   ck.Path,
-		}
-		if i, ok := idx[ck.Name]; ok {
-			c.session.Cookies[i] = sc
-		} else {
-			c.session.Cookies = append(c.session.Cookies, sc)
-			idx[ck.Name] = len(c.session.Cookies) - 1
+		switch {
+		case expired && !ok:
+			// keep what we have; see above
+		case expired:
+			if i >= 0 {
+				kept := c.session.Cookies[:0]
+				for _, have := range c.session.Cookies {
+					if have.Name != ck.Name {
+						kept = append(kept, have)
+					}
+				}
+				c.session.Cookies = kept
+				changed = true
+			}
+		case i < 0:
+			c.session.Cookies = append(c.session.Cookies, SavedCookie{
+				Name: ck.Name, Value: ck.Value, Quoted: ck.Quoted, Domain: ck.Domain, Path: ck.Path,
+			})
+			changed = true
+		case c.session.Cookies[i].Value != ck.Value || c.session.Cookies[i].Quoted != ck.Quoted:
+			c.session.Cookies[i] = SavedCookie{
+				Name: ck.Name, Value: ck.Value, Quoted: ck.Quoted, Domain: ck.Domain, Path: ck.Path,
+			}
+			changed = true
 		}
 	}
+	return changed
 }
 
 func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []byte, error) {
@@ -186,7 +220,7 @@ func (c *Client) doAuthRequest(method, url string, body any) (*http.Response, []
 	}
 
 	c.captureAuthHeaders(resp)
-	c.mergeCookies(resp.Cookies())
+	c.mergeCookies(resp.Cookies(), resp.StatusCode < 300)
 	return resp, respBody, nil
 }
 
@@ -254,7 +288,9 @@ func (c *Client) doServiceRequest(method, url string, body any) ([]byte, error) 
 		fmt.Fprintf(os.Stderr, "[svc] -> %d (%d bytes)\n", resp.StatusCode, len(respBody))
 	}
 
-	c.mergeCookies(resp.Cookies())
+	if c.mergeCookies(resp.Cookies(), resp.StatusCode < 300) && c.OnSessionUpdate != nil {
+		c.OnSessionUpdate(c.session)
+	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return respBody, &HTTPError{Status: resp.StatusCode, URL: url, Body: truncate(string(respBody), 200)}
@@ -277,6 +313,12 @@ func (c *Client) hmeBaseURL() (string, error) {
 	ws, ok := c.session.Webservices["premiummailsettings"]
 	if !ok {
 		return "", fmt.Errorf("premiummailsettings service not found (is iCloud+ active?)")
+	}
+	// Apple sometimes lists a service with no url (pyicloud#337 saw
+	// `schoolwork: {}` on real accounts). Building "/v1/hme/..." from
+	// it fails later as a baffling transport error; say what it is.
+	if strings.TrimSpace(ws.URL) == "" {
+		return "", fmt.Errorf("iCloud listed Hide My Email (premiummailsettings) without a service URL — try again; if it persists, run ihme auth login")
 	}
 	return ws.URL, nil
 }

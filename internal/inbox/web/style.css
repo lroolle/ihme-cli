@@ -1,0 +1,30 @@
+:root { color-scheme: light dark; --muted: #6b6b6b; --line: #d8d8d8; --accent: #0a58ca; --bad: #b00020; }
+@media (prefers-color-scheme: dark) { :root { --muted: #9a9a9a; --line: #3a3a3a; --accent: #7aa7ff; --bad: #ff6b6b; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+h1 { font-size: 1.25rem; margin: 0 0 .5rem; overflow-wrap: break-word; }
+a { color: var(--accent); }
+.muted { color: var(--muted); font-size: .9rem; }
+.error { color: var(--bad); }
+.note { border-left: 3px solid var(--line); padding-left: .75rem; color: var(--muted); }
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }
+header h1 { flex: 1 1 auto; min-width: 0; }
+form { margin: 0; }
+label { display: block; margin: 1rem 0 .25rem; font-weight: 600; }
+input { width: 100%; padding: .55rem .65rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+button { margin-top: 1.25rem; padding: .55rem 1rem; font: inherit; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+button.quiet { margin: 0; padding: .2rem .5rem; font-size: .9rem; color: var(--muted); white-space: nowrap; }
+.list { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+.list li { border-bottom: 1px solid var(--line); }
+.list a { display: block; padding: .65rem 0; color: inherit; text-decoration: none; }
+.list a:hover .subject, .list a:focus .subject { text-decoration: underline; }
+.row { display: flex; justify-content: space-between; gap: 1rem; }
+.from { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.when { color: var(--muted); font-size: .9rem; white-space: nowrap; }
+.subject { display: block; overflow-wrap: anywhere; }
+.tag { font-size: .75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 .3rem; color: var(--muted); }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .75rem; margin: 1rem 0; font-size: .9rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; font: .95rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; border-top: 1px solid var(--line); padding-top: 1rem; }

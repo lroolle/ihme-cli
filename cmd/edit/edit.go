@@ -16,18 +16,29 @@ func NewCmdEdit() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "edit <ref>",
+		Use:   "edit [ref]",
 		Short: "Edit label, note, or tags of a Hide My Email address",
 		Long: `Edit metadata of a Hide My Email address.
 
 Only specified flags are changed; omitted fields keep their current value.
-Tags replace all existing tags (not additive).`,
+Tags replace all existing tags (not additive).
+Without <ref> at a terminal, asks which address, newest first.`,
 		Example: `  ihme edit github.com --label GitHub
   ihme edit github.com --tag dev,work --note "main"
   ihme edit github.com --tag ""`,
-		Args: cmdutil.ExactRefArg("ihme edit <ref>", "ihme edit github.com --label GitHub"),
+		Args: cmdutil.RefOrPick("ihme edit <ref>", "ihme edit github.com --label GitHub"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !cmd.Flags().Changed("label") && !cmd.Flags().Changed("note") && !cmd.Flags().Changed("tag") {
+				return fmt.Errorf("nothing to change — pass --label, --note, or --tag\n\n  Example: ihme edit github.com --label GitHub")
+			}
 			client, err := cmdutil.GetClient(cmd)
+			if err != nil {
+				return err
+			}
+			ref, err := cmdutil.RefFromArgs(args, client, cmdutil.Pick{
+				Verb: "edit",
+				None: "no addresses yet — create one with: ihme new <label>",
+			})
 			if err != nil {
 				return err
 			}
@@ -43,7 +54,7 @@ Tags replace all existing tags (not additive).`,
 				patch.Tags = &tagList
 			}
 
-			hme, err := app.New(client).UpdateMeta(args[0], patch)
+			hme, err := app.New(client).UpdateMeta(ref, patch)
 			if err != nil {
 				return err
 			}

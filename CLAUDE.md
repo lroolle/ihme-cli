@@ -26,6 +26,9 @@ cmd/
   lifecycle/             deactivate, reactivate, delete (with --yes confirmation)
   export/                CSV/JSON export with filters
   forward/               forward-to management
+  share/                 share <ref> | list | revoke: per-address access keys
+  serve/                 ihme serve: the read-only web inbox (IMAP, app password
+                         from --account/IHME_IMAP_*/em's accounts.json)
 
 api/
   types.go               HmeEmail, SessionData, SavedCookie, auth types
@@ -37,7 +40,14 @@ api/
 
 internal/
   srp/                   SRP-6a (NG_2048, SHA-256, NoUserNameInX)
-  cmdutil/               GetClient, OutputResult, ExactRefArg
+  cmdutil/               GetClient, OutputResult, ExactRefArg, RefOrPick +
+                         PickAddress (omitted <ref> at a TTY -> newest-first
+                         picker; never prompts without a TTY or with --json)
+  shares/                shares.json: address -> SHA-256(key); Grant rotates,
+                         Revoke removes; the server re-reads it per request
+  inbox/                 ihme serve: IMAP source (exact To/Cc check before any
+                         row or body is shown), MIME -> text, HTTP + embedded
+                         templates; the privacy model is its package doc
   app/                   Application service: the six HME operations
                          shared by Cobra commands and agent tools
                          (both are adapters over it)
@@ -144,6 +154,10 @@ Apple SRP via idmsa.apple.com (web auth, not GSA):
 
 Cookie handling: manual Cookie header from session cookie list (rclone pattern).
 No Go cookie jar domain matching — cookies go to all service requests.
+Replayed byte-faithful: quoted values keep their quotes (SavedCookie.Quoted),
+a name stored twice sends its last copy, a cookie Apple expires is dropped,
+and a rotated cookie reaches disk through OnSessionUpdate on the call
+that rotated it (inside the 15-min validate TTL nothing else saves).
 CN accounts: auto-fallback to setup.icloud.com.cn on 421.
 
 ## Session resume

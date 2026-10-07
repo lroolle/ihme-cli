@@ -1,6 +1,6 @@
 # ihme
 
-> A command-line tool for iCloud Hide My Email: list, create, edit, deactivate, and export alias addresses. Includes JSON output, an agent skill, a built-in assistant, and a stdio MCP server. MIT licensed.
+> A command-line tool for iCloud Hide My Email: list, create, edit, deactivate, export, and share alias addresses (one address's mail on a plain web page). Includes JSON output, an agent skill, a built-in assistant, and a stdio MCP server. MIT licensed.
 
 Requires iCloud+ and interactive Apple ID sign-in with 2FA. Install a release binary or run `go install github.com/lroolle/ihme-cli/cmd/ihme@latest`, then `ihme auth login`. Installing the agent skill does not install the binary. This is an unofficial client of Apple's undocumented web API.
 
@@ -10,7 +10,7 @@ The live index is https://lroolle.github.io/ihme-cli/llms.txt; the mapped docume
 
 - [README](README.md): what it does, install, scripts, agents
 - [README, Chinese](README.zh.md): the same, in Chinese
-- [Command guide](docs/usage.md): search, create, edit, tags, lifecycle, exports, JSON, and errors
+- [Command guide](docs/usage.md): search, create, edit, tags, lifecycle, sharing an inbox, exports, JSON, and errors
 - [Agent guide](docs/agents.md): providers, coding agents, consent, preferences, memory, and MCP
 - [SKILL.md](skill/SKILL.md): the operational procedure both external agents (shell) and the embedded agent follow — including the address taste rubric
 - [ROADMAP](ROADMAP.md): what shipped per version and what's planned

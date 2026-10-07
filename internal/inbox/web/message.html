@@ -1,0 +1,14 @@
+{{define "message.html"}}{{template "head" .}}
+<p><a href="/inbox">Back to inbox</a></p>
+<h1>{{.Subject}}</h1>
+<dl class="meta">
+<dt>From</dt><dd>{{.From}}</dd>
+<dt>To</dt><dd>{{.Address}}</dd>
+<dt>Date</dt><dd>{{.Full}}</dd>
+</dl>
+{{if .Junk}}<p class="note">This message is in Junk. Treat its links with care.</p>{{end}}
+{{if .TooLarge}}<p class="note">This message is too large to show here.</p>
+{{else if .TooComplex}}<p class="note">This message is nested too deeply to show as text.</p>
+{{else}}<pre class="body">{{range .Body}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer nofollow">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{end}}</pre>{{end}}
+{{if .Attachments}}<p class="muted">Attachments are not shown: {{join .Attachments ", "}}</p>{{end}}
+{{template "foot"}}{{end}}

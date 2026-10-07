@@ -16,6 +16,7 @@ import (
 type hmeTestServer struct {
 	*httptest.Server
 	rejectFirst int
+	loginStatus int // non-zero: accountLogin answers with this status
 	hmeCalls    int
 	loginCalls  int
 	lastDsid    string
@@ -28,6 +29,11 @@ func newHmeTestServer(rejectFirst int) *hmeTestServer {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/accountLogin"):
 			s.loginCalls++
+			if s.loginStatus != 0 {
+				w.WriteHeader(s.loginStatus)
+				fmt.Fprint(w, `{"success":false,"error":1}`)
+				return
+			}
 			fmt.Fprintf(w, `{"dsInfo":{"dsid":"999"},"webservices":{"premiummailsettings":{"url":%q,"status":"active"}}}`, s.URL)
 		case strings.HasSuffix(r.URL.Path, "/v2/hme/list"):
 			s.hmeCalls++
@@ -110,6 +116,45 @@ func TestHmeRequestRecoversOnlyOnce(t *testing.T) {
 	}
 	if srv.hmeCalls != 2 || srv.loginCalls != 1 {
 		t.Errorf("expected 2 HME attempts and 1 accountLogin, got %d and %d", srv.hmeCalls, srv.loginCalls)
+	}
+}
+
+// Apple answers accountLogin with 421 {"success":false,"error":1}
+// once the dsWebAuthToken expires, while /validate still says 200.
+// Seen live 2026-09-27: "try again in a moment" looped forever.
+// That verdict must send the user to `ihme auth login`.
+func TestHmeRequestExpiredTokenIsRejection(t *testing.T) {
+	srv := newHmeTestServer(99)
+	srv.loginStatus = http.StatusMisdirectedRequest
+	defer srv.Close()
+
+	_, err := srv.client().ListHme()
+	if IsTransient(err) {
+		t.Fatalf("expired token read as transient: %v", err)
+	}
+	if !IsAuthRejection(err) {
+		t.Fatalf("expected an auth rejection, got %v", err)
+	}
+	if srv.loginCalls != 1 {
+		t.Errorf("expected 1 accountLogin, got %d", srv.loginCalls)
+	}
+}
+
+// A 421 without Apple's verdict body stays transient: that is the
+// routing-pressure case, where the session is fine.
+func TestHmeRequestBare421StaysTransient(t *testing.T) {
+	srv := newHmeTestServer(99)
+	defer srv.Close()
+	c := srv.client()
+	bare := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMisdirectedRequest)
+	}))
+	defer bare.Close()
+	c.setupBase = bare.URL
+
+	_, err := c.ListHme()
+	if !IsTransient(err) {
+		t.Fatalf("bare 421 should stay transient, got %v", err)
 	}
 }
 

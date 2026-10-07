@@ -173,8 +173,12 @@ type SessionData struct {
 }
 
 type SavedCookie struct {
-	Name   string `json:"name"`
-	Value  string `json:"value"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	// Quoted records that Apple set the value in double quotes;
+	// cookieString puts them back. Older sessions lack it and replay
+	// bare values, as before.
+	Quoted bool   `json:"quoted,omitempty"`
 	Domain string `json:"domain"`
 	Path   string `json:"path"`
 }

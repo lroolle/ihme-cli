@@ -1,0 +1,12 @@
+{{define "home.html"}}{{template "head" .}}
+<h1>Inbox</h1>
+<p class="muted">Read the mail one Hide My Email address has received. The owner of the address gives you its access key.</p>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+<form method="post" action="/open">
+<label for="address">Address</label>
+<input id="address" name="address" type="email" autocomplete="username" spellcheck="false" required value="{{.Address}}">
+<label for="key">Access key</label>
+<input id="key" name="key" type="password" autocomplete="current-password" spellcheck="false" required>
+<button type="submit">Open inbox</button>
+</form>
+{{template "foot"}}{{end}}

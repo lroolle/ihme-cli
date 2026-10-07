@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -217,7 +218,7 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 		return fmt.Errorf("signin init: %w", err)
 	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("signin init returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return signinError("signin init", resp.StatusCode, body)
 	}
 
 	var initResp AuthInitResponse
@@ -269,12 +270,60 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 			fmt.Fprintf(os.Stderr, "[auth] 409 body: %s\n", string(body))
 		}
 		return c.handle2FA(otpCallback)
-	case 403:
-		return fmt.Errorf("invalid credentials")
 	case 412:
 		return fmt.Errorf("account requires acknowledgment at appleid.apple.com")
 	default:
-		return fmt.Errorf("signin complete returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return signinError("signin complete", resp.StatusCode, body)
+	}
+}
+
+// codeAccountLocked is Apple's serviceErrors code for an account
+// locked for security reasons (pyicloud#368, 2026-10-05).
+const codeAccountLocked = "-20209"
+
+// ErrAccountLocked is a sign-in refused because the Apple Account is
+// locked. No password retry opens it; only Apple's unlock flow does.
+var ErrAccountLocked = errors.New("this Apple Account is locked for security reasons — unlock it at https://iforgot.apple.com, then run ihme auth login")
+
+// signinError turns Apple's refusal of a sign-in step into the
+// sentence the user needs. Apple explains itself in serviceErrors,
+// written for people, so its message is shown as-is. One code
+// changes the fix entirely: a locked account, where retrying the
+// password only digs the hole deeper.
+func signinError(step string, status int, body []byte) error {
+	var parsed struct {
+		ServiceErrors []struct {
+			Code    json.RawMessage `json:"code"`
+			Message string          `json:"message"`
+		} `json:"serviceErrors"`
+	}
+	message := ""
+	if json.Unmarshal(body, &parsed) == nil {
+		for _, se := range parsed.ServiceErrors {
+			if scalarText(se.Code) == codeAccountLocked {
+				return ErrAccountLocked
+			}
+			if message == "" {
+				message = strings.TrimSpace(se.Message)
+			}
+		}
+	}
+	// Only the complete step checks the password; init has seen the
+	// Apple ID alone, so a refusal there says nothing about it.
+	refused := status == 401 || status == 403
+	what := "incorrect Apple ID or password"
+	if step == "signin init" {
+		what = "Apple refused sign-in for this Apple ID"
+	}
+	switch {
+	case refused && message != "":
+		return fmt.Errorf("%s (Apple: %s)", what, message)
+	case refused:
+		return errors.New(what)
+	case message != "":
+		return fmt.Errorf("%s returned %d: %s", step, status, message)
+	default:
+		return fmt.Errorf("%s returned %d: %s", step, status, truncate(string(body), 200))
 	}
 }
 
@@ -467,6 +516,20 @@ func (c *Client) accountLogin() error {
 				}
 				return c.accountLogin()
 			}
+		}
+		// A 421 carrying {"success":false} from accountLogin is Apple's
+		// verdict on the tokens, not a routing hiccup: the
+		// dsWebAuthToken expired. /validate can keep answering 200 on
+		// the cookies long after, so this is often the first place the
+		// expiry shows. Retrying never helps; only a fresh sign-in does.
+		// pyicloud, icloudpd, and rclone all read it the same way.
+		var httpErr *HTTPError
+		var verdict struct {
+			Success *bool `json:"success"`
+		}
+		if errors.As(err, &httpErr) && httpErr.Status == 421 &&
+			json.Unmarshal(body, &verdict) == nil && verdict.Success != nil && !*verdict.Success {
+			return fmt.Errorf("account login: %w: %w", ErrSessionInvalid, err)
 		}
 		return fmt.Errorf("account login: %w", err)
 	}
