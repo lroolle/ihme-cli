@@ -47,17 +47,36 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
 
+			sess, err := api.LoadSession(sessPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not load existing session: %s\n", err)
+			}
+
 			if appleID == "" {
 				appleID = os.Getenv("IHME_APPLE_ID")
 			}
 			if appleID == "" {
-				fmt.Print("Apple ID: ")
+				// Signing in again is the common case (the session
+				// expired), so the last Apple ID is one Enter away.
+				last := ""
+				if sess != nil {
+					last = sess.AppleID
+				}
+				if last != "" {
+					fmt.Printf("Apple ID [%s]: ", last)
+				} else {
+					fmt.Print("Apple ID: ")
+				}
 				reader := bufio.NewReader(os.Stdin)
 				line, err := reader.ReadString('\n')
-				if err != nil {
+				if err != nil && strings.TrimSpace(line) == "" {
+					// EOF is not "use the last one".
 					return fmt.Errorf("reading Apple ID: %w", err)
 				}
 				appleID = strings.TrimSpace(line)
+				if appleID == "" {
+					appleID = last
+				}
 			}
 			if appleID == "" {
 				return fmt.Errorf("missing Apple ID")
@@ -77,11 +96,9 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 			}
 			client.Verbose, _ = cmd.Flags().GetBool("verbose")
 
-			sess, err := api.LoadSession(sessPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not load existing session: %s\n", err)
-			}
-			if sess != nil && sess.TrustToken != "" {
+			// A trust token vouches for one account only; it skips
+			// 2FA for that account and means nothing for another.
+			if sess != nil && sess.TrustToken != "" && strings.EqualFold(sess.AppleID, appleID) {
 				client.Session().TrustToken = sess.TrustToken
 			}
 

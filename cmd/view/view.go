@@ -10,11 +10,12 @@ import (
 
 func NewCmdView() *cobra.Command {
 	return &cobra.Command{
-		Use:   "view <ref>",
+		Use:   "view [ref]",
 		Short: "View details of a Hide My Email address",
 		Long: `View details of a Hide My Email address.
 
 <ref> can be an anonymousId, email address, or label (fuzzy match).
+Without it at a terminal, asks which address, newest first.
 
 JSON output (--json):
   {
@@ -23,10 +24,18 @@ JSON output (--json):
   }`,
 		Example: `  ihme view github.com
   ihme view github.com --json
-  ihme view github.com --json --jq '.result.hme'`,
-		Args: cmdutil.ExactRefArg("ihme view <ref>", "ihme view github.com"),
+  ihme view github.com --json --jq '.result.hme'
+  ihme view                # pick, newest first`,
+		Args: cmdutil.RefOrPick("ihme view <ref>", "ihme view github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
+			if err != nil {
+				return err
+			}
+			ref, err := cmdutil.RefFromArgs(args, client, cmdutil.Pick{
+				Verb: "view",
+				None: "no addresses yet — create one with: ihme new <label>",
+			})
 			if err != nil {
 				return err
 			}
@@ -36,7 +45,7 @@ JSON output (--json):
 				return err
 			}
 
-			hme, err := resolver.Resolve(args[0], result.HmeEmails)
+			hme, err := resolver.Resolve(ref, result.HmeEmails)
 			if err != nil {
 				return err
 			}

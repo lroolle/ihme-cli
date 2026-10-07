@@ -71,6 +71,8 @@ func Explain(err error) string {
 	switch {
 	case err == nil:
 		return ""
+	case errors.Is(err, ErrCancelled):
+		return "Cancelled."
 	case errors.Is(err, ErrNotLoggedIn):
 		return "Error: not signed in to iCloud\n  Fix: ihme auth login"
 	case api.IsAuthRejection(err):
@@ -87,7 +89,7 @@ func Explain(err error) string {
 // branch on this instead of matching message text.
 func ExitCode(err error) int {
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, ErrCancelled):
 		return 0
 	case errors.Is(err, ErrNotLoggedIn), api.IsAuthRejection(err):
 		return 2
