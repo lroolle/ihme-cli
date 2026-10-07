@@ -1,0 +1,11 @@
+{{define "inbox.html"}}{{template "head" .}}
+<header>
+<h1>{{.Address}}</h1>
+<form method="post" action="/close"><button type="submit" class="quiet">Sign out</button></form>
+</header>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>
+{{else}}<p class="muted">{{if .Rows}}{{len .Rows}} message{{if ne (len .Rows) 1}}s{{end}}{{else}}No mail{{end}} in the last {{.Days}} days{{if .Capped}}, newest {{.Limit}} shown{{end}}. Checked {{.Checked}}. <a href="/inbox">Check again</a></p>
+{{if .Rows}}<ol class="list">
+{{range .Rows}}<li><a href="{{.Href}}"><span class="row"><span class="from">{{.From}}</span><span class="when" title="{{.Full}}">{{.Ago}}</span></span><span class="subject">{{.Subject}}{{if .Junk}} <span class="tag">Junk</span>{{end}}</span></a></li>
+{{end}}</ol>{{end}}{{end}}
+{{template "foot"}}{{end}}
