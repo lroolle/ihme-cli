@@ -3,8 +3,10 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -139,5 +141,38 @@ func TestCodeAcceptedDespiteConflict(t *testing.T) {
 
 	if codeAcceptedDespiteConflict(nil, validBody) {
 		t.Error("nil response must not read as acceptance")
+	}
+}
+
+func TestSigninError(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   string
+		locked bool
+	}{
+		{"locked, numeric code", 403, `{"serviceErrors":[{"code":-20209,"message":"This Apple Account has been locked for security reasons."}]}`, "locked", true},
+		{"locked, string code", 400, `{"serviceErrors":[{"code":"-20209","message":"locked"}]}`, "locked", true},
+		{"wrong password", 401, `{"serviceErrors":[{"code":"-20101","message":"Your Apple Account or password was incorrect."}]}`, "incorrect Apple ID or password (Apple: Your Apple Account or password was incorrect.)", false},
+		{"bare 403", 403, ``, "incorrect Apple ID or password", false},
+		{"init refusal is not about the password", 401, ``, "Apple refused sign-in for this Apple ID", false},
+		{"other, with message", 503, `{"serviceErrors":[{"code":"-1","message":"Service unavailable"}]}`, "signin complete returned 503: Service unavailable", false},
+		{"other, opaque", 500, `oops`, "signin complete returned 500: oops", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			step := "signin complete"
+			if strings.HasPrefix(tc.name, "init") {
+				step = "signin init"
+			}
+			err := signinError(step, tc.status, []byte(tc.body))
+			if errors.Is(err, ErrAccountLocked) != tc.locked {
+				t.Fatalf("locked = %v, want %v (%v)", !tc.locked, tc.locked, err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not contain %q", err, tc.want)
+			}
+		})
 	}
 }

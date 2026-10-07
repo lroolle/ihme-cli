@@ -60,7 +60,9 @@ var ErrSessionInvalid = errors.New("session rejected by iCloud")
 // routing hiccups and rate pressure on sessions that are still
 // valid — the CN-region case is already retried inside
 // ValidateSessionInfo, and everything else deserves "try again",
-// never "re-login".
+// never "re-login". The one exception is decided where the context
+// lives: accountLogin wraps its 421 {"success":false} in
+// ErrSessionInvalid, because there it means the tokens expired.
 func IsAuthRejection(err error) bool {
 	if errors.Is(err, ErrSessionInvalid) {
 		return true
