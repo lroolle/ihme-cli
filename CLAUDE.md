@@ -18,7 +18,8 @@ cmd/
   root/root.go           Root command, subcommand registration
   auth/                  login (SRP + 2FA), status, logout
   list/                  List with --search/--active/--inactive/--tag/--sort
-  new/                   Generate candidates, interactive pick, --address to reserve
+  new/                   Generate candidates, interactive pick, --address to reserve;
+                         --share also prints the new address's inbox key + link
   view/                  View single address by ref
   edit/                  Edit label/note/tags
   copy/                  Copy address to clipboard
@@ -26,9 +27,11 @@ cmd/
   lifecycle/             deactivate, reactivate, delete (with --yes confirmation)
   export/                CSV/JSON export with filters
   forward/               forward-to management
-  share/                 share <ref> | list | revoke: per-address access keys
-  serve/                 ihme serve: the read-only web inbox (IMAP, app password
-                         from --account/IHME_IMAP_*/em's accounts.json)
+  share/                 share <ref> | secret: the key + link that open one
+                         address in ihme-inbox (github.com/lroolle/ihme-inbox,
+                         the web inbox that was `ihme serve` through v0.7.0);
+                         hidden serve / share list / share revoke say where
+                         they went
 
 api/
   types.go               HmeEmail, SessionData, SavedCookie, auth types
@@ -43,11 +46,11 @@ internal/
   cmdutil/               GetClient, OutputResult, ExactRefArg, RefOrPick +
                          PickAddress (omitted <ref> at a TTY -> newest-first
                          picker; never prompts without a TTY or with --json)
-  shares/                shares.json: address -> SHA-256(key); Grant rotates,
-                         Revoke removes; the server re-reads it per request
-  inbox/                 ihme serve: IMAP source (exact To/Cc check before any
-                         row or body is shown), MIME -> text, HTTP + embedded
-                         templates; the privacy model is its package doc
+  inboxkey/              the minting half of ihme-inbox's key scheme (a copy,
+                         not an import; testdata/v1.json is ihme-inbox's own
+                         vector file and must stay byte-identical), the inbox
+                         secret file, the printed link. Only CreateSecret
+                         makes a secret; Issue fails without one
   app/                   Application service: the six HME operations
                          shared by Cobra commands and agent tools
                          (both are adapters over it)

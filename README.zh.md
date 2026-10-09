@@ -47,11 +47,11 @@ ihme list --json --jq '.addresses[].hme'
 ## 共享一个收件箱
 
 ```bash
-ihme share netflix    # 打印 key 和链接，只显示一次
-ihme serve            # http://127.0.0.1:8025
+ihme new netflix --share    # 新建地址，同时给出打开其邮件的 key 和链接
+ihme share netflix          # 已有的地址，同上
 ```
 
-key 只能访问该地址的邮件：收件箱和垃圾邮件，最近 30 天，纯文本。看不到其他地址和其他收件人，页面不加载外部内容。服务端用 app 专用密码经 IMAP 读信，不使用你的 iCloud 会话。`ihme share revoke netflix` 收回。[详细说明](docs/usage.md#share-an-inbox)（英文）。
+链接在 [ihme-inbox](https://github.com/lroolle/ihme-inbox) 里打开该地址的邮件。ihme-inbox 是一个自己运行的小型网页服务：收件箱和垃圾邮件，最近 30 天，纯文本，验证码或登录链接置顶。看不到其他地址和其他收件人。key 由地址和 ihme 与服务端共用的 secret 算出（`ihme share secret`），新建地址不需要通知服务端。在服务端收回：`ihme-inbox revoke <地址>`。[详细说明](docs/usage.md#share-an-inbox)（英文）。
 
 ## 给 agent 用
 

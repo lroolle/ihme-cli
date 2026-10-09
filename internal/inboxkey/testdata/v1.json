@@ -1,0 +1,47 @@
+{
+  "comment": "ihme-inbox key scheme v1. Computed with Python's hmac, not with this repo's Go code. key = base32(minted || HMAC-SHA256(secret, 'ihme-inbox/key/v1' 0x00 address 0x00 minted)[:16]).",
+  "vectors": [
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "brisk.heron_0q@icloud.com",
+      "minted": 1791504000,
+      "key": "nlec5ae644qag55qnbslg2y2rx3bojkl"
+    },
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "  Brisk.Heron_0Q@iCloud.com ",
+      "minted": 1791504000,
+      "key": "nlec5ae644qag55qnbslg2y2rx3bojkl"
+    },
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "brisk.heron_0q@icloud.com",
+      "minted": 1791504001,
+      "key": "nlec5aonshwlukgbgk2hqfynxgq7do6f"
+    },
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "other_1x@icloud.com",
+      "minted": 1791504000,
+      "key": "nlec5aa2ui4drcj36g3dxkwghe6byvpk"
+    },
+    {
+      "secret": "777p37h37l47r57w6x2ph4xr6dx653pm5pvot2hh43s6jy7c4hqa",
+      "address": "brisk.heron_0q@icloud.com",
+      "minted": 1791504000,
+      "key": "nlec5acesywtuzmznqr5j77oyr445euv"
+    },
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "me+netflix@example.com",
+      "minted": 0,
+      "key": "aaaaaad22stgfnd4nd2n3bkhdl3462yk"
+    },
+    {
+      "secret": "aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+      "address": "a@b",
+      "minted": 4294967295,
+      "key": "7777772ueail7wo6d7njyvcronqit5yj"
+    }
+  ]
+}

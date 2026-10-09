@@ -46,10 +46,9 @@ MANAGE (omit <ref> at a terminal to pick, newest first)
   ihme delete <ref> [--yes]      Permanent deletion (confirms first)
 
 SHARE AN INBOX
-  ihme share <ref>               Access key + link for one address
-  ihme share list                Addresses with a live key
-  ihme share revoke <ref>        Stop a key working (--all: every key)
-  ihme serve                     Plain web inbox for shared addresses
+  ihme new <label> --share       New address, with the key + link for its mail
+  ihme share <ref>               Key + link for an address you have
+  ihme share secret              The secret your ihme-inbox server needs
 
 EXPORT
   ihme export                    CSV to stdout
@@ -111,30 +110,27 @@ Deactivate an address before deleting it. Deactivation and reactivation take eff
 
 ## Share an inbox
 
-One address's mail on a plain web page. Hand someone its key: they read that address and nothing else. Netflix codes for family; your own codes on a phone.
+One address's mail on a plain web page. Send someone the link: they read that address and nothing else. Netflix codes for family; your own codes on a phone.
+
+The page is served by [ihme-inbox](https://github.com/lroolle/ihme-inbox), a separate small program. ihme makes the addresses and their keys; ihme-inbox shows the mail. Through v0.7.0 this was `ihme serve`.
 
 ```bash
-ihme share netflix          # key + link, printed once
-ihme serve                  # http://127.0.0.1:8025
-ihme share list             # what is shared
-ihme share revoke netflix   # locked out on the next request
+ihme share secret           # once: creates the secret, prints the line the server needs
+ihme new netflix --share    # a new address, its key, its link
+ihme share netflix          # key and link for an address you already have
 ```
 
-IMAP login, first match wins:
+Set `IHME_INBOX_URL=https://mail.example.com`, or pass `--url` to `ihme share`, so links point at your server. Without it they point at `http://127.0.0.1:8025`.
 
-- `--account <email>`: that account in em's `~/.config/em/accounts.json` (read only)
-- `IHME_IMAP_USER` + `IHME_IMAP_PASSWORD`: your @icloud.com address and an [app-specific password](https://support.apple.com/102654). `IHME_IMAP_SERVER` (host:port, TLS) if your addresses forward to a non-iCloud mailbox
-- em's accounts file, when it holds exactly one account
+- A key is computed from the address, the time, and the secret. Nothing is stored and the server is not contacted, so a new address works there at once.
+- The secret is `IHME_INBOX_SECRET`, else the file `~/.config/ihme-inbox/secret`, which ihme-inbox reads too: on one machine the two agree with no setup. Only `ihme share secret` creates it; `share` and `new --share` stop with that hint when it is missing.
+- `ihme share` again prints another key. Earlier ones keep working.
+- Revoke on the server's machine: `ihme-inbox revoke <address>`. It stops every key made so far for that address, on the next request. For a new key, make it there (`ihme-inbox key <address>`) or wait five seconds before `ihme share`: a key carries this machine's time, and a revoke also covers keys dated up to 5 seconds ahead of the server's clock. Keep both machines on network time. A link that says "not valid yet" means this machine's clock runs ahead.
+- `ihme new --share` checks for the secret before it reserves anything. With `--json` it needs `--yes` or `--address`; the reservation gains a `share` field: `{"key":"...","link":"...","mintedAt":"..."}`.
 
-What the visitor gets:
+Running the server, what a visitor sees, and what the server can read: the [ihme-inbox README](https://github.com/lroolle/ihme-inbox#readme).
 
-- INBOX and Junk mail sent To or Cc their address in the last 30 days (`--days`). Older mail does not open even by URL. Bcc-only mail does not show.
-- Plain text. No scripts, images, or fonts; mail HTML becomes text on the server. Other recipients are never shown.
-- Message links sealed to their address. They die on restart and cannot be guessed, counted, or opened with another key.
-
-What the server can do: read mail. Not create, delete, or redirect addresses; viewing does not mark mail read. ihme stores key hashes only; sharing an address again rotates its key.
-
-Going public: there is no admin page, shares are managed with `ihme share` on the server's machine. Put HTTPS in front and set `IHME_SERVE_URL=https://...` for both commands: `ihme share` prints working links, and `ihme serve` always marks the key cookie Secure. Have the proxy send `X-Forwarded-Proto: https` too (Caddy does; nginx: `proxy_set_header X-Forwarded-Proto $scheme;`). `/k/<key>` paths carry the key: keep them out of access logs.
+Coming from v0.7.0: keys from that version open nothing now; share again. `IHME_SERVE_URL` is still read where `IHME_INBOX_URL` is not set. `shares.json` beside the session file is unused and can be deleted.
 
 ## Authentication and errors
 

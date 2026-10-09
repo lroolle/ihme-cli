@@ -2,6 +2,34 @@
 
 Current: **v0.7.0** · [MIT](LICENSE)
 
+## Next: v0.8.0 — the web inbox moves out, `new --share`
+
+- **`ihme new <label> --share`.** One command reserves the address
+  and prints the key and link that open its mail. `--json` adds a
+  `share` field to the reservation. The secret is checked before
+  anything is reserved.
+- **`ihme serve` is now [ihme-inbox](https://github.com/lroolle/ihme-inbox)**,
+  its own repository and binary: a box on the internet runs the mail
+  viewer and nothing else. It also lifts the code or sign-in link out
+  of each message, with a copy button. ihme no longer links an IMAP
+  client.
+- **Keys are computed, not recorded.** A key is an HMAC of the
+  address, the time, and a secret ihme shares with the server
+  (`ihme share secret`). No `shares.json`, nothing to copy to the
+  server when an address is made. `ihme share <ref>` prints a key for
+  an address you already have; running it again prints another.
+- **Revoking moved to the server**: `ihme-inbox revoke <address>`.
+  `ihme serve`, `ihme share list`, and `ihme share revoke` remain as
+  hidden commands that say where they went.
+- **`--jq` alone is machine output in `new`.** `ihme new <label> --jq
+  .candidates` in a pipe used to fall through to "no terminal:
+  reserve the first candidate".
+- **`new --agent` reports an address the run reserved even when the
+  run then fails**, instead of printing only the error.
+- **Breaking.** Keys made by v0.7.0 open nothing; share again.
+  `IHME_SERVE_URL` became `IHME_INBOX_URL` (the old name is still
+  read). `share --json` drops `rotated` and gains `mintedAt`.
+
 ## Shipped in v0.7.0 — share one inbox, pick instead of typing
 
 - **`ihme share` + `ihme serve`.** One address's mail on a plain

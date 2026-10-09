@@ -4,7 +4,7 @@
 
 ## What this tool does
 
-`ihme` manages iCloud Hide My Email addresses: create, list, search, edit, deactivate, reactivate, delete, export, and share one address's inbox on a plain web page. It authenticates via Apple's SRP-6a protocol with 2FA support and persists session tokens locally.
+`ihme` manages iCloud Hide My Email addresses: create, list, search, edit, deactivate, reactivate, delete, export, and print the key and link that open one address's mail in ihme-inbox (a separate web server). It authenticates via Apple's SRP-6a protocol with 2FA support and persists session tokens locally.
 
 ## Prerequisites
 
@@ -108,11 +108,12 @@ ihme forward set user@icloud.com          # change it
 ### Share an inbox
 
 ```bash
-ihme share github.com --json              # one key per address; printed once
-ihme share list --json                    # shared addresses (no keys)
-ihme share revoke github.com --json       # --all revokes every key
-ihme serve                                # long-running web server; see docs/usage.md
+ihme new github.com --share --yes --json  # reserve, and get the key + link for its mail
+ihme share github.com --json              # key + link for an existing address
+ihme share secret                         # prints IHME_INBOX_SECRET=...; creates it on first run
 ```
+
+The link opens that address's mail in [ihme-inbox](https://github.com/lroolle/ihme-inbox), which the user runs separately. Nothing is stored and no server is contacted: a key is computed from the address and the inbox secret. `share` and `new --share` fail with "ihme share secret" as the fix when the machine has no secret; `new --share` fails before reserving. Each call returns a new key and earlier ones keep working. Revoking is not an ihme command: `ihme-inbox revoke <address>` on the server. Treat `key`, `link`, and the secret as credentials: do not log them.
 
 ## Reference resolution
 
@@ -133,13 +134,12 @@ list --json      {"addresses":[{anonymousId,label,hme,isActive,createTimestamp,n
 view --json      {"result":{anonymousId,label,hme,forwardToEmail,isActive,...},"hints":{...}}
 new --json       {"candidates":["a@icloud.com",...],"label":"...","hint":"..."}
 new -y --json    {anonymousId,label,hme,isActive,...}
+new -y --share   {anonymousId,label,hme,isActive,...,"share":{"key":"...","link":"...","mintedAt":"..."}}
 forward --json   {"forwardTo":"...","available":[...],"hint":"..."}
 deactivate       {"status":"deactivated","hme":"...","id":"...","hints":{...}}
 reactivate       {"status":"reactivated","hme":"...","id":"...","hint":"..."}
 delete --yes     {"status":"deleted","hme":"...","id":"..."}
-share --json     {"address":"...","label":"...","key":"...","link":"...","rotated":false,"hints":{...}}
-share list       [{"address":"...","label":"...","anonymousId":"...","createdAt":"..."}]
-share revoke     {"revoked":["address",...]}
+share --json     {"address":"...","label":"...","key":"...","link":"...","mintedAt":"...","hints":{...}}
 ```
 
 JSON output includes `hints` with suggested follow-up commands.

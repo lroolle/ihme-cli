@@ -56,9 +56,9 @@ sudo install -m 755 ihme /usr/local/bin/ihme</code></pre>
 ihme list</code></pre>
 
         <h2 id="share">Share one inbox</h2>
-        <pre><code>ihme share netflix    <span class="c"># prints a key and a link, once</span>
-ihme serve            <span class="c"># http://127.0.0.1:8025</span></code></pre>
-        <p>The key opens one address's mail: INBOX and Junk, last 30 days, as plain text. No other address, no other recipients, nothing loaded from anywhere else. The server reads mail over IMAP with an app-specific password, never your iCloud session. <code>ihme share revoke netflix</code> ends it. <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md#share-an-inbox">Details</a>.</p>
+        <pre><code>ihme new netflix --share    <span class="c"># a new address, with the key and link that open its mail</span>
+ihme share netflix          <span class="c"># the same, for an address you already have</span></code></pre>
+        <p>The link opens one address's mail in <a href="https://github.com/lroolle/ihme-inbox">ihme-inbox</a>, a small web server you run: INBOX and Junk, last 30 days, as plain text, with the code or sign-in link on top. No other address, no other recipients. The key is computed from the address and a secret ihme shares with the server (<code>ihme share secret</code>), so the server is never told about a new address. Revoke there: <code>ihme-inbox revoke &lt;address&gt;</code>. <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md#share-an-inbox">Details</a>.</p>
 
         <h2 id="docs">Docs</h2>
         <ul class="docs">

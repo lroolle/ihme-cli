@@ -47,11 +47,11 @@ Exit 2: sign in again. Exit 1: anything else.
 ## Share one inbox
 
 ```bash
-ihme share netflix    # prints a key and a link, once
-ihme serve            # http://127.0.0.1:8025
+ihme new netflix --share    # a new address, with the key and link that open its mail
+ihme share netflix          # the same, for an address you already have
 ```
 
-The key opens one address's mail: INBOX and Junk, last 30 days, as plain text. No other address, no other recipients, nothing loaded from anywhere else. The server reads mail over IMAP with an app-specific password, never your iCloud session. `ihme share revoke netflix` ends it. [Details](docs/usage.md#share-an-inbox).
+The link opens one address's mail in [ihme-inbox](https://github.com/lroolle/ihme-inbox), a small web server you run: INBOX and Junk, last 30 days, as plain text, with the code or sign-in link on top. No other address, no other recipients. The key is computed from the address and a secret ihme shares with the server (`ihme share secret`), so the server is never told about a new address. Revoke there: `ihme-inbox revoke <address>`. [Details](docs/usage.md#share-an-inbox).
 
 ## Agents
 

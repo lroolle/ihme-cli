@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/lroolle/ihme-cli/api"
 	"github.com/lroolle/ihme-cli/internal/agent"
 	"github.com/lroolle/ihme-cli/internal/app"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
+	"github.com/lroolle/ihme-cli/internal/inboxkey"
 	"github.com/lroolle/ihme-cli/internal/memory"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -24,6 +27,7 @@ func NewCmdNew() *cobra.Command {
 		agentic bool
 		grant   string
 		effort  string
+		shared  bool
 	)
 
 	cmd := &cobra.Command{
@@ -37,11 +41,16 @@ JSON output without --yes (candidates, no reservation):
   {"candidates":["a@icloud.com","b@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
 
 JSON output with --yes or --address (reserved):
-  {"anonymousId":"...","label":"...","hme":"a@icloud.com","isActive":true,...}`,
+  {"anonymousId":"...","label":"...","hme":"a@icloud.com","isActive":true,...}
+
+--share also prints the key and link that open the new address's mail
+in ihme-inbox (see 'ihme share --help'); in JSON, as one more field:
+  {...,"share":{"key":"...","link":"...","mintedAt":"..."}}`,
 		Example: `  ihme new github.com
   ihme new github.com --json
   ihme new github.com --address pole-toils-3x@icloud.com
   ihme new github.com -y --json
+  ihme new netflix --share
   ihme new github.com --tag dev --note "main"`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -55,6 +64,22 @@ JSON output with --yes or --address (reserved):
 		RunE: func(cmd *cobra.Command, args []string) error {
 			label := args[0]
 			jsonFlag, _ := cmd.Flags().GetBool("json")
+			// --jq is machine output too: without this, "--jq .candidates"
+			// in a pipe took the non-TTY path and reserved an address.
+			if jq, _ := cmd.Flags().GetString("jq"); jq != "" {
+				jsonFlag = true
+			}
+
+			if shared {
+				// Checked before anything is reserved: an address made
+				// and then not shared is a surprise to clean up.
+				if jsonFlag && !yes && address == "" && !agentic {
+					return fmt.Errorf("--share needs a reservation, and --json alone only lists candidates\n\n  Add --yes, or --address <candidate>")
+				}
+				if _, _, _, err := inboxkey.LoadSecret(); err != nil {
+					return err
+				}
+			}
 
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
@@ -71,23 +96,44 @@ JSON output with --yes or --address (reserved):
 				res, err := agent.RunNew(cmd.Context(), svc, client.Session().AppleID, agent.Options{
 					Label: label, Note: note, Grant: agent.GrantMode(grant), Effort: effort, JSON: jsonFlag,
 				})
+				// A run can reserve and then fail (the model's closing
+				// turn times out). The address exists either way, so it
+				// is reported, with its key, before the error is.
+				if err != nil && (res == nil || res.Reserved == nil) {
+					return err
+				}
+				runErr := err
+				if res.Reserved == nil {
+					if jsonFlag {
+						return cmdutil.OutputResult(cmd, res)
+					}
+					fmt.Println("No address reserved.")
+					return nil
+				}
+				g, err := grantFor(res.Reserved, shared)
 				if err != nil {
 					return err
 				}
 				if jsonFlag {
-					return cmdutil.OutputResult(cmd, res)
+					var out any = res
+					if g != nil {
+						out = struct {
+							*agent.Result
+							Share *inboxkey.Grant `json:"share"`
+						}{res, g}
+					}
+					if err := cmdutil.OutputResult(cmd, out); err != nil {
+						return err
+					}
+					return runErr
 				}
-				if res.Reserved != nil {
-					fmt.Printf("Reserved: %s (label: %s)\n", res.Reserved.Hme, res.Reserved.Label)
-				} else {
-					fmt.Println("No address reserved.")
-				}
-				return nil
+				printReserved(res.Reserved, g)
+				return runErr
 			}
 
 			// --address: reserve a specific address (agent step 2)
 			if address != "" {
-				return reserve(svc, address, label, tagList, note, jsonFlag, cmd)
+				return reserve(svc, address, label, tagList, note, jsonFlag, shared, cmd)
 			}
 
 			// --yes: generate one, reserve, done (script mode)
@@ -96,7 +142,7 @@ JSON output with --yes or --address (reserved):
 				if err != nil {
 					return err
 				}
-				return reserve(svc, candidates[0], label, tagList, note, jsonFlag, cmd)
+				return reserve(svc, candidates[0], label, tagList, note, jsonFlag, shared, cmd)
 			}
 
 			candidates, err := svc.Generate(count)
@@ -122,11 +168,11 @@ JSON output with --yes or --address (reserved):
 
 			// non-TTY: take first
 			if !term.IsTerminal(int(os.Stdin.Fd())) {
-				return reserve(svc, candidates[0], label, tagList, note, false, cmd)
+				return reserve(svc, candidates[0], label, tagList, note, false, shared, cmd)
 			}
 
 			// interactive: pick from list
-			return interactive(svc, candidates, label, tagList, note, cmd)
+			return interactive(svc, candidates, label, tagList, note, shared, cmd)
 		},
 	}
 
@@ -138,23 +184,56 @@ JSON output with --yes or --address (reserved):
 	cmd.Flags().BoolVar(&agentic, "agent", false, "Run the embedded agent: search, generate, judge, reserve per SKILL.md")
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Agent consent for actions beyond this run's scope: ask or auto")
 	cmd.Flags().StringVar(&effort, "effort", "", "Agent reasoning effort: minimal, low, medium, high (some models also: xhigh, max)")
+	cmd.Flags().BoolVar(&shared, "share", false, "Also print the key and link that open the new address in ihme-inbox")
 	return cmd
 }
 
-func reserve(svc *app.Service, hme, label string, tagList []string, note string, jsonFlag bool, cmd *cobra.Command) error {
+func reserve(svc *app.Service, hme, label string, tagList []string, note string, jsonFlag, shared bool, cmd *cobra.Command) error {
 	reserved, err := svc.Reserve(hme, label, tagList, note)
 	if err != nil {
 		return err
 	}
 	agent.JournalReservation(reserved)
+	g, err := grantFor(reserved, shared)
+	if err != nil {
+		return err
+	}
 	if jsonFlag {
+		if g != nil {
+			return cmdutil.OutputResult(cmd, struct {
+				*api.HmeEmail
+				Share *inboxkey.Grant `json:"share"`
+			}{reserved, g})
+		}
 		return cmdutil.OutputResult(cmd, reserved)
 	}
-	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
+	printReserved(reserved, g)
 	return nil
 }
 
-func interactive(svc *app.Service, candidates []string, label string, tagList []string, note string, cmd *cobra.Command) error {
+// grantFor mints the new address's key when --share asked for one. A
+// failure here comes after the reservation, so the error says the
+// address exists and how to get its key.
+func grantFor(reserved *api.HmeEmail, shared bool) (*inboxkey.Grant, error) {
+	if !shared {
+		return nil, nil
+	}
+	g, err := inboxkey.Issue(reserved.Hme, "", time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("reserved %s (label: %s), but could not make its key: %w\n\n  The address exists. Its key: ihme share %s",
+			reserved.Hme, reserved.Label, err, reserved.Hme)
+	}
+	return g, nil
+}
+
+func printReserved(reserved *api.HmeEmail, g *inboxkey.Grant) {
+	fmt.Printf("Reserved: %s (label: %s)\n", reserved.Hme, reserved.Label)
+	if g != nil {
+		fmt.Print(g.Text(reserved.Hme))
+	}
+}
+
+func interactive(svc *app.Service, candidates []string, label string, tagList []string, note string, shared bool, cmd *cobra.Command) error {
 	fmt.Println()
 	for i, c := range candidates {
 		fmt.Printf("  [%d] %s\n", i+1, c)
@@ -177,5 +256,5 @@ func interactive(svc *app.Service, candidates []string, label string, tagList []
 		return fmt.Errorf("invalid choice — enter 1-%d or c", len(candidates))
 	}
 
-	return reserve(svc, candidates[idx-1], label, tagList, note, false, cmd)
+	return reserve(svc, candidates[idx-1], label, tagList, note, false, shared, cmd)
 }
