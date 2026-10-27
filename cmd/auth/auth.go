@@ -2,16 +2,23 @@ package auth
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/lroolle/ihme-cli/api"
+	"github.com/lroolle/ihme-cli/internal/securitykey"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// securityKeyWait bounds how long login waits for a security key to
+// be plugged in and touched before giving up.
+const securityKeyWait = 2 * time.Minute
 
 func NewCmdAuth() *cobra.Command {
 	cmd := &cobra.Command{
@@ -35,6 +42,9 @@ func newCmdLogin() *cobra.Command {
 		Use:   "login",
 		Short: "Sign in with your Apple ID",
 		Long: `Sign in with your Apple ID using SRP authentication + 2FA.
+
+2FA is a six-digit code, or, if your Apple Account uses security
+keys, a touch on a FIDO2 key plugged in over USB.
 
 Credentials are never stored. Session tokens are saved to:
   ~/.config/ihme/session.json (respects $XDG_CONFIG_HOME)
@@ -116,8 +126,18 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 				return code, nil
 			}
 
+			keyCallback := func(challenge api.SecurityKeyChallenge) (*api.SecurityKeyAssertion, error) {
+				if len(challenge.KeyNames) > 0 {
+					fmt.Printf("This Apple Account uses security keys (%s).\n", strings.Join(challenge.KeyNames, ", "))
+				}
+				fmt.Println("Insert your security key and touch it when it flashes...")
+				ctx, cancel := context.WithTimeout(cmd.Context(), securityKeyWait)
+				defer cancel()
+				return securitykey.Assert(ctx, challenge)
+			}
+
 			fmt.Println("Authenticating...")
-			if err := client.Login(appleID, password, otpCallback); err != nil {
+			if err := client.Login(appleID, password, otpCallback, keyCallback); err != nil {
 				// %v, not %w, on purpose: the final accountLogin can
 				// fail as an auth rejection, and cmdutil.Explain would
 				// answer it with "Fix: ihme auth login" — the command

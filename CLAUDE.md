@@ -40,6 +40,8 @@ api/
 
 internal/
   srp/                   SRP-6a (NG_2048, SHA-256, NoUserNameInX)
+  securitykey/           FIDO2 assertion over USB HID (cgo-free) for
+                         security-key 2FA; touch only, no PIN
   cmdutil/               GetClient, OutputResult, ExactRefArg, RefOrPick +
                          PickAddress (omitted <ref> at a TTY -> newest-first
                          picker; never prompts without a TTY or with --json)
@@ -149,6 +151,9 @@ Apple SRP via idmsa.apple.com (web auth, not GSA):
    for a VALID code — the acceptance signal is the fresh
    X-Apple-Session-Token header, not the status (rclone#9488). Do
    not "restore" a strict 2xx check there.
+   Security-key accounts get no code at all: GET /appleauth/auth
+   carries fsaChallenge, internal/securitykey has a USB FIDO2 key
+   sign it, POST /verify/security/key (pyicloud's request shape).
 6. GET  /2sv/trust — trust token
 7. POST setup.icloud.com/accountLogin — get webservices map + cookies
 

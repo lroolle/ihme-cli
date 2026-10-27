@@ -133,6 +133,31 @@ type AuthOptionsResponse struct {
 	TrustedPhoneNumbers     []TrustedPhoneNumber     `json:"trustedPhoneNumbers,omitempty"`
 	TrustedDevices          []TrustedDevice          `json:"trustedDevices,omitempty"`
 	NoTrustedDevices        bool                     `json:"noTrustedDevices,omitempty"`
+	// Set when the account's second factor is a hardware security
+	// key. Apple then sends no code anywhere; it wants a WebAuthn
+	// assertion instead.
+	FsaChallenge *SecurityKeyChallenge `json:"fsaChallenge,omitempty"`
+	KeyNames     []string              `json:"keyNames,omitempty"`
+}
+
+// SecurityKeyChallenge is Apple's WebAuthn request (fsaChallenge).
+// Challenge and KeyHandles are base64url, as Apple sends them.
+type SecurityKeyChallenge struct {
+	Challenge  string   `json:"challenge"`
+	KeyHandles []string `json:"keyHandles"`
+	RpID       string   `json:"rpId"`
+	// KeyNames are the names the user gave the keys, for the prompt.
+	KeyNames []string `json:"-"`
+}
+
+// SecurityKeyAssertion is a security key's signed answer to a
+// SecurityKeyChallenge, as raw bytes.
+type SecurityKeyAssertion struct {
+	ClientData        []byte
+	AuthenticatorData []byte
+	Signature         []byte
+	UserHandle        []byte
+	CredentialID      []byte
 }
 
 type PhoneNumberVerification struct {

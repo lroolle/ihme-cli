@@ -138,7 +138,7 @@ Going public: there is no admin page, shares are managed with `ihme share` on th
 
 ## Authentication and errors
 
-`ihme auth login` signs in interactively with Apple ID and two-factor authentication. `ihme auth status --json` checks the saved session against iCloud; add `--local` to inspect only the local file.
+`ihme auth login` signs in interactively with Apple ID and two-factor authentication. If the Apple Account uses security keys, Apple sends no code; plug a FIDO2 key into USB and touch it when asked. A key that demands its PIN on every use is not supported yet. On Linux the key needs udev rules that let your user open it. `ihme auth status --json` checks the saved session against iCloud; add `--local` to inspect only the local file.
 
 Exit codes: `0` success, `1` other error, `2` authentication required. A rejected session is refreshed once during an HME call; if Apple still refuses it, run `ihme auth login`. A temporary network or server failure asks you to retry instead.
 

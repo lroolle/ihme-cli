@@ -3,9 +3,12 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -174,5 +177,96 @@ func TestSigninError(t *testing.T) {
 				t.Errorf("error %q does not contain %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// toServer sends every request to srv, whatever host it names, so
+// the real AuthEndpoint URLs can be exercised against a fake Apple.
+type toServer struct{ srv *httptest.Server }
+
+func (t toServer) RoundTrip(r *http.Request) (*http.Response, error) {
+	u, _ := url.Parse(t.srv.URL)
+	r.URL.Scheme, r.URL.Host = u.Scheme, u.Host
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// A security-key account gets no code anywhere: login must answer
+// fsaChallenge with the key's signature at /verify/security/key and
+// never prompt for a code.
+func TestHandle2FASecurityKey(t *testing.T) {
+	var submitted map[string]any
+	status := 200
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/appleauth/auth":
+			fmt.Fprint(w, `{"fsaChallenge":{"challenge":"Y2hhbGxlbmdl","keyHandles":["a2V5MQ","a2V5Mg"],"rpId":"apple.com"},"keyNames":["Blue","Black"],"trustedPhoneNumbers":[{"id":1,"pushMode":"sms"}]}`)
+		case r.Method == "POST" && r.URL.Path == "/appleauth/auth/verify/security/key":
+			if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
+				t.Errorf("decoding submitted body: %v", err)
+			}
+			w.WriteHeader(status)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}))
+	defer srv.Close()
+
+	newClient := func() *Client {
+		c, _ := NewClient()
+		c.http.Transport = toServer{srv}
+		return c
+	}
+	otp := func() (string, error) {
+		t.Error("a security-key account must not be asked for a code")
+		return "", errors.New("unexpected")
+	}
+	var got SecurityKeyChallenge
+	key := func(ch SecurityKeyChallenge) (*SecurityKeyAssertion, error) {
+		got = ch
+		return &SecurityKeyAssertion{
+			ClientData:        []byte("cd"),
+			AuthenticatorData: []byte("ad"),
+			Signature:         []byte("sig"),
+			CredentialID:      []byte("key1"),
+		}, nil
+	}
+
+	if err := newClient().handle2FA(otp, key); err != nil {
+		t.Fatalf("handle2FA: %v", err)
+	}
+	if got.Challenge != "Y2hhbGxlbmdl" || got.RpID != "apple.com" || len(got.KeyHandles) != 2 {
+		t.Errorf("challenge passed to the key = %+v", got)
+	}
+	if strings.Join(got.KeyNames, ",") != "Blue,Black" {
+		t.Errorf("key names = %v, want Blue,Black", got.KeyNames)
+	}
+	want := map[string]any{
+		"challenge":         "Y2hhbGxlbmdl",
+		"clientData":        "Y2Q=",
+		"authenticatorData": "YWQ=",
+		"signatureData":     "c2ln",
+		"credentialID":      "a2V5MQ==",
+		"userHandle":        nil,
+		"rpId":              "apple.com",
+	}
+	for k, v := range want {
+		if submitted[k] != v {
+			t.Errorf("submitted %s = %v, want %v", k, submitted[k], v)
+		}
+	}
+
+	status = 400
+	if err := newClient().handle2FA(otp, key); err == nil || !strings.Contains(err.Error(), "security key not accepted by Apple") {
+		t.Errorf("400 from Apple: got %v", err)
+	}
+
+	if err := newClient().handle2FA(otp, nil); err == nil || !strings.Contains(err.Error(), "security key") {
+		t.Errorf("no key callback: got %v", err)
+	}
+
+	keyErr := func(SecurityKeyChallenge) (*SecurityKeyAssertion, error) { return nil, errors.New("not touched") }
+	if err := newClient().handle2FA(otp, keyErr); err == nil || !strings.Contains(err.Error(), "not touched") {
+		t.Errorf("key failure must surface: got %v", err)
 	}
 }

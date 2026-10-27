@@ -18,7 +18,12 @@ import (
 
 type TwoFactorCallback func() (string, error)
 
-func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) error {
+// SecurityKeyCallback has a hardware security key sign Apple's
+// challenge. Login calls it instead of TwoFactorCallback when the
+// account uses security keys: Apple then sends no code at all.
+type SecurityKeyCallback func(SecurityKeyChallenge) (*SecurityKeyAssertion, error)
+
+func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	c.session.AppleID = strings.ToLower(appleID)
 	c.frameID = strings.ToLower(uuid.New().String())
 
@@ -30,7 +35,7 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) 
 		return fmt.Errorf("federate: %w", err)
 	}
 
-	if err := c.srpAuthenticate(c.session.AppleID, password, otpCallback); err != nil {
+	if err := c.srpAuthenticate(c.session.AppleID, password, otpCallback, keyCallback); err != nil {
 		return err
 	}
 
@@ -200,7 +205,7 @@ func (c *Client) authFederate(email string) error {
 	return nil
 }
 
-func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCallback) error {
+func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	params := srp.Apple2048Params()
 	client, err := srp.NewClient(params)
 	if err != nil {
@@ -269,7 +274,7 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 		if c.Verbose {
 			fmt.Fprintf(os.Stderr, "[auth] 409 body: %s\n", string(body))
 		}
-		return c.handle2FA(otpCallback)
+		return c.handle2FA(otpCallback, keyCallback)
 	case 412:
 		return fmt.Errorf("account requires acknowledgment at appleid.apple.com")
 	default:
@@ -327,11 +332,7 @@ func signinError(step string, status int, body []byte) error {
 	}
 }
 
-func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
-	if otpCallback == nil {
-		return fmt.Errorf("two-factor authentication required but no callback provided")
-	}
-
+func (c *Client) handle2FA(otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	_, authBody, err := c.doAuthRequest("GET", AuthEndpoint, nil)
 	if err != nil {
 		return fmt.Errorf("fetching auth options: %w", err)
@@ -343,6 +344,20 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 	var opts AuthOptionsResponse
 	if err := json.Unmarshal(authBody, &opts); err != nil {
 		return fmt.Errorf("parsing auth options: %w", err)
+	}
+
+	// A security-key account gets no code on any device or phone,
+	// so this check comes before every code path. fsaChallenge is
+	// only in this JSON shape, not the HTML auth shell
+	// (pyicloud#363/#364, verified live with a YubiKey 2026-10-05).
+	if opts.FsaChallenge != nil {
+		challenge := *opts.FsaChallenge
+		challenge.KeyNames = opts.KeyNames
+		return c.handle2FASecurityKey(challenge, keyCallback)
+	}
+
+	if otpCallback == nil {
+		return fmt.Errorf("two-factor authentication required but no callback provided")
 	}
 
 	// Some accounts nest auth state under phoneNumberVerification
@@ -447,6 +462,59 @@ func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
 		return fmt.Errorf("incorrect verification code")
 	default:
 		return fmt.Errorf("2FA verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+	}
+}
+
+// handle2FASecurityKey answers Apple's WebAuthn challenge for an
+// account protected by hardware security keys: the key's signature
+// is the second factor. The request shape follows pyicloud's
+// confirm_security_key (standard base64 for the byte fields, the
+// challenge echoed back as Apple sent it).
+func (c *Client) handle2FASecurityKey(challenge SecurityKeyChallenge, keyCallback SecurityKeyCallback) error {
+	if keyCallback == nil {
+		return fmt.Errorf("this Apple Account signs in with a security key, which this client cannot use")
+	}
+	if challenge.Challenge == "" || challenge.RpID == "" {
+		return fmt.Errorf("security key challenge from Apple is missing challenge or rpId")
+	}
+
+	assertion, err := keyCallback(challenge)
+	if err != nil {
+		return fmt.Errorf("security key: %w", err)
+	}
+
+	resp, respBody, err := c.doAuthRequest("POST", AuthEndpoint+"/verify/security/key",
+		securityKeyRequest(challenge, assertion))
+	if err != nil {
+		return fmt.Errorf("submitting security key: %w", err)
+	}
+
+	switch {
+	case resp.StatusCode == 200 || resp.StatusCode == 204:
+		return nil
+	case codeAcceptedDespiteConflict(resp, respBody):
+		return nil
+	case resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403:
+		return fmt.Errorf("security key not accepted by Apple (%d): %s", resp.StatusCode, truncate(string(respBody), 200))
+	default:
+		return fmt.Errorf("security key verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+	}
+}
+
+func securityKeyRequest(challenge SecurityKeyChallenge, a *SecurityKeyAssertion) map[string]any {
+	b64 := base64.StdEncoding.EncodeToString
+	var userHandle any // JSON null when the key returns none
+	if len(a.UserHandle) > 0 {
+		userHandle = b64(a.UserHandle)
+	}
+	return map[string]any{
+		"challenge":         challenge.Challenge,
+		"clientData":        b64(a.ClientData),
+		"signatureData":     b64(a.Signature),
+		"authenticatorData": b64(a.AuthenticatorData),
+		"userHandle":        userHandle,
+		"credentialID":      b64(a.CredentialID),
+		"rpId":              challenge.RpID,
 	}
 }
 
