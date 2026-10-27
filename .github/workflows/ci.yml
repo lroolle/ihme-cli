@@ -26,3 +26,18 @@ jobs:
       - run: go build -o ihme ./cmd/ihme
       - run: ./ihme version
       - run: ./ihme --help
+
+  # The release binaries are CGO_ENABLED=0; on macOS the security-key
+  # HID backend still loads IOKit at startup (purego), so every
+  # command depends on it. Run a darwin binary, not just build one.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=0 go build -o ihme ./cmd/ihme
+      - run: ./ihme version
+      - run: ./ihme --help
+      - run: go test ./api ./internal/securitykey ./cmd/...

@@ -274,7 +274,7 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 		if c.Verbose {
 			fmt.Fprintf(os.Stderr, "[auth] 409 body: %s\n", string(body))
 		}
-		return c.handle2FA(otpCallback, keyCallback)
+		return c.handle2FA(body, otpCallback, keyCallback)
 	case 412:
 		return fmt.Errorf("account requires acknowledgment at appleid.apple.com")
 	default:
@@ -332,7 +332,11 @@ func signinError(step string, status int, body []byte) error {
 	}
 }
 
-func (c *Client) handle2FA(otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
+// handle2FA completes the second factor. signinBody is the 409 from
+// /signin/complete: some accounts carry the security-key challenge
+// there too (rhoopr/kei srp.rs), which is the fallback when the
+// options GET lacks it.
+func (c *Client) handle2FA(signinBody []byte, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	_, authBody, err := c.doAuthRequest("GET", AuthEndpoint, nil)
 	if err != nil {
 		return fmt.Errorf("fetching auth options: %w", err)
@@ -348,12 +352,28 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback, keyCallback SecurityKe
 
 	// A security-key account gets no code on any device or phone,
 	// so this check comes before every code path. fsaChallenge is
-	// only in this JSON shape, not the HTML auth shell
-	// (pyicloud#363/#364, verified live with a YubiKey 2026-10-05).
-	if opts.FsaChallenge != nil {
-		challenge := *opts.FsaChallenge
+	// in this JSON shape, not the HTML auth shell (pyicloud#363/#364).
+	verification := opts.securityKey()
+	if verification == nil {
+		var signin AuthOptionsResponse
+		if json.Unmarshal(signinBody, &signin) == nil {
+			verification = signin.securityKey()
+			if len(opts.KeyNames) == 0 {
+				opts.KeyNames = signin.KeyNames
+			}
+		}
+	}
+	if verification != nil {
+		if verification.RequirePrf {
+			return fmt.Errorf("this sign-in requires the security key PRF extension, which ihme does not support")
+		}
+		challenge := *verification.FsaChallenge
 		challenge.KeyNames = opts.KeyNames
 		return c.handle2FASecurityKey(challenge, keyCallback)
+	}
+	if len(opts.KeyNames) > 0 {
+		// Prompting for a code here would wait for one that never comes.
+		return fmt.Errorf("this Apple Account uses security keys, but Apple sent no security key challenge; run ihme auth login -v and report the output")
 	}
 
 	if otpCallback == nil {
@@ -474,8 +494,17 @@ func (c *Client) handle2FASecurityKey(challenge SecurityKeyChallenge, keyCallbac
 	if keyCallback == nil {
 		return fmt.Errorf("this Apple Account signs in with a security key, which this client cannot use")
 	}
-	if challenge.Challenge == "" || challenge.RpID == "" {
-		return fmt.Errorf("security key challenge from Apple is missing challenge or rpId")
+	if len(challenge.KeyHandles) == 0 && challenge.AllowedCredentials != "" {
+		for _, id := range strings.Split(challenge.AllowedCredentials, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				challenge.KeyHandles = append(challenge.KeyHandles, id)
+			}
+		}
+	}
+	// Without key handles the key would look for a discoverable
+	// credential and report "not registered" for the right key.
+	if challenge.Challenge == "" || challenge.RpID == "" || len(challenge.KeyHandles) == 0 {
+		return fmt.Errorf("security key challenge from Apple is missing challenge, rpId, or key handles")
 	}
 
 	assertion, err := keyCallback(challenge)
@@ -489,16 +518,33 @@ func (c *Client) handle2FASecurityKey(challenge SecurityKeyChallenge, keyCallbac
 		return fmt.Errorf("submitting security key: %w", err)
 	}
 
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] security key: %d %s\n", resp.StatusCode, truncate(string(respBody), 2000))
+	}
+
 	switch {
 	case resp.StatusCode == 200 || resp.StatusCode == 204:
 		return nil
-	case codeAcceptedDespiteConflict(resp, respBody):
+	case resp.StatusCode == 409 && !hasServiceErrors(respBody):
+		// Apple's sign-in page treats a 409 here as accepted
+		// (mandarons/icloudpy#174), as the securitycode endpoints
+		// now answer 409 for valid codes. Accepting is safe: the
+		// trust step that follows refuses a session Apple did not
+		// verify.
 		return nil
-	case resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403:
+	case resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 409:
 		return fmt.Errorf("security key not accepted by Apple (%d): %s", resp.StatusCode, truncate(string(respBody), 200))
 	default:
 		return fmt.Errorf("security key verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
 	}
+}
+
+// hasServiceErrors reports whether Apple's response names an error.
+func hasServiceErrors(body []byte) bool {
+	var parsed struct {
+		ServiceErrors []json.RawMessage `json:"serviceErrors"`
+	}
+	return json.Unmarshal(body, &parsed) == nil && len(parsed.ServiceErrors) > 0
 }
 
 func securityKeyRequest(challenge SecurityKeyChallenge, a *SecurityKeyAssertion) map[string]any {

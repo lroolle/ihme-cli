@@ -232,7 +232,7 @@ func TestHandle2FASecurityKey(t *testing.T) {
 		}, nil
 	}
 
-	if err := newClient().handle2FA(otp, key); err != nil {
+	if err := newClient().handle2FA(nil, otp, key); err != nil {
 		t.Fatalf("handle2FA: %v", err)
 	}
 	if got.Challenge != "Y2hhbGxlbmdl" || got.RpID != "apple.com" || len(got.KeyHandles) != 2 {
@@ -251,22 +251,139 @@ func TestHandle2FASecurityKey(t *testing.T) {
 		"rpId":              "apple.com",
 	}
 	for k, v := range want {
-		if submitted[k] != v {
-			t.Errorf("submitted %s = %v, want %v", k, submitted[k], v)
+		if got, ok := submitted[k]; !ok || got != v {
+			t.Errorf("submitted %s = %v (present %v), want %v", k, got, ok, v)
 		}
 	}
 
 	status = 400
-	if err := newClient().handle2FA(otp, key); err == nil || !strings.Contains(err.Error(), "security key not accepted by Apple") {
+	if err := newClient().handle2FA(nil, otp, key); err == nil || !strings.Contains(err.Error(), "security key not accepted by Apple") {
 		t.Errorf("400 from Apple: got %v", err)
 	}
 
-	if err := newClient().handle2FA(otp, nil); err == nil || !strings.Contains(err.Error(), "security key") {
+	if err := newClient().handle2FA(nil, otp, nil); err == nil || !strings.Contains(err.Error(), "security key") {
 		t.Errorf("no key callback: got %v", err)
 	}
 
 	keyErr := func(SecurityKeyChallenge) (*SecurityKeyAssertion, error) { return nil, errors.New("not touched") }
-	if err := newClient().handle2FA(otp, keyErr); err == nil || !strings.Contains(err.Error(), "not touched") {
+	if err := newClient().handle2FA(nil, otp, keyErr); err == nil || !strings.Contains(err.Error(), "not touched") {
 		t.Errorf("key failure must surface: got %v", err)
+	}
+}
+
+// keyNames alone still means a security-key account: never fall
+// through to a code prompt that cannot be answered.
+func TestHandle2FAKeyNamesWithoutChallenge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"keyNames":["Blue"],"trustedPhoneNumbers":[{"id":1,"pushMode":"sms"}]}`)
+	}))
+	defer srv.Close()
+	c, _ := NewClient()
+	c.http.Transport = toServer{srv}
+	otp := func() (string, error) {
+		t.Error("must not prompt for a code")
+		return "", errors.New("unexpected")
+	}
+	if err := c.handle2FA(nil, otp, nil); err == nil || !strings.Contains(err.Error(), "no security key challenge") {
+		t.Errorf("got %v", err)
+	}
+}
+
+// fakeApple serves the 2FA options GET with options and answers the
+// security-key POST with status and body.
+func fakeApple(t *testing.T, options string, status int, body string) *Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/appleauth/auth":
+			fmt.Fprint(w, options)
+		case r.Method == "POST" && r.URL.Path == "/appleauth/auth/verify/security/key":
+			w.WriteHeader(status)
+			fmt.Fprint(w, body)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c, _ := NewClient()
+	c.http.Transport = toServer{srv}
+	return c
+}
+
+// Every shape Apple (or a man in the middle of our reading of it) has
+// been seen to use for the challenge must reach the key, and the
+// answer statuses must be read the way Apple's own page reads them.
+func TestHandle2FASecurityKeyShapes(t *testing.T) {
+	const challenge = `{"challenge":"Y2g","keyHandles":["a2V5MQ"],"rpId":"apple.com"}`
+	noCode := func() (string, error) {
+		t.Error("must not prompt for a code")
+		return "", errors.New("unexpected")
+	}
+	cases := []struct {
+		name       string
+		options    string
+		signin     string
+		status     int
+		body       string
+		wantErr    string // "" means success
+		wantHandle string
+	}{
+		{"top level", `{"fsaChallenge":` + challenge + `}`, "", 200, "", "", "a2V5MQ"},
+		{"nested under fsaVerification", `{"fsaVerification":{"fsaChallenge":` + challenge + `}}`, "", 200, "", "", "a2V5MQ"},
+		{"only in the signin 409", `{"trustedPhoneNumbers":[{"id":1,"pushMode":"sms"}]}`, `{"fsaChallenge":` + challenge + `}`, 200, "", "", "a2V5MQ"},
+		{"allowedCredentials instead of keyHandles", `{"fsaChallenge":{"challenge":"Y2g","allowedCredentials":"a2V5Mg, a2V5Mw","rpId":"apple.com"}}`, "", 200, "", "", "a2V5Mg"},
+		{"no key handles at all", `{"fsaChallenge":{"challenge":"Y2g","rpId":"apple.com"}}`, "", 200, "", "missing challenge, rpId, or key handles", ""},
+		{"PRF required", `{"fsaChallenge":` + challenge + `,"requirePrf":true}`, "", 200, "", "PRF extension", ""},
+		{"409 without serviceErrors is accepted", `{"fsaChallenge":` + challenge + `}`, "", 409, `{}`, "", "a2V5MQ"},
+		{"409 with serviceErrors is refused", `{"fsaChallenge":` + challenge + `}`, "", 409, `{"serviceErrors":[{"code":"-27962"}]}`, "not accepted by Apple (409)", "a2V5MQ"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got SecurityKeyChallenge
+			key := func(ch SecurityKeyChallenge) (*SecurityKeyAssertion, error) {
+				got = ch
+				return &SecurityKeyAssertion{CredentialID: []byte("key1")}, nil
+			}
+			err := fakeApple(t, tc.options, tc.status, tc.body).handle2FA([]byte(tc.signin), noCode, key)
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("want success, got %v", err)
+			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+				t.Fatalf("want error containing %q, got %v", tc.wantErr, err)
+			}
+			if tc.wantHandle != "" && (len(got.KeyHandles) == 0 || got.KeyHandles[0] != tc.wantHandle) {
+				t.Errorf("key handles = %v, want first %q", got.KeyHandles, tc.wantHandle)
+			}
+		})
+	}
+}
+
+// The regression guard for everyone else: an account that uses codes
+// still gets the push, the prompt, and the code POST, and the key
+// callback is never called.
+func TestHandle2FACodeAccountUnchanged(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.Method == "GET" {
+			fmt.Fprint(w, `{"trustedDevices":[{"name":"iPhone","id":"1"}]}`)
+		}
+	}))
+	defer srv.Close()
+	c, _ := NewClient()
+	c.http.Transport = toServer{srv}
+	prompted := false
+	otp := func() (string, error) { prompted = true; return "123456", nil }
+	key := func(SecurityKeyChallenge) (*SecurityKeyAssertion, error) {
+		t.Error("a code account must not reach the security key")
+		return nil, errors.New("unexpected")
+	}
+	if err := c.handle2FA([]byte(`{}`), otp, key); err != nil {
+		t.Fatal(err)
+	}
+	want := "GET /appleauth/auth,PUT /appleauth/auth/verify/trusteddevice/securitycode,POST /appleauth/auth/verify/trusteddevice/securitycode"
+	if got := strings.Join(calls, ","); got != want || !prompted {
+		t.Errorf("calls = %s (prompted %v)\nwant    %s", got, prompted, want)
 	}
 }

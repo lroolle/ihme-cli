@@ -135,9 +135,32 @@ type AuthOptionsResponse struct {
 	NoTrustedDevices        bool                     `json:"noTrustedDevices,omitempty"`
 	// Set when the account's second factor is a hardware security
 	// key. Apple then sends no code anywhere; it wants a WebAuthn
-	// assertion instead.
+	// assertion instead. The challenge comes either at the top level
+	// or nested under fsaVerification (seen by rclone#9734 testers).
+	SecurityKeyVerification
+	FsaVerification *SecurityKeyVerification `json:"fsaVerification,omitempty"`
+	KeyNames        []string                 `json:"keyNames,omitempty"`
+}
+
+// SecurityKeyVerification is the security-key part of Apple's 2FA
+// options.
+type SecurityKeyVerification struct {
 	FsaChallenge *SecurityKeyChallenge `json:"fsaChallenge,omitempty"`
-	KeyNames     []string              `json:"keyNames,omitempty"`
+	// RequirePrf asks for the WebAuthn PRF extension, which no
+	// client of this flow supports.
+	RequirePrf bool `json:"requirePrf,omitempty"`
+}
+
+// securityKey returns the security-key verification wherever Apple put
+// it, or nil for an account that uses codes.
+func (o *AuthOptionsResponse) securityKey() *SecurityKeyVerification {
+	if o.FsaChallenge != nil {
+		return &o.SecurityKeyVerification
+	}
+	if o.FsaVerification != nil && o.FsaVerification.FsaChallenge != nil {
+		return o.FsaVerification
+	}
+	return nil
 }
 
 // SecurityKeyChallenge is Apple's WebAuthn request (fsaChallenge).
@@ -145,7 +168,10 @@ type AuthOptionsResponse struct {
 type SecurityKeyChallenge struct {
 	Challenge  string   `json:"challenge"`
 	KeyHandles []string `json:"keyHandles"`
-	RpID       string   `json:"rpId"`
+	// AllowedCredentials carries the same credential IDs, comma
+	// separated; XcodesLoginKit builds its allow list from it.
+	AllowedCredentials string `json:"allowedCredentials,omitempty"`
+	RpID               string `json:"rpId"`
 	// KeyNames are the names the user gave the keys, for the prompt.
 	KeyNames []string `json:"-"`
 }

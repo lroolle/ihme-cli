@@ -5,6 +5,7 @@
 // Only user presence (a touch) is requested, as Apple's own web flow
 // does. A key configured to demand its PIN on every use (alwaysUv)
 // is refused with a clear error rather than prompted for a PIN.
+// U2F-only (CTAP1) keys are not supported.
 package securitykey
 
 import (
@@ -14,64 +15,103 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"iter"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/lroolle/ihme-cli/api"
 	"github.com/telesma-app/ctap/authenticator"
+	"github.com/telesma-app/ctap/backend"
 	directhid "github.com/telesma-app/ctap/backend/hid"
 	"github.com/telesma-app/ctap/credential"
+	"github.com/telesma-app/ctap/protocol"
 	"github.com/telesma-app/ctap/transport"
 )
 
-// origin is the WebAuthn origin written into clientData. Apple's
-// rpId is apple.com; pyicloud signs with this same origin and
-// icloudpd users sign in with it.
-const origin = "https://apple.com"
+// origin is the WebAuthn origin written into clientData and rpID the
+// only relying party a key is asked to sign for. pyicloud signs with
+// the same pair (timlaing/pyicloud#364, live with a YubiKey).
+const (
+	origin = "https://apple.com"
+	rpID   = "apple.com"
+)
 
-// pollInterval is how often Assert looks for a key that is not yet
-// plugged in.
-const pollInterval = 500 * time.Millisecond
+const (
+	// pollInterval is how often the plugged-in keys are looked at
+	// again while waiting.
+	pollInterval = 500 * time.Millisecond
+	// deniedPolls is how many polls in a row a key may refuse to
+	// open before that is the answer: right after plug-in, Linux
+	// creates the device node before udev grants access to it.
+	deniedPolls = 4
+)
 
-// Assert waits for a security key to appear, has the user touch it,
-// and returns its signature over Apple's challenge. ctx bounds the
-// whole wait. With several keys plugged in, the first touch picks
-// the key and a second touch signs.
+// Assert waits for a security key registered to the account, has the
+// user touch it, and returns its signature over Apple's challenge.
+// ctx bounds the whole wait. With several keys plugged in, only the
+// registered one is asked for a touch.
 func Assert(ctx context.Context, challenge api.SecurityKeyChallenge) (*api.SecurityKeyAssertion, error) {
+	// The key signs for whatever rpId it is handed; a browser would
+	// refuse one that does not match the origin, and so do we.
+	if challenge.RpID != rpID {
+		return nil, fmt.Errorf("refusing to sign for rpId %q; Apple's is %q", challenge.RpID, rpID)
+	}
 	clientData, allowList, err := prepare(challenge)
 	if err != nil {
 		return nil, err
 	}
 
-	device, err := waitForKey(ctx)
+	device, allowList, err := waitForKey(ctx, directhid.Enumerate, clientData, allowList)
 	if err != nil {
 		return nil, err
 	}
 	defer device.Close()
 
-	for resp, err := range device.GetAssertion(ctx, nil, challenge.RpID, clientData, allowList, nil, nil) {
-		if err != nil {
-			return nil, explain(err)
-		}
-		credentialID := resp.Credential.ID
-		if len(credentialID) == 0 && len(allowList) == 1 {
-			// CTAP lets the key omit the credential when the
-			// allow list named exactly one.
-			credentialID = allowList[0].ID
-		}
-		assertion := &api.SecurityKeyAssertion{
-			ClientData:        clientData,
-			AuthenticatorData: resp.AuthDataRaw,
-			Signature:         resp.Signature,
-			CredentialID:      credentialID,
-		}
-		if resp.User != nil {
-			assertion.UserHandle = resp.User.ID
-		}
-		return assertion, nil
+	resp, err := firstAssertion(ctx, device, clientData, allowList, nil)
+	if err != nil {
+		return nil, explain(err)
 	}
-	return nil, errors.New("the security key returned no signature")
+	return toAssertion(clientData, allowList, resp)
+}
+
+// toAssertion maps a key's answer to what Apple is sent.
+func toAssertion(clientData []byte, allowList []credential.PublicKeyCredentialDescriptor,
+	resp protocol.AuthenticatorGetAssertionResponse,
+) (*api.SecurityKeyAssertion, error) {
+	credentialID := resp.Credential.ID
+	if len(credentialID) == 0 && len(allowList) == 1 {
+		// CTAP lets the key omit the credential when the allow list
+		// named exactly one.
+		credentialID = allowList[0].ID
+	}
+	if len(credentialID) == 0 {
+		return nil, errors.New("the security key did not say which credential it used")
+	}
+	assertion := &api.SecurityKeyAssertion{
+		ClientData:        clientData,
+		AuthenticatorData: resp.AuthDataRaw,
+		Signature:         resp.Signature,
+		CredentialID:      credentialID,
+	}
+	if resp.User != nil {
+		assertion.UserHandle = resp.User.ID
+	}
+	return assertion, nil
+}
+
+// silent asks a key to check for a credential without a touch or a
+// blink (CTAP "up": false).
+var silent = map[protocol.Option]bool{protocol.OptionUserPresence: false}
+
+// firstAssertion returns the first assertion the key yields. With an
+// allow list the key returns one, so stopping there loses nothing.
+func firstAssertion(ctx context.Context, device *authenticator.Device, clientData []byte,
+	allowList []credential.PublicKeyCredentialDescriptor, options map[protocol.Option]bool,
+) (protocol.AuthenticatorGetAssertionResponse, error) {
+	for resp, err := range device.GetAssertion(ctx, nil, rpID, clientData, allowList, nil, options) {
+		return resp, err
+	}
+	return protocol.AuthenticatorGetAssertionResponse{}, errors.New("the security key returned no signature")
 }
 
 // collectedClientData is WebAuthn's CollectedClientData. Field order
@@ -122,36 +162,110 @@ func decodeBase64(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
 }
 
-// waitForKey returns the first security key found, polling until one
-// is plugged in or ctx ends.
-func waitForKey(ctx context.Context) (*authenticator.Device, error) {
+// waitForKey returns a plugged-in key that holds one of the account's
+// credentials, and the allow list narrowed to that credential, polling
+// until one appears or ctx ends.
+//
+// It stops early in two cases, because waiting will not change them:
+// every key that answered lacks the credential (the wrong key), or a
+// key has refused access for deniedPolls polls in a row. Any other
+// failure (a key still booting, an unrelated HID device) is "not yet",
+// and the last one is reported if the wait runs out.
+func waitForKey(ctx context.Context, enumerate backend.Enumerator, clientData []byte,
+	allowList []credential.PublicKeyCredentialDescriptor,
+) (*authenticator.Device, []credential.PublicKeyCredentialDescriptor, error) {
+	var lastErr error
+	denied := 0
 	for {
-		seen := 0
-		enumerate := func(ctx context.Context) iter.Seq2[transport.Device, error] {
-			return func(yield func(transport.Device, error) bool) {
-				for d, err := range directhid.Enumerate(ctx) {
-					seen++
-					if !yield(d, err) {
-						return
-					}
-				}
+		device, narrowed, err := findKey(ctx, enumerate, clientData, allowList)
+		switch {
+		case device != nil:
+			return device, narrowed, nil
+		case isNoCredentials(err):
+			return nil, nil, explain(err)
+		case errors.Is(err, fs.ErrPermission):
+			if denied++; denied >= deniedPolls {
+				return nil, nil, explain(err)
 			}
+		default:
+			denied = 0
 		}
-		device, err := authenticator.Select(ctx, enumerate)
-		if err == nil {
-			return device, nil
-		}
-		if seen > 0 {
-			// A key is there but could not be opened or picked.
-			return nil, explain(err)
+		if err != nil && ctx.Err() == nil {
+			lastErr = err
 		}
 		select {
 		case <-ctx.Done():
-			return nil, errors.New("no security key found; plug one in and run ihme auth login again")
+			if lastErr != nil {
+				return nil, nil, fmt.Errorf("no usable security key found: %w", explain(lastErr))
+			}
+			return nil, nil, errors.New("no security key found; plug one in and run ihme auth login again")
 		case <-time.After(pollInterval):
 		}
 	}
 }
+
+// findKey picks among the plugged-in keys the way python-fido2 and
+// browsers do: each is asked silently whether it holds one of the
+// account's credentials, and the first that does is returned with the
+// allow list narrowed to that credential; the rest are closed. One
+// touch, even with both of a user's keys plugged in, and no CTAP 2.1
+// selection command. A key that cannot answer the silent check is kept
+// as a fallback and asked for a touch with the full allow list.
+//
+// Without a key it returns an open failure if there was one, else the
+// no-credentials error if a key answered, else (nil, nil, nil) when
+// nothing is plugged in.
+func findKey(ctx context.Context, enumerate backend.Enumerator, clientData []byte,
+	allowList []credential.PublicKeyCredentialDescriptor,
+) (*authenticator.Device, []credential.PublicKeyCredentialDescriptor, error) {
+	var (
+		openErr, wrongKey error
+		fallback          *authenticator.Device
+	)
+	for t, err := range enumerate(ctx) {
+		if err != nil {
+			openErr = errors.Join(openErr, err)
+			continue
+		}
+		device, err := authenticator.New(ctx, t)
+		if err != nil {
+			openErr = errors.Join(openErr, err, t.Close())
+			continue
+		}
+		resp, err := firstAssertion(ctx, device, clientData, allowList, silent)
+		switch {
+		case err == nil:
+			if fallback != nil {
+				fallback.Close()
+			}
+			if len(resp.Credential.ID) > 0 {
+				return device, []credential.PublicKeyCredentialDescriptor{resp.Credential}, nil
+			}
+			return device, allowList, nil
+		case isNoCredentials(err):
+			wrongKey = err
+			device.Close()
+		case fallback == nil:
+			fallback = device
+		default:
+			device.Close()
+		}
+	}
+	if fallback != nil {
+		return fallback, allowList, nil
+	}
+	if openErr != nil {
+		return nil, nil, openErr
+	}
+	return nil, nil, wrongKey
+}
+
+func isNoCredentials(err error) bool {
+	var ctapErr *transport.CTAPError
+	return errors.As(err, &ctapErr) && ctapErr.StatusCode == transport.CTAP2_ERR_NO_CREDENTIALS
+}
+
+var errNotTouched = errors.New("the security key was not touched in time; run ihme auth login again")
 
 // explain turns a CTAP or HID failure into what the user should do.
 func explain(err error) error {
@@ -160,18 +274,38 @@ func explain(err error) error {
 		switch ctapErr.StatusCode {
 		case transport.CTAP2_ERR_NO_CREDENTIALS:
 			return errors.New("this security key is not registered to this Apple Account; try your other key")
-		case transport.CTAP2_ERR_OPERATION_DENIED,
-			transport.CTAP2_ERR_USER_ACTION_TIMEOUT,
+		case transport.CTAP2_ERR_OPERATION_DENIED:
+			return errors.New("the security key declined; run ihme auth login again")
+		case transport.CTAP2_ERR_USER_ACTION_TIMEOUT,
 			transport.CTAP2_ERR_ACTION_TIMEOUT,
 			transport.CTAP2_ERR_KEEPALIVE_CANCEL:
-			return errors.New("the security key was not touched in time; run ihme auth login again")
+			return errNotTouched
 		}
 	}
-	if errors.Is(err, authenticator.ErrPinUvAuthTokenRequired) || errors.Is(err, authenticator.ErrBuiltInUVRequired) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return errNotTouched
+	case errors.Is(err, authenticator.ErrPinUvAuthTokenRequired),
+		errors.Is(err, authenticator.ErrBuiltInUVRequired):
 		return errors.New("this security key requires its PIN on every use (alwaysUv), which ihme does not support yet")
-	}
-	if errors.Is(err, fs.ErrPermission) {
-		return fmt.Errorf("no permission to open the security key (on Linux, install your key's udev rules): %w", err)
+	case errors.Is(err, authenticator.ErrUvNotConfigured):
+		return errors.New("this security key requires fingerprint verification but has none enrolled; enroll one with the key's own app")
+	case errors.Is(err, fs.ErrPermission):
+		return fmt.Errorf("no permission to open the security key (%s): %w", permissionHint(), err)
 	}
 	return err
+}
+
+func permissionHint() string {
+	switch runtime.GOOS {
+	case "windows":
+		// Windows 10 1903+ only lets elevated processes talk to
+		// FIDO keys directly; everything else must go through
+		// webauthn.dll, which ihme does not use.
+		return "on Windows, run ihme from an Administrator terminal"
+	case "linux":
+		return "on Linux, install your key's udev rules"
+	default:
+		return "check that no other app holds the key"
+	}
 }
