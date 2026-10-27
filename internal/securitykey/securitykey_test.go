@@ -71,7 +71,8 @@ func TestExplain(t *testing.T) {
 		{&transport.CTAPError{StatusCode: transport.CTAP2_ERR_OPERATION_DENIED}, "declined"},
 		{fmt.Errorf("select: %w", context.DeadlineExceeded), "not touched in time"},
 		{authenticator.ErrPinUvAuthTokenRequired, "requires its PIN on every use"},
-		{fmt.Errorf("open /dev/hidraw0: %w", fs.ErrPermission), "udev rules"},
+		// The hint itself depends on runtime.GOOS.
+		{fmt.Errorf("open /dev/hidraw0: %w", fs.ErrPermission), "no permission to open the security key (" + permissionHint() + ")"},
 	}
 	for _, tc := range cases {
 		if got := explain(tc.err).Error(); !strings.Contains(got, tc.want) {
