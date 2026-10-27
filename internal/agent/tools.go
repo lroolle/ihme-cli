@@ -38,6 +38,7 @@ const minRationale = 20
 // runState is the per-run scope shared by tools and gate: what this
 // run created is what unattended consent covers.
 type runState struct {
+	noClipboard    bool
 	label          string
 	generateRounds int
 	questions      int
@@ -284,7 +285,7 @@ func tools(svc *app.Service, st *runState, appleID string, ask asker, mem *memor
 				// Best-effort convenience: the address lands on the
 				// clipboard (pbcopy/xclip) ready to paste into the
 				// signup form. Failure is not an error — just absent.
-				copied := clip.Copy(reserved.Hme) == nil
+				copied := !st.noClipboard && clip.Copy(reserved.Hme) == nil
 				out := map[string]any{"status": "reserved", "address": view(*reserved), "copiedToClipboard": copied}
 				if memNote.Status != "" {
 					out["memory"] = memNote

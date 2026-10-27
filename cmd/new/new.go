@@ -37,6 +37,11 @@ func NewCmdNew() *cobra.Command {
 
 Matches the iCloud web flow: generate first, pick, then reserve.
 
+At a terminal, copies the reserved address to the system clipboard.
+With --share, copies the inbox link instead. Use --no-copy to opt out,
+or --copy to request copying with piped or JSON output. Clipboard failure
+never fails the reservation; the address and link are still printed.
+
 JSON output without --yes (candidates, no reservation):
   {"candidates":["a@icloud.com","b@icloud.com",...],"label":"...","hint":"ihme new <label> --address <addr>"}
 
@@ -79,6 +84,9 @@ in ihme-inbox (see 'ihme share --help'); in JSON, as one more field:
 				if _, _, _, err := inboxkey.LoadSecret(); err != nil {
 					return err
 				}
+				if _, err := inboxkey.BaseURL(""); err != nil {
+					return err
+				}
 			}
 
 			client, err := cmdutil.GetClient(cmd)
@@ -94,7 +102,7 @@ in ihme-inbox (see 'ihme share --help'); in JSON, as one more field:
 					return fmt.Errorf("invalid --grant %q — use ask or auto", grant)
 				}
 				res, err := agent.RunNew(cmd.Context(), svc, client.Session().AppleID, agent.Options{
-					Label: label, Note: note, Grant: agent.GrantMode(grant), Effort: effort, JSON: jsonFlag,
+					Label: label, Note: note, Grant: agent.GrantMode(grant), Effort: effort, JSON: jsonFlag, NoClipboard: true,
 				})
 				// A run can reserve and then fail (the model's closing
 				// turn times out). The address exists either way, so it
@@ -114,6 +122,7 @@ in ihme-inbox (see 'ihme share --help'); in JSON, as one more field:
 				if err != nil {
 					return err
 				}
+				copyReserved(cmd, res.Reserved, g)
 				if jsonFlag {
 					var out any = res
 					if g != nil {
@@ -185,6 +194,9 @@ in ihme-inbox (see 'ihme share --help'); in JSON, as one more field:
 	cmd.Flags().StringVar(&grant, "grant", "ask", "Agent consent for actions beyond this run's scope: ask or auto")
 	cmd.Flags().StringVar(&effort, "effort", "", "Agent reasoning effort: minimal, low, medium, high (some models also: xhigh, max)")
 	cmd.Flags().BoolVar(&shared, "share", false, "Also print the key and link that open the new address in ihme-inbox")
+	cmd.Flags().Bool("copy", false, "Copy the address (or inbox link with --share), including in scripts")
+	cmd.Flags().Bool("no-copy", false, "Do not change the clipboard")
+	cmd.MarkFlagsMutuallyExclusive("copy", "no-copy")
 	return cmd
 }
 
@@ -198,6 +210,7 @@ func reserve(svc *app.Service, hme, label string, tagList []string, note string,
 	if err != nil {
 		return err
 	}
+	copyReserved(cmd, reserved, g)
 	if jsonFlag {
 		if g != nil {
 			return cmdutil.OutputResult(cmd, struct {

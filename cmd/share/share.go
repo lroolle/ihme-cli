@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lroolle/ihme-cli/internal/clip"
 	"github.com/lroolle/ihme-cli/internal/cmdutil"
 	"github.com/lroolle/ihme-cli/internal/inboxkey"
 	"github.com/lroolle/ihme-cli/pkg/resolver"
@@ -18,6 +19,7 @@ const inboxURL = "https://github.com/lroolle/ihme-inbox"
 
 func NewCmdShare() *cobra.Command {
 	var baseURL string
+	var copyLink bool
 
 	cmd := &cobra.Command{
 		Use:   "share [ref]",
@@ -34,10 +36,17 @@ Running this again prints another key; the earlier ones keep working
 until the address is revoked on the server: ihme-inbox revoke <address>.
 Without <ref> at a terminal, asks which address, newest first.
 
+Save your server once with 'ihme share config --url https://mail.example.com'.
+Both share and new --share then use it. --url and IHME_INBOX_URL override it.
+Add --copy to copy the link; if the clipboard is unavailable, the link is
+still printed. Clipboard status goes to stderr, including with --json.
+
 JSON output (--json):
   {"address":"...","label":"...","key":"...","link":"...","mintedAt":"...",
    "hints":{"revoke":"ihme-inbox revoke <address>","serve":"ihme-inbox serve"}}`,
 		Example: `  ihme share netflix
+  ihme share netflix --copy
+  ihme share config --url https://mail.example.com
   ihme share netflix --url https://mail.example.com
   ihme new netflix --share
   ihme share secret`,
@@ -46,6 +55,10 @@ JSON output (--json):
 			// Before any iCloud call: a machine with no secret cannot
 			// share, and should hear that first.
 			if _, _, _, err := inboxkey.LoadSecret(); err != nil {
+				return err
+			}
+			resolvedURL, err := inboxkey.BaseURL(baseURL)
+			if err != nil {
 				return err
 			}
 			client, err := cmdutil.GetClient(cmd)
@@ -67,9 +80,16 @@ JSON output (--json):
 			if err != nil {
 				return err
 			}
-			grant, err := inboxkey.Issue(hme.Hme, baseURL, time.Now())
+			grant, err := inboxkey.Issue(hme.Hme, resolvedURL, time.Now())
 			if err != nil {
 				return err
+			}
+			if copyLink {
+				if err := clip.Copy(grant.Link); err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Clipboard unavailable; use the printed link.")
+				} else {
+					fmt.Fprintln(cmd.ErrOrStderr(), "Inbox link copied.")
+				}
 			}
 
 			jsonFlag, _ := cmd.Flags().GetBool("json")
@@ -102,6 +122,8 @@ JSON output (--json):
 	}
 
 	cmd.Flags().StringVar(&baseURL, "url", "", "Public URL of ihme-inbox for the printed link (or set IHME_INBOX_URL)")
+	cmd.Flags().BoolVar(&copyLink, "copy", false, "Copy the inbox link to the clipboard")
+	cmd.AddCommand(newCmdConfig())
 	cmd.AddCommand(newCmdSecret())
 	cmd.AddCommand(moved("list", "ihme no longer keeps a list of shared addresses\n\n"+
 		"  A key is computed from the address, so nothing is recorded.\n"+
@@ -112,6 +134,43 @@ JSON output (--json):
 		"  It stops every key made so far for that address, at once.\n"+
 		"  For a new key, make it there too:     ihme-inbox key <address>\n"+
 		"  (a key made here in the seconds after a revoke may not open)"))
+	return cmd
+}
+
+func newCmdConfig() *cobra.Command {
+	var baseURL string
+	cmd := &cobra.Command{
+		Use:     "config",
+		Short:   "Show or save the default inbox URL",
+		Long:    "Save the server URL for share and new --share, without changing the secret.\nFlags and IHME_INBOX_URL (or IHME_SERVE_URL) override the saved URL.\n\nJSON output (--json): {\"url\":\"...\",\"hints\":{\"share\":\"ihme share <ref> --copy\"}}",
+		Example: "  ihme share config --url https://mail.example.com\n  ihme share config --json",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("url") {
+				if _, err := inboxkey.SaveURL(baseURL); err != nil {
+					return err
+				}
+			}
+			effective, err := inboxkey.BaseURL("")
+			if err != nil {
+				return err
+			}
+			jsonFlag, _ := cmd.Flags().GetBool("json")
+			jqFlag, _ := cmd.Flags().GetString("jq")
+			if !jsonFlag && jqFlag == "" {
+				fmt.Printf("Inbox URL: %s\n", effective)
+				if cmd.Flags().Changed("url") {
+					fmt.Println("Saved for share and new --share. Environment variables override this default.")
+				}
+				return nil
+			}
+			return cmdutil.OutputResult(cmd, map[string]any{
+				"url":   effective,
+				"hints": map[string]string{"share": "ihme share <ref> --copy"},
+			})
+		},
+	}
+	cmd.Flags().StringVar(&baseURL, "url", "", "Save the default public URL of ihme-inbox")
 	return cmd
 }
 

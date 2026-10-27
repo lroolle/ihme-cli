@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -223,6 +224,144 @@ func TestShareAnExistingAddress(t *testing.T) {
 	}
 	if s.reserves.Load() != 0 {
 		t.Error("sharing reserved something")
+	}
+}
+
+func TestShareConfiguredRemoteAndCopy(t *testing.T) {
+	s := newICloud(t)
+	signedIn(t, s)
+	if _, err := ihme(t, "share", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ihme(t, "share", "config", "--url", "https://remote.example.com/", "--json")
+	if err != nil || !strings.Contains(out, `"url": "https://remote.example.com"`) {
+		t.Fatalf("config = %s, %v", out, err)
+	}
+	if s.calls.Load() != 0 {
+		t.Fatal("config contacted iCloud")
+	}
+	// A clipboard command receives the exact printed link through stdin.
+	bin := t.TempDir()
+	copied := filepath.Join(t.TempDir(), "clipboard")
+	t.Setenv("IHME_TEST_CLIPBOARD", copied)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	name := "xclip"
+	if runtime.GOOS == "darwin" {
+		name = "pbcopy"
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("clipboard shell fixture needs Unix")
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\ncat > \"$IHME_TEST_CLIPBOARD\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, err = ihme(t, "share", "netflix", "--copy", "--json")
+	var grant struct{ Link string }
+	if err != nil || json.Unmarshal([]byte(out), &grant) != nil {
+		t.Fatalf("share: %s %v", out, err)
+	}
+	clipboard, err := os.ReadFile(copied)
+	if err != nil || string(clipboard) != grant.Link || !strings.HasPrefix(grant.Link, "https://remote.example.com/k/") {
+		t.Fatal("clipboard does not contain configured link", err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, err = ihme(t, "share", "netflix", "--copy", "--json")
+	if err != nil || json.Unmarshal([]byte(out), &grant) != nil || grant.Link == "" {
+		t.Fatal("clipboard failure lost JSON link", err)
+	}
+	out, err = ihme(t, "new", "netflix", "--share", "--yes", "--json")
+	if err != nil || !strings.Contains(out, "https://remote.example.com/k/") {
+		t.Fatal("new --share ignored configured URL", err)
+	}
+}
+
+func TestNewCopiesReservedAddressOrShareLink(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Unix clipboard fixture")
+	}
+	s := newICloud(t)
+	signedIn(t, s)
+	if _, err := ihme(t, "share", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	copied := filepath.Join(t.TempDir(), "clipboard")
+	t.Setenv("IHME_TEST_CLIPBOARD", copied)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	name := "xclip"
+	if runtime.GOOS == "darwin" {
+		name = "pbcopy"
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\ncat > \"$IHME_TEST_CLIPBOARD\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, shared := range []bool{false, true} {
+		args := []string{"new", "netflix", "--yes", "--json", "--copy"}
+		if shared {
+			args = append(args, "--share")
+		}
+		out, err := ihme(t, args...)
+		var result struct {
+			Hme   string
+			Share struct{ Link string }
+		}
+		if err != nil || json.Unmarshal([]byte(out), &result) != nil {
+			t.Fatalf("reservation: %v", err)
+		}
+		want := result.Hme
+		if shared {
+			want = result.Share.Link
+		}
+		got, err := os.ReadFile(copied)
+		if err != nil || want == "" || string(got) != want {
+			t.Fatal("clipboard did not receive reservation output")
+		}
+	}
+	if err := os.WriteFile(copied, []byte("unchanged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"new", "netflix", "--yes", "--json"},
+		{"new", "netflix", "--yes", "--no-copy"},
+		{"new", "netflix", "--json", "--copy"}, // candidates only
+	} {
+		if _, err := ihme(t, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := os.ReadFile(copied)
+	if string(got) != "unchanged" {
+		t.Fatal("non-copying command changed clipboard")
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ihme(t, "new", "netflix", "--yes", "--json", "--copy")
+	if err != nil || !json.Valid([]byte(out)) {
+		t.Fatal("clipboard failure lost reservation output")
+	}
+	before := s.reserves.Load()
+	if _, err := ihme(t, "new", "netflix", "--yes", "--copy", "--no-copy"); err == nil || before != s.reserves.Load() {
+		t.Fatal("conflicting clipboard flags reserved an address")
+	}
+}
+
+func TestInvalidShareURLFailsBeforeAppleCalls(t *testing.T) {
+	s := newICloud(t)
+	signedIn(t, s)
+	if _, err := ihme(t, "share", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("IHME_INBOX_URL", "https://user:password@mail.example.com")
+	for _, args := range [][]string{{"share", "netflix"}, {"new", "netflix", "--share", "--yes"}} {
+		if _, err := ihme(t, args...); err == nil || strings.Contains(err.Error(), "password") {
+			t.Fatal("invalid URL accepted or echoed credentials", err)
+		}
+	}
+	if s.calls.Load() != 0 {
+		t.Fatal("invalid URL reached iCloud")
 	}
 }
 

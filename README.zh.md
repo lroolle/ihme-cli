@@ -14,6 +14,8 @@ ihme export -o backup.csv    # 导出备份
 
 [English](README.md)
 
+在终端预留成功后，`ihme new` 会自动复制地址到剪贴板（macOS 使用 `pbcopy`，Linux 使用 `xclip`）；使用 `--share` 时则复制收件箱链接。`--no-copy` 可关闭复制。JSON、管道输出和 `IHME_NO_PROMPT` 模式不会自动复制，可用 `--copy` 显式开启。剪贴板不可用时，预留仍然成功，结果照常输出。
+
 ## 安装
 
 macOS（Apple 芯片）：
@@ -48,7 +50,8 @@ ihme list --json --jq '.addresses[].hme'
 
 ```bash
 ihme new netflix --share    # 新建地址，同时给出打开其邮件的 key 和链接
-ihme share netflix          # 已有的地址，同上
+ihme share config --url https://mail.example.com  # 保存远程收件箱地址
+ihme share netflix --copy   # 复制已有地址的收件箱链接
 ```
 
 链接在 [ihme-inbox](https://github.com/lroolle/ihme-inbox) 里打开该地址的邮件。ihme-inbox 是一个自己运行的小型网页服务：收件箱和垃圾邮件，最近 30 天，纯文本，验证码或登录链接置顶。看不到其他地址和其他收件人。key 由地址和 ihme 与服务端共用的 secret 算出（`ihme share secret`），新建地址不需要通知服务端。在服务端收回：`ihme-inbox revoke <地址>`。[详细说明](docs/usage.md#share-an-inbox)（英文）。

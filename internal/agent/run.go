@@ -265,11 +265,12 @@ func hintErr(err error) error {
 
 // Options configures one embedded-agent run.
 type Options struct {
-	Label  string
-	Note   string // extra context from the user, folded into the task
-	Grant  GrantMode
-	Effort string // reasoning effort override (thinking models)
-	JSON   bool
+	Label       string
+	Note        string // extra context from the user, folded into the task
+	Grant       GrantMode
+	Effort      string // reasoning effort override (thinking models)
+	JSON        bool
+	NoClipboard bool // the caller handles clipboard output, or disabled it
 }
 
 // Result is the structured outcome for --json consumers.
@@ -293,6 +294,7 @@ func RunNew(ctx context.Context, svc *app.Service, appleID string, opts Options)
 	if err != nil {
 		return nil, err
 	}
+	s.st.noClipboard = opts.NoClipboard
 	fmt.Fprintln(sio.meta, s.header())
 	task := fmt.Sprintf("Create a new Hide My Email address with the label %q. "+
 		"The label is the user's explicit choice — reserve under it VERBATIM. "+

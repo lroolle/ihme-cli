@@ -70,9 +70,13 @@ func (g *Grant) Text(address string) string {
 }
 
 // Issue mints a key for address now. baseURL is where ihme-inbox is
-// served; empty means $IHME_INBOX_URL, else this machine.
+// served; empty uses BaseURL's environment and saved default.
 func Issue(address, baseURL string, now time.Time) (*Grant, error) {
 	_, secret, _, err := LoadSecret()
+	if err != nil {
+		return nil, err
+	}
+	baseURL, err = BaseURL(baseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -88,15 +92,6 @@ func Issue(address, baseURL string, now time.Time) (*Grant, error) {
 }
 
 func link(baseURL, address, k string) string {
-	if baseURL == "" {
-		baseURL = os.Getenv("IHME_INBOX_URL")
-	}
-	if baseURL == "" {
-		baseURL = os.Getenv("IHME_SERVE_URL") // its name through v0.7.0
-	}
-	if baseURL == "" {
-		baseURL = defaultURL
-	}
 	return strings.TrimRight(baseURL, "/") + "/k/" + url.PathEscape(address) + "/" + k
 }
 

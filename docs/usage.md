@@ -47,7 +47,8 @@ MANAGE (omit <ref> at a terminal to pick, newest first)
 
 SHARE AN INBOX
   ihme new <label> --share       New address, with the key + link for its mail
-  ihme share <ref>               Key + link for an address you have
+  ihme share <ref> --copy        Key + link; copy the link to clipboard
+  ihme share config --url <url> Save the default remote inbox URL
   ihme share secret              The secret your ihme-inbox server needs
 
 EXPORT
@@ -88,6 +89,8 @@ ihme new github.com --yes --json                # reserve the first candidate
 
 Replace `<candidate>` with an address returned by the first command. A terminal session with `ihme new github.com` asks you to pick; without a terminal, that same command reserves the first candidate. Use `--json` alone when you only want candidates.
 
+After a reservation at a terminal, the address is copied automatically using the platform clipboard tool. `--share` copies its inbox link instead. `--no-copy` disables this; `--copy` also works with JSON or piped output. Automatic copying is disabled for JSON, `--jq`, piped stdout, and `IHME_NO_PROMPT`. Clipboard status goes to stderr; an unavailable clipboard never fails a reservation.
+
 ## Tags and notes
 
 ```bash
@@ -120,7 +123,16 @@ ihme new netflix --share    # a new address, its key, its link
 ihme share netflix          # key and link for an address you already have
 ```
 
-Set `IHME_INBOX_URL=https://mail.example.com`, or pass `--url` to `ihme share`, so links point at your server. Without it they point at `http://127.0.0.1:8025`.
+Save your remote inbox once, then copy links in one command:
+
+```bash
+ihme share config --url https://mail.example.com
+ihme share netflix --copy
+```
+
+The saved URL applies to both `share` and `new --share`. Precedence: `share --url`, `IHME_INBOX_URL`, legacy `IHME_SERVE_URL`, saved URL, then `http://127.0.0.1:8025`. `ihme share config` shows the effective URL. The URL is stored in `~/.config/ihme-inbox/url` (respecting `IHME_INBOX_DIR` and `XDG_CONFIG_HOME`); saving it never changes the secret. Remote URLs require HTTPS.
+
+`--copy` puts only the link on the clipboard. If the clipboard is unavailable, the link is still printed. Clipboard status goes to stderr so `--json` and `--jq` remain usable. Anyone holding a link can read that address's mail and, on an inbox server with deletion support, hide or restore messages in that shared inbox; the original mailbox stays unchanged.
 
 - A key is computed from the address, the time, and the secret. Nothing is stored and the server is not contacted, so a new address works there at once.
 - The secret is `IHME_INBOX_SECRET`, else the file `~/.config/ihme-inbox/secret`, which ihme-inbox reads too: on one machine the two agree with no setup. Only `ihme share secret` creates it; `share` and `new --share` stop with that hint when it is missing.

@@ -14,6 +14,8 @@ Needs iCloud+ and an Apple ID with 2FA. Unofficial: ihme uses the same web API a
 
 [中文](README.zh.md)
 
+After reservation at a terminal, `ihme new` copies the address to the clipboard (`pbcopy` on macOS, `xclip` on Linux); `--share` copies the inbox link instead. Use `--no-copy` to leave the clipboard alone. JSON, piped output, and `IHME_NO_PROMPT` do not copy automatically; `--copy` opts in. If the clipboard is unavailable, the reservation still succeeds and its result is printed.
+
 ## Install
 
 macOS on Apple Silicon:
@@ -48,7 +50,8 @@ Exit 2: sign in again. Exit 1: anything else.
 
 ```bash
 ihme new netflix --share    # a new address, with the key and link that open its mail
-ihme share netflix          # the same, for an address you already have
+ihme share config --url https://mail.example.com  # save your server once
+ihme share netflix --copy   # copy a link for an address you already have
 ```
 
 The link opens one address's mail in [ihme-inbox](https://github.com/lroolle/ihme-inbox), a small web server you run: INBOX and Junk, last 30 days, as plain text, with the code or sign-in link on top. No other address, no other recipients. The key is computed from the address and a secret ihme shares with the server (`ihme share secret`), so the server is never told about a new address. Revoke there: `ihme-inbox revoke <address>`. [Details](docs/usage.md#share-an-inbox).
