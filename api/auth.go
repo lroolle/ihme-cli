@@ -47,10 +47,11 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, 
 		return fmt.Errorf("account login: %w", err)
 	}
 
-	return c.checkAccount()
+	return c.checkAccount(c.lastLogin)
 }
 
-// checkAccount reads Apple's verdict in the accountLogin answer. A
+// checkAccount reads Apple's verdict in an accountLogin (or, for a
+// browser session, validate) answer. A
 // session Apple still holds 2FA against fails: every service answers
 // it with 401 "Invalid global session", so reporting success would
 // only move the failure to the next command. Only an explicit
@@ -61,8 +62,7 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, 
 // the account, web access to iCloud data turned off, or the service
 // marked pcsRequired (device approval ihme cannot request yet; normal
 // accounts do not carry it on premiummailsettings).
-func (c *Client) checkAccount() error {
-	login := c.lastLogin
+func (c *Client) checkAccount(login *AccountLoginResponse) error {
 	if login == nil {
 		return nil
 	}
@@ -116,7 +116,8 @@ func (c *Client) LoginWithSession() error {
 }
 
 func (c *Client) ResumeSession() error {
-	if c.session.SessionToken == "" && c.session.TrustToken == "" {
+	browser := c.session.Source == SourceBrowser
+	if c.session.SessionToken == "" && c.session.TrustToken == "" && !browser {
 		return fmt.Errorf("no session data")
 	}
 
@@ -148,6 +149,11 @@ func (c *Client) ResumeSession() error {
 		if c.Verbose {
 			fmt.Fprintf(os.Stderr, "[svc] session rejected, falling back to accountLogin\n")
 		}
+	}
+
+	// A browser session has no tokens to trade for new cookies.
+	if browser {
+		return fmt.Errorf("validating session: %w", ErrBrowserSessionExpired)
 	}
 
 	// Fall back to accountLogin (triggers Apple sign-in email).
@@ -208,6 +214,14 @@ func (c *Client) ValidateSessionInfo() (*AccountInfoResponse, json.RawMessage, e
 				}
 				return c.ValidateSessionInfo()
 			}
+		}
+		// A browser session has no accountLogin to settle what a 421
+		// {"success":false} means, and Apple answers cookies it does
+		// not accept that way (seen live with made-up cookies: 421,
+		// not 401). Read as transient, an expired browser session
+		// would be "try again" forever.
+		if c.session.Source == SourceBrowser && refused421(err, body) {
+			return nil, nil, fmt.Errorf("validate session: %w: %w", ErrSessionInvalid, err)
 		}
 		return nil, nil, fmt.Errorf("validate session: %w", err)
 	}
@@ -699,12 +713,7 @@ func (c *Client) accountLogin() error {
 		// the cookies long after, so this is often the first place the
 		// expiry shows. Retrying never helps; only a fresh sign-in does.
 		// pyicloud, icloudpd, and rclone all read it the same way.
-		var httpErr *HTTPError
-		var verdict struct {
-			Success *bool `json:"success"`
-		}
-		if errors.As(err, &httpErr) && httpErr.Status == 421 &&
-			json.Unmarshal(body, &verdict) == nil && verdict.Success != nil && !*verdict.Success {
+		if refused421(err, body) {
 			return fmt.Errorf("account login: %w: %w", ErrSessionInvalid, err)
 		}
 		return fmt.Errorf("account login: %w", err)
@@ -723,6 +732,18 @@ func (c *Client) accountLogin() error {
 	c.session.ValidatedAt = time.Now()
 	c.lastLogin = &resp
 	return nil
+}
+
+// refused421 reports a 421 whose body is {"success":false}: Apple's
+// verdict on the credentials rather than a routing hiccup, where the
+// caller has the context to read it that way.
+func refused421(err error, body []byte) bool {
+	var httpErr *HTTPError
+	var verdict struct {
+		Success *bool `json:"success"`
+	}
+	return errors.As(err, &httpErr) && httpErr.Status == 421 &&
+		json.Unmarshal(body, &verdict) == nil && verdict.Success != nil && !*verdict.Success
 }
 
 func derivePassword(password string, salt []byte, iterations int, protocol string) []byte {

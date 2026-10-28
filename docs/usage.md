@@ -10,6 +10,7 @@ Create, find, edit, and export iCloud Hide My Email addresses from the terminal.
 ```
 AUTH
   ihme auth login                Sign in with Apple ID (SRP + 2FA)
+  ihme auth login --browser      Sign in with a browser's icloud.com session
   ihme auth status [--json]      Session state
   ihme auth logout               Clear session
 
@@ -139,6 +140,8 @@ Going public: there is no admin page, shares are managed with `ihme share` on th
 ## Authentication and errors
 
 `ihme auth login` signs in interactively with Apple ID and two-factor authentication. If the Apple Account uses security keys, Apple sends no code; plug a FIDO2 key into USB and touch it when asked. With both keys plugged in, only the registered one blinks. Not supported yet: keys that demand their PIN on every use, U2F-only keys, NFC and Bluetooth. On Linux the key needs udev rules that let your user open it; on Windows, run ihme from an Administrator terminal (Windows only lets elevated programs reach security keys directly). `ihme auth status --json` checks the saved session against iCloud; add `--local` to inspect only the local file.
+
+`ihme auth login --browser` is the way in when the password sign-in does not work for your account. Sign in at https://www.icloud.com in a browser; it handles your password, code or security key, and any approval on a trusted device. Then open the developer tools, Network tab, reload, click a request to setup.icloud.com, and copy the whole value of the Cookie request header. Paste it at the prompt (it is not shown), or pipe it in: `pbpaste | ihme auth login --browser`. A cookie editor's JSON export works too. ihme checks the session with iCloud and lists your addresses once before saving it. Treat the copied cookies like a password: they are your iCloud session. Such a session cannot renew itself; signing out at icloud.com ends it, and when it expires commands say so: sign in at icloud.com again and rerun `ihme auth login --browser`.
 
 Exit codes: `0` success, `1` other error, `2` authentication required. A rejected session is refreshed once during an HME call; if Apple still refuses it, run `ihme auth login`. A temporary network or server failure asks you to retry instead.
 

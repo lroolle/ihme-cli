@@ -75,6 +75,8 @@ func Explain(err error) string {
 		return "Cancelled."
 	case errors.Is(err, ErrNotLoggedIn):
 		return "Error: not signed in to iCloud\n  Fix: ihme auth login"
+	case errors.Is(err, api.ErrBrowserSessionExpired):
+		return fmt.Sprintf("Error: iCloud no longer accepts the session copied from your browser\n  Cause: %s\n  Fix: sign in at https://www.icloud.com, then run ihme auth login --browser", err)
 	case api.IsAuthRejection(err):
 		return fmt.Sprintf("Error: iCloud rejected this session — the saved login is no longer valid\n  Cause: %s\n  Fix: ihme auth login", err)
 	case api.IsTransient(err):

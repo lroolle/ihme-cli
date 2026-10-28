@@ -26,6 +26,7 @@ func NewCmdAuth() *cobra.Command {
 		Short: "Authenticate with iCloud",
 		Example: `  ihme auth login
   ihme auth login --apple-id user@icloud.com
+  ihme auth login --browser
   ihme auth status --json
   ihme auth logout`,
 	}
@@ -36,7 +37,10 @@ func NewCmdAuth() *cobra.Command {
 }
 
 func newCmdLogin() *cobra.Command {
-	var appleID string
+	var (
+		appleID string
+		browser bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "login",
@@ -50,12 +54,25 @@ Credentials are never stored. Session tokens are saved to:
   ~/.config/ihme/session.json (respects $XDG_CONFIG_HOME)
 Override with IHME_SESSION_PATH.
 
-Trust token (~30 days) allows subsequent logins without 2FA.`,
+Trust token (~30 days) allows subsequent logins without 2FA.
+
+--browser signs in with the session a browser already has at
+icloud.com instead: the browser handles the password, the second
+factor and any approval on a trusted device, and ihme reads the
+Cookie header you paste (or pipe in). Use it when the password
+sign-in does not work for your account. Such a session cannot renew
+itself: when it expires, sign in at icloud.com again and rerun
+ihme auth login --browser.`,
 		Example: `  ihme auth login
   ihme auth login --apple-id user@icloud.com
-  IHME_APPLE_ID=user@icloud.com ihme auth login`,
+  IHME_APPLE_ID=user@icloud.com ihme auth login
+  ihme auth login --browser
+  pbpaste | ihme auth login --browser`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
+			if browser {
+				return loginBrowser(cmd, sessPath)
+			}
 
 			sess, err := api.LoadSession(sessPath)
 			if err != nil {
@@ -156,6 +173,8 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 	}
 
 	cmd.Flags().StringVar(&appleID, "apple-id", "", "Apple ID email (or set IHME_APPLE_ID)")
+	cmd.Flags().BoolVar(&browser, "browser", false, "Sign in with the cookies of a browser signed in at icloud.com, read from stdin")
+	cmd.MarkFlagsMutuallyExclusive("browser", "apple-id")
 	return cmd
 }
 
@@ -198,6 +217,10 @@ JSON output (--json):
 				os.Exit(2)
 			}
 
+			loginCmd := "ihme auth login"
+			if sess.Source == api.SourceBrowser {
+				loginCmd += " --browser"
+			}
 			localExpired := sess.IsExpired()
 			out := map[string]any{
 				"loggedIn":        true,
@@ -226,7 +249,7 @@ JSON output (--json):
 					out["canAccessICloud"] = false
 					out["check"] = "icloud"
 					out["error"] = err.Error()
-					out["hint"] = "ihme auth login"
+					out["hint"] = loginCmd
 
 					if jsonFlag {
 						enc := json.NewEncoder(os.Stdout)
@@ -240,7 +263,7 @@ JSON output (--json):
 							fmt.Println("Local session may be expired.")
 						}
 						fmt.Printf("iCloud access check failed: %s\n", err)
-						fmt.Println("Run 'ihme auth login' to refresh.")
+						fmt.Printf("Run '%s' to refresh.\n", loginCmd)
 					}
 					os.Exit(2)
 				}
@@ -274,7 +297,7 @@ JSON output (--json):
 			}
 			fmt.Printf("Session saved: %s\n", sess.SavedAt.Format("2006-01-02 15:04"))
 			if localExpired && localOnly {
-				fmt.Println("Session may be expired — run 'ihme auth login' to refresh.")
+				fmt.Printf("Session may be expired — run '%s' to refresh.\n", loginCmd)
 			}
 			return nil
 		},

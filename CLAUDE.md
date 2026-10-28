@@ -157,6 +157,15 @@ Apple SRP via idmsa.apple.com (web auth, not GSA):
 6. GET  /2sv/trust — trust token
 7. POST setup.icloud.com/accountLogin — get webservices map + cookies
 
+`ihme auth login --browser` (api/browser.go) skips all of the above:
+the user pastes the Cookie header of a browser signed in at
+icloud.com, /validate confirms it, one HME list proves it. The session
+is marked source=browser and holds no session or trust token, so
+nothing can re-mint it: ResumeSession and hmeRequest return
+ErrBrowserSessionExpired instead of calling accountLogin, and validate
+reads 421 {"success":false} as a rejection for it (made-up cookies get
+421, not 401, live).
+
 Cookie handling: manual Cookie header from session cookie list (rclone pattern).
 No Go cookie jar domain matching — cookies go to all service requests.
 Replayed byte-faithful: quoted values keep their quotes (SavedCookie.Quoted),

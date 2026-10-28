@@ -417,7 +417,7 @@ func TestCheckAccount(t *testing.T) {
 			if err := c.accountLogin(); err != nil {
 				t.Fatal(err)
 			}
-			err := c.checkAccount()
+			err := c.checkAccount(c.lastLogin)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("checkAccount = %v, wantErr %v", err, tc.wantErr)
 			}

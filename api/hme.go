@@ -27,6 +27,10 @@ func (c *Client) hmeRequest(version int, path, method string, body any) ([]byte,
 		return respBody, err
 	}
 
+	// Browser cookies have no tokens behind them to mint new ones.
+	if c.session.Source == SourceBrowser {
+		return nil, fmt.Errorf("%w: %w", err, ErrBrowserSessionExpired)
+	}
 	if c.Verbose {
 		fmt.Fprintf(os.Stderr, "[svc] %s rejected the session, re-authenticating once\n", path)
 	}
