@@ -25,6 +25,9 @@ type Client struct {
 	// setupBase overrides the setup.icloud.com origin. Empty in
 	// production (the region constants decide); set by tests.
 	setupBase string
+	// lastLogin is the latest accountLogin answer, for Login to
+	// check Apple's 2FA verdict.
+	lastLogin *AccountLoginResponse
 	Verbose   bool
 	// OnSessionUpdate, when set, is called whenever the session
 	// changes mid-command: Apple rotated or expired a cookie on a

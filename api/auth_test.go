@@ -387,3 +387,58 @@ func TestHandle2FACodeAccountUnchanged(t *testing.T) {
 		t.Errorf("calls = %s (prompted %v)\nwant    %s", got, prompted, want)
 	}
 }
+
+// A login Apple still holds 2FA against must not report success:
+// Robert's security-key login said "Logged in successfully" and the
+// next command got 401 "Invalid global session". Only an explicit
+// hsaChallengeRequired=true fails, so accounts whose response lacks
+// the field behave as before.
+func TestCheckAccount(t *testing.T) {
+	cases := []struct {
+		name, body string
+		wantErr    bool
+		wantNote   string // substring; "" means no note
+	}{
+		{"2FA still owed", `{"dsInfo":{"dsid":"1","hsaVersion":2},"hsaChallengeRequired":true,"hsaTrustedBrowser":false}`, true, ""},
+		{"2FA done, everything on", `{"dsInfo":{"dsid":"1","hsaVersion":2,"isWebAccessAllowed":true,"isHideMyEmailFeatureAvailable":true},"hsaChallengeRequired":false,"hsaTrustedBrowser":true,"webservices":{"premiummailsettings":{"url":"u","status":"active"}}}`, false, ""},
+		{"fields absent", `{"dsInfo":{"dsid":"1"},"webservices":{"premiummailsettings":{"url":"u"}}}`, false, ""},
+		{"pcsRequired HME is a note, not a failure", `{"dsInfo":{"dsid":"1"},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u","status":"active","pcsRequired":true}}}`, false, "pcsRequired"},
+		{"web access off is a note, not a failure", `{"dsInfo":{"dsid":"1","isWebAccessAllowed":false},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u"}}}`, false, "Access iCloud Data on the Web"},
+		{"no Hide My Email is a note, not a failure", `{"dsInfo":{"dsid":"1","isHideMyEmailFeatureAvailable":false},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u"}}}`, false, "iCloud+"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+			c, _ := NewClient()
+			c.setupBase = srv.URL
+			if err := c.accountLogin(); err != nil {
+				t.Fatal(err)
+			}
+			err := c.checkAccount()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("checkAccount = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr && !strings.Contains(err.Error(), "hsaChallengeRequired") {
+				t.Errorf("error should name Apple's flag: %v", err)
+			}
+			if tc.wantErr {
+				return // login fails before any note
+			}
+			note := accountNote(c.lastLogin)
+			if (tc.wantNote == "") != (note == "") || !strings.Contains(note, tc.wantNote) {
+				t.Errorf("note = %q, want one containing %q", note, tc.wantNote)
+			}
+		})
+	}
+}
+
+// An account Apple lists without the Hide My Email service at all
+// gets the iCloud+ note: nothing else ihme does can work there.
+func TestAccountNoteNoService(t *testing.T) {
+	if note := accountNote(&AccountLoginResponse{}); !strings.Contains(note, "iCloud+") {
+		t.Errorf("note = %q", note)
+	}
+}

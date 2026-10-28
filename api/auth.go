@@ -47,7 +47,65 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, 
 		return fmt.Errorf("account login: %w", err)
 	}
 
+	return c.checkAccount()
+}
+
+// checkAccount reads Apple's verdict in the accountLogin answer. A
+// session Apple still holds 2FA against fails: every service answers
+// it with 401 "Invalid global session", so reporting success would
+// only move the failure to the next command. Only an explicit
+// hsaChallengeRequired=true fails; absent fields keep the old path.
+//
+// What else can stop Hide My Email is reported as a note, not a
+// failure, because the session itself is good: no Hide My Email on
+// the account, web access to iCloud data turned off, or the service
+// marked pcsRequired (device approval ihme cannot request yet; normal
+// accounts do not carry it on premiummailsettings).
+func (c *Client) checkAccount() error {
+	login := c.lastLogin
+	if login == nil {
+		return nil
+	}
+	ds := login.DsInfo
+	hme, hasHME := login.Webservices["premiummailsettings"]
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] account: hsaVersion=%d hsaChallengeRequired=%s hsaTrustedBrowser=%s isWebAccessAllowed=%s isHideMyEmailFeatureAvailable=%s isHideMyEmailSubscriptionActive=%s premiummailsettings=%v status=%q pcsRequired=%v\n",
+			ds.HsaVersion, boolText(login.HsaChallengeRequired), boolText(login.HsaTrustedBrowser),
+			boolText(ds.WebAccessAllowed), boolText(ds.HideMyEmailAvailable), boolText(ds.HideMyEmailActive),
+			hasHME, hme.Status, hme.PcsRequired)
+	}
+	if login.HsaChallengeRequired != nil && *login.HsaChallengeRequired {
+		return fmt.Errorf("two-factor authentication was not completed for this session (Apple: hsaChallengeRequired); run ihme auth login -v and report the output")
+	}
+	if note := accountNote(login); note != "" {
+		fmt.Fprintln(os.Stderr, "Note: "+note)
+	}
 	return nil
+}
+
+// accountNote names the first thing on a good session that can still
+// stop Hide My Email, or "" when nothing does.
+func accountNote(login *AccountLoginResponse) string {
+	ds := login.DsInfo
+	hme, hasHME := login.Webservices["premiummailsettings"]
+	switch {
+	case !hasHME || isFalse(ds.HideMyEmailAvailable):
+		return "Apple reports no Hide My Email on this Apple Account; it needs an iCloud+ subscription."
+	case isFalse(ds.WebAccessAllowed):
+		return "\"Access iCloud Data on the Web\" is off for this Apple Account, and ihme uses iCloud's web API. If commands fail with \"Invalid global session\", turn it on (iPhone: Settings > [your name] > iCloud) and sign in again."
+	case hme.PcsRequired:
+		return "Apple marks Hide My Email on this account as needing approval on a trusted device (pcsRequired), which ihme cannot request yet. If commands fail with \"Invalid global session\", that is the likely cause."
+	}
+	return ""
+}
+
+func isFalse(b *bool) bool { return b != nil && !*b }
+
+func boolText(b *bool) string {
+	if b == nil {
+		return "absent"
+	}
+	return fmt.Sprint(*b)
 }
 
 func (c *Client) LoginWithSession() error {
@@ -519,7 +577,8 @@ func (c *Client) handle2FASecurityKey(challenge SecurityKeyChallenge, keyCallbac
 	}
 
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "[auth] security key: %d %s\n", resp.StatusCode, truncate(string(respBody), 2000))
+		fmt.Fprintf(os.Stderr, "[auth] security key: %d %s (session token renewed: %v)\n",
+			resp.StatusCode, truncate(string(respBody), 2000), resp.Header.Get("X-Apple-Session-Token") != "")
 	}
 
 	switch {
@@ -600,6 +659,9 @@ func (c *Client) getTrust() error {
 	if resp.StatusCode != 200 && resp.StatusCode != 204 {
 		return fmt.Errorf("get trust returned %d: %s", resp.StatusCode, truncate(string(body), 200))
 	}
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] trust token received: %v\n", resp.Header.Get("X-Apple-TwoSV-Trust-Token") != "")
+	}
 	return nil
 }
 
@@ -659,6 +721,7 @@ func (c *Client) accountLogin() error {
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
 	c.session.ValidatedAt = time.Now()
+	c.lastLogin = &resp
 	return nil
 }
 

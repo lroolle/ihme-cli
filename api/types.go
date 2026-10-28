@@ -107,25 +107,38 @@ type AccountInfoResponse struct {
 	DsInfo      DsInfo                        `json:"dsInfo"`
 	Webservices map[string]WebserviceEndpoint `json:"webservices"`
 	Success     *bool                         `json:"success,omitempty"`
+	// Apple's verdict on the session's second factor. Services
+	// refuse a session that still owes 2FA with 401 "Invalid global
+	// session".
+	HsaChallengeRequired *bool `json:"hsaChallengeRequired,omitempty"`
+	HsaTrustedBrowser    *bool `json:"hsaTrustedBrowser,omitempty"`
 }
 
 type AccountLoginResponse = AccountInfoResponse
 
 type DsInfo struct {
-	Dsid              string `json:"dsid"`
-	LastName          string `json:"lastName"`
-	FirstName         string `json:"firstName"`
-	PrimaryEmail      string `json:"appleId"`
-	CountryCode       string `json:"countryCode"`
-	HsaVersion        int    `json:"hsaVersion"`
-	StatusCode        int    `json:"statusCode"`
-	ManagedAppleID    bool   `json:"isManagedAppleID"`
-	HideMyEmailActive bool   `json:"isHideMyEmailSubscriptionActive"`
+	Dsid           string `json:"dsid"`
+	LastName       string `json:"lastName"`
+	FirstName      string `json:"firstName"`
+	PrimaryEmail   string `json:"appleId"`
+	CountryCode    string `json:"countryCode"`
+	HsaVersion     int    `json:"hsaVersion"`
+	StatusCode     int    `json:"statusCode"`
+	ManagedAppleID bool   `json:"isManagedAppleID"`
+	// Pointers: absent and false mean different things, and Apple
+	// omits some of these on some accounts.
+	HideMyEmailActive    *bool `json:"isHideMyEmailSubscriptionActive,omitempty"`
+	HideMyEmailAvailable *bool `json:"isHideMyEmailFeatureAvailable,omitempty"`
+	// WebAccessAllowed is the "Access iCloud Data on the Web" setting.
+	WebAccessAllowed *bool `json:"isWebAccessAllowed,omitempty"`
 }
 
 type WebserviceEndpoint struct {
 	URL    string `json:"url"`
 	Status string `json:"status"`
+	// PcsRequired marks a service behind Advanced Data Protection:
+	// web access needs approval on a trusted device (requestPCS).
+	PcsRequired bool `json:"pcsRequired,omitempty"`
 }
 
 type AuthOptionsResponse struct {
