@@ -1,6 +1,20 @@
 # Roadmap
 
-Current: **v0.7.0** · [MIT](LICENSE)
+Current: **v0.7.2** · [MIT](LICENSE)
+
+## Shipped in v0.7.1 and v0.7.2 — security keys, and the setting behind "Invalid global session"
+
+- **Security-key sign-in.** Accounts that use security keys get no
+  code; `auth login` now has a USB FIDO2 key sign Apple's challenge.
+  Touch only: no PIN, NFC, or Bluetooth yet.
+- **Login proves Hide My Email answers.** It lists the addresses
+  once before it reports success.
+- **"Invalid global session" names its fix.** A 401 on a session
+  Apple just minted is the account blocking web data access, not
+  expiry: the error names "Allow Data Access" and exits 1, instead
+  of looping on sign-in. Where the setting is: [FAQ](docs/faq.md).
+- **`--browser` login removed in v0.7.2.** A pasted browser session
+  cannot renew itself and did not hold up in practice.
 
 ## Shipped in v0.7.0 — share one inbox, pick instead of typing
 

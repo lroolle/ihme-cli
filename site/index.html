@@ -54,6 +54,7 @@ sudo install -m 755 ihme /usr/local/bin/ihme</code></pre>
         <p>macOS Intel, Linux, Windows (arm64, x86-64): <a href="https://github.com/lroolle/ihme-cli/releases/latest">releases</a>, with SHA-256 checksums. Go: <code>go install github.com/lroolle/ihme-cli/cmd/ihme@latest</code>.</p>
         <pre><code>ihme auth login    <span class="c"># Apple ID, password, 2FA. Saves session, not password or code.</span>
 ihme list</code></pre>
+        <p class="note">Signed in, but Hide My Email refuses with <code>Invalid global session</code>? Turn on Allow Data Access. iPhone: Settings &gt; [your name] &gt; iCloud &gt; iCloud.com. Mac: System Settings &gt; [your name] &gt; iCloud &gt; Data Access on iCloud.com. Then run <code>ihme auth login</code> again. <a href="https://github.com/lroolle/ihme-cli/blob/main/docs/faq.md#signed-in-but-hide-my-email-refuses-the-session">FAQ</a>.</p>
 
         <h2 id="share">Share one inbox</h2>
         <pre><code>ihme share netflix    <span class="c"># prints a key and a link, once</span>
@@ -64,6 +65,7 @@ ihme serve            <span class="c"># http://127.0.0.1:8025</span></code></pre
         <ul class="docs">
           <li><a href="README.md">README</a><span>the whole thing: install, scripts, agents</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">Commands</a><span>search, create, edit, tags, share, export, JSON, errors</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/faq.md">FAQ</a><span>signed in but refused, no 2FA code</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md">Agents</a><span>providers, consent, memory, MCP</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/ROADMAP.md">Roadmap and release notes</a><span></span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/SECURITY.md">Security</a><span>what is stored, and where</span></li>

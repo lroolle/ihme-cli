@@ -64,6 +64,7 @@ Account changes ask first. Preferences live in plain Markdown; `ihme memory` sho
 ## Docs
 
 - [Commands](docs/usage.md): search, create, edit, tags, share, export, JSON, errors
+- [FAQ](docs/faq.md): signed in but Hide My Email refuses, no 2FA code
 - [Agents](docs/agents.md): providers, consent, memory, MCP
 - [Roadmap and release notes](ROADMAP.md)
 - [Security](SECURITY.md): what is stored, and where

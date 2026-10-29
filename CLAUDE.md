@@ -192,9 +192,10 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
    minted in this process (accountLogin or the recovery itself) is
    NOT expiry: it is ServiceRefusedError, the account blocking web
    data access ("Allow Data Access", formerly "Access iCloud Data on
-   the Web"; ADP turns it off). Field-confirmed (issue #14). It exits 1 and names the setting; never answer it
-   with "sign in again". Fresh cookies go back to disk through
-   Client.OnSessionUpdate.
+   the Web"; ADP turns it off). Field-confirmed (issue #14; user
+   answer in docs/faq.md). It exits 1 and names the setting; never
+   answer it with "sign in again". Fresh cookies go back to disk
+   through Client.OnSessionUpdate.
 7. clientId is generated once and persisted in the session — one
    installation, not a new stranger every invocation.
 
