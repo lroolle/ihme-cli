@@ -23,7 +23,8 @@ func PrintTable(w io.Writer, emails []api.HmeEmail) {
 		if !e.IsActive {
 			status = "inactive"
 		}
-		created := time.UnixMilli(e.CreateTimestamp).Format("Jan 02")
+		// With the year: a list sorted oldest first spans years.
+		created := time.UnixMilli(e.CreateTimestamp).Format("2006-01-02")
 		id := e.AnonymousID
 		if len(id) > 8 {
 			id = id[:8]

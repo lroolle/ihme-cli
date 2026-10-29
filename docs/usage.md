@@ -18,7 +18,7 @@ LIST & SEARCH
   ihme list --search <query>     Search label, address, or note
   ihme list --active             Only active
   ihme list --tag <tag>          Filter by tag
-  ihme list --sort label         Sort by label or date
+  ihme list --sort oldest        Oldest first (also: newest, label)
 
 CREATE
   ihme new <label>               Interactive: pick from ~3 candidates
@@ -41,9 +41,9 @@ MANAGE (omit <ref> at a terminal to pick, newest first)
   ihme view <ref>                View details
   ihme edit <ref>                Edit label, note, tags
   ihme copy <ref>                Copy address to clipboard
-  ihme deactivate <ref>          Stop receiving mail
-  ihme reactivate <ref>          Resume receiving mail
-  ihme delete <ref> [--yes]      Permanent deletion (confirms first)
+  ihme deactivate <ref>...       Stop receiving mail
+  ihme reactivate <ref>...       Resume receiving mail
+  ihme delete <ref>... [--yes]   Permanent deletion (confirms first)
 
 SHARE AN INBOX
   ihme share <ref>               Access key + link for one address
@@ -108,6 +108,16 @@ ihme delete example.com --yes   # permanently delete an inactive address
 ```
 
 Deactivate an address before deleting it. Deactivation and reactivation take effect immediately; deletion asks for confirmation unless `--yes` is set. A picked address is always confirmed, even with `--yes`; without a terminal, `--yes` is required.
+
+Clean up several at once, by the ID column of `ihme list` or by full address:
+
+```bash
+ihme list --sort oldest                  # oldest first, with dates
+ihme deactivate 7d8e9f0a 3f9a1b2c        # stop their mail; reversible
+ihme delete --force 7d8e9f0a 3f9a1b2c    # deactivate and delete, one confirmation
+```
+
+Every ref is resolved before anything changes, and one that is not an ID or address changes nothing. Labels work one address at a time only, so an unquoted `$label` that splits in two cannot hit two addresses. `delete` lists every address it will delete and asks once. The first failure stops the rest, and ihme prints one command that retries only what was not done.
 
 ## Share an inbox
 

@@ -22,8 +22,12 @@ func NewCmdExport() *cobra.Command {
 		Example: `  ihme export
   ihme export --format json
   ihme export --active --tag dev -o dev.csv
-  ihme export --format json -o all.json`,
+  ihme export --format json -o all.json
+  ihme export --sort oldest -o oldest-first.csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := opts.Validate(); err != nil {
+				return err
+			}
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
@@ -61,6 +65,6 @@ func NewCmdExport() *cobra.Command {
 	cmd.Flags().StringVarP(&opts.Search, "search", "s", "", "Search label, address, or note")
 	cmd.Flags().BoolVar(&opts.Active, "active", false, "Export only active")
 	cmd.Flags().BoolVar(&opts.Inactive, "inactive", false, "Export only inactive")
-	cmd.Flags().StringVar(&opts.Sort, "sort", "", "Sort by: date, label, date:asc, label:desc")
+	cmd.Flags().StringVar(&opts.Sort, "sort", "", filter.SortUsage)
 	return cmd
 }

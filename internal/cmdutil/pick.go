@@ -52,6 +52,18 @@ func RefOrPick(use, example string) cobra.PositionalArgs {
 	}
 }
 
+// RefsOrPick is RefOrPick for commands that also act on many
+// addresses at once: one or more <ref>s, or none at a terminal.
+func RefsOrPick(use, example string) cobra.PositionalArgs {
+	one := RefOrPick(use, example)
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) > 1 {
+			return nil
+		}
+		return one(cmd, args)
+	}
+}
+
 // CanPrompt reports whether a human can answer a question: stdin and
 // stderr are terminals, no machine-readable output was requested, and
 // IHME_NO_PROMPT is unset. The variable is for harnesses that drive

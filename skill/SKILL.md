@@ -98,6 +98,7 @@ ihme edit github.com --label GitHub --tag dev,work
 ihme deactivate github.com --json
 ihme reactivate github.com --json
 ihme delete github.com --yes --json
+ihme deactivate <id> <id> --json      # several: {"results":[...],"hints":{"retry":...}}
 
 # Export
 ihme export --format json
@@ -184,7 +185,7 @@ or an album title — evocative without trying.
 Errors include the fix command:
 ```
 Error: <ref> required — an address label, email, or ID
-  Usage: ihme deactivate <ref>
+  Usage: ihme deactivate <ref>...
   Example: ihme deactivate github.com
 ```
 
@@ -309,7 +310,7 @@ Common tags: `#work`, `#dev`, `#personal`, `#throwaway`, `#team-<name>`.
 
 ### Hygiene
 
-`ihme list --sort date:asc` to surface old addresses for audit.
+`ihme list --sort oldest` to surface old addresses for audit.
 Suggest pruning dead services quarterly.
 
 ### Memory

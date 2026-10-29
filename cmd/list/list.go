@@ -31,8 +31,12 @@ Use --jq to query: ihme list --json --jq '.addresses[] | select(.isActive)'`,
   ihme list --search netflix
   ihme list --search github --active --json
   ihme list --json --jq '.addresses[0:5]'
+  ihme list --sort oldest
   ihme list --sort label`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := opts.Validate(); err != nil {
+				return err
+			}
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
@@ -66,6 +70,6 @@ Use --jq to query: ihme list --json --jq '.addresses[] | select(.isActive)'`,
 	cmd.Flags().BoolVar(&opts.Inactive, "inactive", false, "Show only inactive addresses")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Filter by tag")
 	cmd.Flags().StringVarP(&opts.Search, "search", "s", "", "Search label, address, or note")
-	cmd.Flags().StringVar(&opts.Sort, "sort", "", "Sort by: date, label, date:asc, label:desc")
+	cmd.Flags().StringVar(&opts.Sort, "sort", "", filter.SortUsage)
 	return cmd
 }

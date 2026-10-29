@@ -37,6 +37,31 @@ This error exits with code 1, not 2: signing in again does not fix it, only the 
 
 If your Apple Account uses security keys, Apple sends no code. Use ihme 0.7.1 or later (`ihme version`): it asks you to plug a FIDO2 key into USB and touch it. Keys that demand a PIN on every use, U2F-only keys, NFC and Bluetooth are not supported yet. Platform notes are in the [command guide](usage.md#authentication-and-errors).
 
+## Cleaning up old addresses
+
+ihme 0.7.4 or later. List the oldest first; the first column is each address's ID:
+
+```
+ihme list --sort oldest
+```
+
+Pass several IDs (or full addresses) at once:
+
+```
+ihme deactivate 7d8e9f0a 3f9a1b2c
+ihme delete --force 7d8e9f0a 3f9a1b2c
+```
+
+Deactivating stops an address's mail, and `ihme reactivate` brings it back. Deleting is permanent. If an address is still the sign-in email for some account, deleting it means that account's password-reset mail has nowhere to go. When unsure, deactivate first and delete later.
+
+`delete` lists every address and asks once. `ihme export --sort oldest -o addresses.csv` gives the same list for a spreadsheet.
+
+## When was an address last used?
+
+Apple does not record it anywhere ihme can read. For each address, Hide My Email returns its creation date, label, note, forward-to address, and whether it is active. Nothing about the mail it received.
+
+To check whether an address still gets mail, search the inbox it forwards to for the address.
+
 ## "Apple reports no Hide My Email on this Apple Account"
 
 Hide My Email needs an iCloud+ subscription on the Apple Account you signed in with. Check Settings > [your name] > iCloud > Hide My Email on an iPhone.

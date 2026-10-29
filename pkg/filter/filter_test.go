@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lroolle/ihme-cli/api"
@@ -121,5 +122,49 @@ func TestFilterEmpty(t *testing.T) {
 	result := Apply(nil, Options{Active: true})
 	if len(result) != 0 {
 		t.Errorf("nil input: got %d, want 0", len(result))
+	}
+}
+
+var datedEmails = []api.HmeEmail{
+	{AnonymousID: "mid", CreateTimestamp: 2000},
+	{AnonymousID: "old", CreateTimestamp: 1000},
+	{AnonymousID: "new", CreateTimestamp: 3000},
+	{AnonymousID: "mid2", CreateTimestamp: 2000},
+}
+
+func ids(emails []api.HmeEmail) string {
+	var s []string
+	for _, e := range emails {
+		s = append(s, e.AnonymousID)
+	}
+	return strings.Join(s, " ")
+}
+
+func TestSortByDate(t *testing.T) {
+	for _, tc := range []struct{ sort, want string }{
+		{"oldest", "old mid mid2 new"},
+		{"date:asc", "old mid mid2 new"},
+		{"newest", "new mid mid2 old"},
+		{"date", "new mid mid2 old"},
+		{"date:desc", "new mid mid2 old"},
+	} {
+		// Ties (mid, mid2) keep input order in both directions.
+		if got := ids(Apply(datedEmails, Options{Sort: tc.sort})); got != tc.want {
+			t.Errorf("--sort %s: got %q, want %q", tc.sort, got, tc.want)
+		}
+	}
+}
+
+func TestValidateSort(t *testing.T) {
+	for _, ok := range []string{"", "oldest", "newest", "date", "date:asc", "date:desc", "label", "label:asc", "label:desc"} {
+		if err := (Options{Sort: ok}).Validate(); err != nil {
+			t.Errorf("--sort %q rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"created", "old", "date:up", "Oldest"} {
+		err := (Options{Sort: bad}).Validate()
+		if err == nil || !strings.Contains(err.Error(), "use oldest, newest") {
+			t.Errorf("--sort %q: got %v, want an error naming the valid values", bad, err)
+		}
 	}
 }

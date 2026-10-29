@@ -1,6 +1,25 @@
 # Roadmap
 
-Current: **v0.7.3** · [MIT](LICENSE)
+Current: **v0.7.4** · [MIT](LICENSE)
+
+## Shipped in v0.7.4 — clean up old addresses
+
+- **`ihme list --sort oldest`** (and `newest`), and the table's
+  CREATED column carries the year. An unknown `--sort` value is now
+  an error: it used to fall through to newest first, so `--sort
+  oldest` listed the opposite of what it asked for. Ties keep
+  Apple's order.
+- **Several addresses at once.** `deactivate`, `reactivate`, and
+  `delete` take many IDs (the first column of `ihme list`) or full
+  addresses; labels stay one at a time. All are resolved before
+  anything changes, so a ref that matches nothing changes nothing.
+  `delete` lists every address and asks once. The first failure
+  stops the rest: an error is rarely about one address, and a
+  rejected session would retry the sign-in for each. What was not
+  done comes back as one retry command (`hints.retry` with
+  `--json`).
+- **No last-used date.** Apple does not return one. The
+  [FAQ](docs/faq.md) says so, and how to clean up without it.
 
 ## Shipped in v0.7.1 to v0.7.3 — security keys, and the setting behind "Invalid global session"
 
@@ -232,7 +251,7 @@ Not on the original roadmap; it emerged and took the release:
 | Item | Why |
 |------|-----|
 | `ihme audit` — surface old addresses, inactive services, missing tags | 326 addresses, 1 deactivated. Hygiene at scale |
-| `ihme bulk deactivate --tag throwaway --older-than 6m` | Batch lifecycle for agent-driven cleanup |
+| `ihme bulk deactivate --tag throwaway --older-than 6m` | Batch lifecycle for agent-driven cleanup. Several refs per command shipped in v0.7.4; selecting by tag or age is still open |
 | Structured stderr (JSON errors when `--json` is set) | Agents can't parse human error messages reliably |
 | Shell completions with dynamic ref completion | Tab-complete labels and IDs for humans |
 
