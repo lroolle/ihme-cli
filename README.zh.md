@@ -31,6 +31,8 @@ ihme auth login    # Apple ID、密码、双重认证码。保存会话，不保
 ihme list
 ```
 
+如果你的账号无法用密码登录，`ihme auth login --browser` 可以改用已在浏览器登录 icloud.com 的会话（[用法](docs/usage.md)）。
+
 ## 脚本
 
 所有地址命令支持 `--json`，`--jq` 调用本机 jq 处理输出。无终端时不弹出任何提问。

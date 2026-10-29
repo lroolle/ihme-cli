@@ -199,6 +199,12 @@ A session that expires mid-command heals itself (one silent re-auth,
 then the call is replayed), so a lone 401 never surfaces. Exit 2 means
 Apple kept refusing: only an interactive login fixes it.
 
+An error saying Hide My Email refuses this session exits 1: iCloud
+signed in fine, but the account blocks iCloud data on the web. Do not
+ask for a login; tell the user to turn on "Allow Data Access" (iPhone:
+Settings > [your name] > iCloud > iCloud.com), as the error's Fix line
+says.
+
 ## Operational guide (for agents)
 
 ### Creating an address
