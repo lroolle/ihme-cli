@@ -1,8 +1,8 @@
 # Roadmap
 
-Current: **v0.7.2** · [MIT](LICENSE)
+Current: **v0.7.3** · [MIT](LICENSE)
 
-## Shipped in v0.7.1 and v0.7.2 — security keys, and the setting behind "Invalid global session"
+## Shipped in v0.7.1 to v0.7.3 — security keys, and the setting behind "Invalid global session"
 
 - **Security-key sign-in.** Accounts that use security keys get no
   code; `auth login` now has a USB FIDO2 key sign Apple's challenge.
@@ -15,6 +15,7 @@ Current: **v0.7.2** · [MIT](LICENSE)
   of looping on sign-in. Where the setting is: [FAQ](docs/faq.md).
 - **`--browser` login removed in v0.7.2.** A pasted browser session
   cannot renew itself and did not hold up in practice.
+- **The fix names the Mac path too (v0.7.3)** and links the FAQ.
 
 ## Shipped in v0.7.0 — share one inbox, pick instead of typing
 

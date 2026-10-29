@@ -67,8 +67,9 @@ func (e *ServiceRefusedError) Unwrap() error { return e.Err }
 // DataAccessFix is how to turn on the setting that gates iCloud's web
 // API, the cause seen in the field. Apple renamed it in iOS/macOS 26.4
 // from "Access iCloud Data on the Web"; Advanced Data Protection
-// turns it off (support.apple.com/102630).
-const DataAccessFix = `turn on "Allow Data Access" (iPhone: Settings > [your name] > iCloud > iCloud.com; before iOS 26.4 it is "Access iCloud Data on the Web" under Settings > [your name] > iCloud), then run ihme auth login again`
+// turns it off (support.apple.com/102630). docs/faq.md has the long
+// answer; keep the two in step.
+const DataAccessFix = `turn on "Allow Data Access" (iPhone: Settings > [your name] > iCloud > iCloud.com; Mac: System Settings > [your name] > iCloud > Data Access on iCloud.com; before 26.4 it is "Access iCloud Data on the Web" under iCloud), then run ihme auth login again. More: https://github.com/lroolle/ihme-cli/blob/main/docs/faq.md`
 
 // ErrSessionInvalid marks a definitive rejection: Apple examined
 // the session and said no. Only this class justifies re-login or
