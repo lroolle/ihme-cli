@@ -30,7 +30,7 @@ type Client struct {
 	// account setting behind it.
 	lastLogin *AccountLoginResponse
 	// fresh means Apple minted or confirmed this session in this
-	// process (accountLogin, browser import). A service rejecting a
+	// process (accountLogin). A service rejecting a
 	// fresh session is the service's verdict on the account, and
 	// recovery would only mint the same session again.
 	fresh   bool

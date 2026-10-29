@@ -230,9 +230,6 @@ type SessionData struct {
 	// and kept: a new id per invocation is a stranger every time.
 	ClientID string    `json:"clientId,omitempty"`
 	SavedAt  time.Time `json:"savedAt"`
-	// Source is SourceBrowser for a session imported from a browser,
-	// empty for a password sign-in.
-	Source string `json:"source,omitempty"`
 	// ValidatedAt is the last time Apple confirmed this session
 	// (successful validate or accountLogin). Fresh sessions skip
 	// the per-command validate round trip.
