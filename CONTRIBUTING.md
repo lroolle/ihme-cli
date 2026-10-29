@@ -4,7 +4,7 @@ Small fixes and reproducible bug reports are welcome. Open an issue before start
 
 ## Report a bug
 
-Include your OS, `ihme version`, the command, what you expected, and the redacted error. Do not attach session files, cookies, model keys, or account exports. For vulnerabilities, follow [Security](SECURITY.md).
+Check the [FAQ](docs/faq.md) first. Include your OS, `ihme version`, the command, what you expected, and the redacted error. Do not attach session files, cookies, model keys, or account exports. For vulnerabilities, follow [Security](SECURITY.md).
 
 ## Change the code
 

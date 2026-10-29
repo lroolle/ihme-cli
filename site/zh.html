@@ -54,6 +54,7 @@ sudo install -m 755 ihme /usr/local/bin/ihme</code></pre>
         <p>macOS Intel、Linux、Windows（arm64、x86-64）见 <a href="https://github.com/lroolle/ihme-cli/releases/latest">releases</a>，附 SHA-256 校验值。Go 用户：<code>go install github.com/lroolle/ihme-cli/cmd/ihme@latest</code>。</p>
         <pre><code>ihme auth login    <span class="c"># Apple ID、密码、双重认证码。保存会话，不保存密码和验证码。</span>
 ihme list</code></pre>
+        <p class="note">登录成功，但隐藏邮件地址报 <code>Invalid global session</code>？打开“允许数据访问”。iPhone：设置 &gt; [你的姓名] &gt; iCloud &gt; iCloud.com。Mac：系统设置 &gt; [你的姓名] &gt; iCloud &gt; iCloud.com 数据访问。然后重新运行 <code>ihme auth login</code>。<a href="https://github.com/lroolle/ihme-cli/blob/main/docs/faq.md#signed-in-but-hide-my-email-refuses-the-session">常见问题</a>（英文）。</p>
 
         <h2 id="share">共享一个收件箱</h2>
         <pre><code>ihme share netflix    <span class="c"># 打印 key 和链接，只显示一次</span>
@@ -65,6 +66,7 @@ ihme serve            <span class="c"># http://127.0.0.1:8025</span></code></pre
         <ul class="docs">
           <li><a href="README.zh.md">中文 README</a><span>完整说明：安装、脚本、agent</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/usage.md">命令说明</a><span>查找、创建、编辑、标签、共享、导出、JSON、错误</span></li>
+          <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/faq.md">常见问题</a><span>登录成功但被拒绝、收不到双重认证码</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/docs/agents.md">Agent 说明</a><span>模型、确认、记忆、MCP</span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/ROADMAP.md">路线图与更新记录</a><span></span></li>
           <li><a href="https://github.com/lroolle/ihme-cli/blob/main/SECURITY.md">安全说明</a><span>本地存了什么，存在哪</span></li>

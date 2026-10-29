@@ -16,7 +16,7 @@ SITE_URL = 'https://lroolle.github.io/ihme-cli/'
 REPO_URL = 'https://github.com/lroolle/ihme-cli/'
 # Deliberate public entry points. Never recursively copy docs or the workspace.
 PUBLIC_DOCS = (
-    'README.md', 'README.zh.md', 'docs/usage.md', 'docs/agents.md', 'skill/SKILL.md',
+    'README.md', 'README.zh.md', 'docs/usage.md', 'docs/faq.md', 'docs/agents.md', 'skill/SKILL.md',
     'ROADMAP.md', 'AGENTS.md', 'pkg/agentkit/README.md', 'LICENSE',
     'SECURITY.md', 'CONTRIBUTING.md',
 )
