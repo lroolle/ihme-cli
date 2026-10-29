@@ -23,7 +23,7 @@ func NewCmdExport() *cobra.Command {
   ihme export --format json
   ihme export --active --tag dev -o dev.csv
   ihme export --format json -o all.json
-  ihme export --sort oldest -o oldest-first.csv`,
+  ihme export --sort date:asc -o oldest-first.csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := opts.Validate(); err != nil {
 				return err

@@ -31,7 +31,7 @@ Use --jq to query: ihme list --json --jq '.addresses[] | select(.isActive)'`,
   ihme list --search netflix
   ihme list --search github --active --json
   ihme list --json --jq '.addresses[0:5]'
-  ihme list --sort oldest
+  ihme list --sort date:asc
   ihme list --sort label`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := opts.Validate(); err != nil {

@@ -190,11 +190,11 @@ Without <ref> at a terminal, asks which inactive address (any address
 with --force), newest first. A picked address is always confirmed,
 even with --yes. Without a terminal, --yes is required.
 
-Several refs take IDs (the first column of 'ihme list --sort
-oldest') or full addresses, not labels. All are resolved and checked
-before anything is deleted, then confirmed once, listing every
-address. The first failure stops the rest, and ihme prints one
-command that retries what was not deleted.
+Several refs take IDs (the first column of 'ihme list') or full
+addresses, not labels. All are resolved and checked before anything
+is deleted, then confirmed once, listing every address. The first
+failure stops the rest, and ihme prints one command that retries
+what was not deleted.
 
 JSON output (--json):
   {"status":"deleted","hme":"...","id":"..."}

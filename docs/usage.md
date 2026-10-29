@@ -18,7 +18,7 @@ LIST & SEARCH
   ihme list --search <query>     Search label, address, or note
   ihme list --active             Only active
   ihme list --tag <tag>          Filter by tag
-  ihme list --sort oldest        Oldest first (also: newest, label)
+  ihme list --sort date:asc      Oldest first (also: date, label)
 
 CREATE
   ihme new <label>               Interactive: pick from ~3 candidates
@@ -112,7 +112,7 @@ Deactivate an address before deleting it. Deactivation and reactivation take eff
 Clean up several at once, by the ID column of `ihme list` or by full address:
 
 ```bash
-ihme list --sort oldest                  # oldest first, with dates
+ihme list --sort date:asc                # oldest first, with dates
 ihme deactivate 7d8e9f0a 3f9a1b2c        # stop their mail; reversible
 ihme delete --force 7d8e9f0a 3f9a1b2c    # deactivate and delete, one confirmation
 ```

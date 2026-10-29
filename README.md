@@ -5,7 +5,7 @@ iCloud Hide My Email from the terminal. One address per signup. Find it later. D
 ```bash
 ihme new github.com          # pick from Apple's candidates
 ihme list --search github    # by label, address, or note
-ihme list --sort oldest      # oldest first, to clean up
+ihme list --sort date:asc    # oldest first, to clean up
 ihme deactivate              # no address: pick one, newest first
 ihme share netflix           # grant read of that address
 ihme export -o backup.csv    # your own copy

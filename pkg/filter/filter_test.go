@@ -142,9 +142,7 @@ func ids(emails []api.HmeEmail) string {
 
 func TestSortByDate(t *testing.T) {
 	for _, tc := range []struct{ sort, want string }{
-		{"oldest", "old mid mid2 new"},
 		{"date:asc", "old mid mid2 new"},
-		{"newest", "new mid mid2 old"},
 		{"date", "new mid mid2 old"},
 		{"date:desc", "new mid mid2 old"},
 	} {
@@ -156,14 +154,14 @@ func TestSortByDate(t *testing.T) {
 }
 
 func TestValidateSort(t *testing.T) {
-	for _, ok := range []string{"", "oldest", "newest", "date", "date:asc", "date:desc", "label", "label:asc", "label:desc"} {
+	for _, ok := range []string{"", "date", "date:asc", "date:desc", "label", "label:asc", "label:desc"} {
 		if err := (Options{Sort: ok}).Validate(); err != nil {
 			t.Errorf("--sort %q rejected: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"created", "old", "date:up", "Oldest"} {
+	for _, bad := range []string{"created", "oldest", "newest", "date:up", "Date"} {
 		err := (Options{Sort: bad}).Validate()
-		if err == nil || !strings.Contains(err.Error(), "use oldest, newest") {
+		if err == nil || !strings.Contains(err.Error(), "use date, date:asc") {
 			t.Errorf("--sort %q: got %v, want an error naming the valid values", bad, err)
 		}
 	}
