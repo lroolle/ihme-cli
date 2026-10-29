@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -109,6 +110,11 @@ func TestHmeRequestRecoversOnlyOnce(t *testing.T) {
 	if !IsAuthRejection(err) {
 		t.Errorf("persistent 401 should read as an auth rejection, got %v", err)
 	}
+	// accountLogin just minted a good session; the service still says
+	// no. That is the account (web data access off), not expiry.
+	if !errors.As(err, new(*ServiceRefusedError)) {
+		t.Errorf("a refusal after a fresh accountLogin should be a ServiceRefusedError, got %v", err)
+	}
 	// The service's verdict is the diagnosis; recovery's failure is
 	// only why it stands.
 	if !strings.Contains(err.Error(), "401") {
@@ -155,6 +161,26 @@ func TestHmeRequestBare421StaysTransient(t *testing.T) {
 	_, err := c.ListHme()
 	if !IsTransient(err) {
 		t.Fatalf("bare 421 should stay transient, got %v", err)
+	}
+}
+
+// A session accountLogin minted in this process (a login just now)
+// is not re-minted on a 401: recovery would mint the same session
+// and send Apple's sign-in email for nothing.
+func TestHmeRequestFreshSessionIsNotRecovered(t *testing.T) {
+	srv := newHmeTestServer(99)
+	defer srv.Close()
+
+	c := srv.client()
+	if err := c.accountLogin(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := c.ListHme()
+	if !errors.As(err, new(*ServiceRefusedError)) {
+		t.Fatalf("want a ServiceRefusedError, got %v", err)
+	}
+	if srv.hmeCalls != 1 || srv.loginCalls != 1 {
+		t.Errorf("want 1 HME call and only the login's accountLogin, got %d and %d", srv.hmeCalls, srv.loginCalls)
 	}
 }
 

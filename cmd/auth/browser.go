@@ -56,18 +56,9 @@ func loginBrowser(cmd *cobra.Command, sessPath string) error {
 		// %v: see the password path in newCmdLogin.
 		return fmt.Errorf("sign-in failed: %v", err)
 	}
-	// iCloud accepting the cookies is not Hide My Email accepting
-	// them; one list call proves the session is worth saving.
-	list, err := client.ListHme()
-	if err != nil {
-		return fmt.Errorf("iCloud accepted the session, but Hide My Email refused it: %v", err)
+	if err := confirmHme(client, sessPath, "Logged in as "+client.Session().AppleID+" from your browser session"); err != nil {
+		return err
 	}
-
-	if err := api.SaveSession(sessPath, client.Session()); err != nil {
-		return fmt.Errorf("saving session: %w", err)
-	}
-	fmt.Printf("Logged in as %s from your browser session (%d addresses).\n",
-		client.Session().AppleID, len(list.HmeEmails))
 	fmt.Println("Keep that browser signed in: signing out at icloud.com ends this session too.")
 	return nil
 }
@@ -100,6 +91,11 @@ func readCookieInput(in *os.File, interactive bool) (string, error) {
 // the terminal handles no keys: Enter ends the line, Backspace
 // deletes, Ctrl-C cancels, Ctrl-D on an empty line is EOF. Bracketed
 // paste markers and other control bytes are dropped.
+//
+// A pasted JSON export spans many lines, so input that starts with
+// "[" ends only at a line ending in "]". Stopping at its first line
+// would leave the rest in the terminal for the shell to run as
+// commands, cookies and all, into the shell history.
 func readHiddenLine(r io.Reader) (string, error) {
 	br := bufio.NewReader(r)
 	var line []byte
@@ -113,6 +109,10 @@ func readHiddenLine(r io.Reader) (string, error) {
 		}
 		switch b {
 		case '\r', '\n':
+			if s := strings.TrimSpace(cleanPaste(line)); strings.HasPrefix(s, "[") && !strings.HasSuffix(s, "]") {
+				line = append(line, ' ')
+				continue
+			}
 			return cleanPaste(line), nil
 		case 0x03:
 			return "", cmdutil.ErrCancelled

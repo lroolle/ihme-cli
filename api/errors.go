@@ -49,6 +49,27 @@ func IsTransient(err error) bool {
 	return errors.As(err, &t)
 }
 
+// ServiceRefusedError is Hide My Email answering 401/403 to a session
+// Apple confirmed moments before. That is the account refusing web
+// access to the service, not an expired session, so signing in again
+// does not help and must not be the advice. Note names the account
+// setting Apple reported as the likely cause, "" when none did.
+type ServiceRefusedError struct {
+	Err  error
+	Note string
+}
+
+func (e *ServiceRefusedError) Error() string {
+	return "iCloud accepted the session but Hide My Email refused it: " + e.Err.Error()
+}
+func (e *ServiceRefusedError) Unwrap() error { return e.Err }
+
+// DataAccessFix is how to turn on the setting that gates iCloud's web
+// API, the cause seen in the field. Apple renamed it in iOS/macOS 26.4
+// from "Access iCloud Data on the Web"; Advanced Data Protection
+// turns it off (support.apple.com/102630).
+const DataAccessFix = `turn on "Allow Data Access" (iPhone: Settings > [your name] > iCloud > iCloud.com; before iOS 26.4 it is "Access iCloud Data on the Web" under Settings > [your name] > iCloud), then run ihme auth login again`
+
 // ErrSessionInvalid marks a definitive rejection: Apple examined
 // the session and said no. Only this class justifies re-login or
 // the accountLogin fallback.

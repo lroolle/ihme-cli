@@ -134,5 +134,7 @@ func (c *Client) ImportBrowserSession() error {
 	if info.DsInfo.PrimaryEmail != "" {
 		c.session.AppleID = strings.ToLower(info.DsInfo.PrimaryEmail)
 	}
+	c.lastLogin = info
+	c.fresh = true
 	return c.checkAccount(info)
 }

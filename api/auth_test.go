@@ -404,6 +404,7 @@ func TestCheckAccount(t *testing.T) {
 		{"fields absent", `{"dsInfo":{"dsid":"1"},"webservices":{"premiummailsettings":{"url":"u"}}}`, false, ""},
 		{"pcsRequired HME is a note, not a failure", `{"dsInfo":{"dsid":"1"},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u","status":"active","pcsRequired":true}}}`, false, "pcsRequired"},
 		{"web access off is a note, not a failure", `{"dsInfo":{"dsid":"1","isWebAccessAllowed":false},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u"}}}`, false, "Access iCloud Data on the Web"},
+		{"data access off outranks a missing service", `{"dsInfo":{"dsid":"1","isWebAccessAllowed":false},"hsaChallengeRequired":false,"webservices":{}}`, false, "Allow Data Access"},
 		{"no Hide My Email is a note, not a failure", `{"dsInfo":{"dsid":"1","isHideMyEmailFeatureAvailable":false},"hsaChallengeRequired":false,"webservices":{"premiummailsettings":{"url":"u"}}}`, false, "iCloud+"},
 	}
 	for _, tc := range cases {

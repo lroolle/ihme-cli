@@ -27,6 +27,9 @@ func (c *Client) hmeRequest(version int, path, method string, body any) ([]byte,
 		return respBody, err
 	}
 
+	if c.fresh {
+		return nil, c.serviceRefused(err)
+	}
 	// Browser cookies have no tokens behind them to mint new ones.
 	if c.session.Source == SourceBrowser {
 		return nil, fmt.Errorf("%w: %w", err, ErrBrowserSessionExpired)
@@ -49,7 +52,19 @@ func (c *Client) hmeRequest(version int, path, method string, body any) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	return c.doServiceRequest(method, url, body)
+	respBody, err = c.doServiceRequest(method, url, body)
+	if IsAuthRejection(err) {
+		return nil, c.serviceRefused(err)
+	}
+	return respBody, err
+}
+
+func (c *Client) serviceRefused(err error) error {
+	note := ""
+	if c.lastLogin != nil {
+		note = accountNote(c.lastLogin)
+	}
+	return &ServiceRefusedError{Err: err, Note: note}
 }
 
 func (c *Client) ListHme() (*ListHmeResult, error) {

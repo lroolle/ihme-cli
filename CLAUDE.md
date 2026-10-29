@@ -196,9 +196,14 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
    validate, which already lied), rebuild the URL from the fresh
    webservices map and dsid, replay the call. A rejected call
    changed nothing on Apple's side, so replaying is safe even for
-   mutations. Recovery is one shot; a session Apple keeps refusing
-   is expired, and retry loops against auth endpoints get accounts
-   rate limited. Fresh cookies go back to disk through
+   mutations. Recovery is one shot, and retry loops against auth
+   endpoints get accounts rate limited. A 401 on a session Apple
+   minted in this process (accountLogin, browser import, or the
+   recovery itself) is NOT expiry: it is ServiceRefusedError, the
+   account blocking web data access ("Allow Data Access", formerly
+   "Access iCloud Data on the Web"; ADP turns it off). Field-confirmed
+   (issue #14). It exits 1 and names the setting; never answer it
+   with "sign in again". Fresh cookies go back to disk through
    Client.OnSessionUpdate.
 7. clientId is generated once and persisted in the session — one
    installation, not a new stranger every invocation.

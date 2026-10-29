@@ -19,6 +19,7 @@ func TestReadHiddenLine(t *testing.T) {
 		{"longer than a terminal line", long + "\r", long, nil},
 		{"bracketed paste", "\x1b[200~a=b\x1b[201~\r", "a=b", nil},
 		{"backspace", "a=bx\x7f\r", "a=b", nil},
+		{"multi-line JSON export is read whole", "[\r\n  {\"name\": \"a\",\r\n   \"value\": \"b\"}\r\n]\rnext", `[    {"name": "a",     "value": "b"}  ]`, nil},
 		{"EOF after input", "a=b", "a=b", nil},
 		{"Ctrl-C cancels", "a=\x03", "", cmdutil.ErrCancelled},
 		{"Ctrl-D on empty line", "\x04", "", io.EOF},

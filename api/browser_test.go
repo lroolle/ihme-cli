@@ -159,12 +159,26 @@ func TestBrowserSessionExpired(t *testing.T) {
 			t.Fatalf("ResumeSession = %v", err)
 		}
 	})
-	t.Run("service call", func(t *testing.T) {
+	// Moments after import the session is fresh: a refusal is Hide
+	// My Email's verdict on the account, not expiry.
+	t.Run("service call right after import", func(t *testing.T) {
 		apple := newBrowserApple(t, http.StatusOK, validateOK)
 		c := apple.client()
 		if err := c.ImportBrowserSession(); err != nil {
 			t.Fatal(err)
 		}
+		apple.hmeStatus = http.StatusUnauthorized
+		_, err := c.ListHme()
+		if !errors.As(err, new(*ServiceRefusedError)) || errors.Is(err, ErrBrowserSessionExpired) {
+			t.Fatalf("ListHme = %v", err)
+		}
+	})
+	// In a later command the same refusal means the cookies expired.
+	t.Run("service call in a later command", func(t *testing.T) {
+		apple := newBrowserApple(t, http.StatusOK, validateOK)
+		c := apple.client()
+		c.session.Source = SourceBrowser
+		c.session.Webservices = map[string]WebserviceEndpoint{"premiummailsettings": {URL: apple.URL}}
 		apple.hmeStatus = http.StatusUnauthorized
 		_, err := c.ListHme()
 		if !errors.Is(err, ErrBrowserSessionExpired) || !IsAuthRejection(err) {

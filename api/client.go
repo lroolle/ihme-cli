@@ -26,9 +26,15 @@ type Client struct {
 	// production (the region constants decide); set by tests.
 	setupBase string
 	// lastLogin is the latest accountLogin answer, for Login to
-	// check Apple's 2FA verdict.
+	// check Apple's 2FA verdict and for a refusal to name the
+	// account setting behind it.
 	lastLogin *AccountLoginResponse
-	Verbose   bool
+	// fresh means Apple minted or confirmed this session in this
+	// process (accountLogin, browser import). A service rejecting a
+	// fresh session is the service's verdict on the account, and
+	// recovery would only mint the same session again.
+	fresh   bool
+	Verbose bool
 	// OnSessionUpdate, when set, is called whenever the session
 	// changes mid-command: Apple rotated or expired a cookie on a
 	// service response, or the client re-minted the session. The

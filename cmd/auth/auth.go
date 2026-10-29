@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -163,12 +164,7 @@ ihme auth login --browser.`,
 				return fmt.Errorf("sign-in failed: %v", err)
 			}
 
-			if err := api.SaveSession(sessPath, client.Session()); err != nil {
-				return fmt.Errorf("saving session: %w", err)
-			}
-
-			fmt.Println("Logged in successfully.")
-			return nil
+			return confirmHme(client, sessPath, "Logged in successfully")
 		},
 	}
 
@@ -176,6 +172,29 @@ ihme auth login --browser.`,
 	cmd.Flags().BoolVar(&browser, "browser", false, "Sign in with the cookies of a browser signed in at icloud.com, read from stdin")
 	cmd.MarkFlagsMutuallyExclusive("browser", "apple-id")
 	return cmd
+}
+
+// confirmHme saves the session, then lists the addresses once, so a
+// login only reports success when Hide My Email answers, not just
+// iCloud. A refusal is returned as the login's error; the session is
+// still kept, since it is valid and its trust token spares the second
+// factor on the sign-in the fix asks for. Anything else (no network,
+// no iCloud+) is a warning on a good login.
+func confirmHme(client *api.Client, sessPath, success string) error {
+	if err := api.SaveSession(sessPath, client.Session()); err != nil {
+		return fmt.Errorf("saving session: %w", err)
+	}
+	list, err := client.ListHme()
+	if errors.As(err, new(*api.ServiceRefusedError)) {
+		return err
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not check Hide My Email: %v\n", err)
+		fmt.Println(success + ".")
+		return nil
+	}
+	fmt.Printf("%s (%d addresses).\n", success, len(list.HmeEmails))
+	return nil
 }
 
 func newCmdStatus() *cobra.Command {

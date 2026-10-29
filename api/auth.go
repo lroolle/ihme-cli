@@ -51,17 +51,12 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, 
 }
 
 // checkAccount reads Apple's verdict in an accountLogin (or, for a
-// browser session, validate) answer. A
-// session Apple still holds 2FA against fails: every service answers
-// it with 401 "Invalid global session", so reporting success would
-// only move the failure to the next command. Only an explicit
-// hsaChallengeRequired=true fails; absent fields keep the old path.
-//
-// What else can stop Hide My Email is reported as a note, not a
-// failure, because the session itself is good: no Hide My Email on
-// the account, web access to iCloud data turned off, or the service
-// marked pcsRequired (device approval ihme cannot request yet; normal
-// accounts do not carry it on premiummailsettings).
+// browser session, validate) answer. A session Apple still holds 2FA
+// against fails: every service answers it with 401 "Invalid global
+// session", so reporting success would only move the failure to the
+// next command. Only an explicit hsaChallengeRequired=true fails;
+// absent fields keep the old path. What else can stop Hide My Email
+// is reported by accountNote when the service actually refuses.
 func (c *Client) checkAccount(login *AccountLoginResponse) error {
 	if login == nil {
 		return nil
@@ -75,26 +70,25 @@ func (c *Client) checkAccount(login *AccountLoginResponse) error {
 			hasHME, hme.Status, hme.PcsRequired)
 	}
 	if login.HsaChallengeRequired != nil && *login.HsaChallengeRequired {
-		return fmt.Errorf("two-factor authentication was not completed for this session (Apple: hsaChallengeRequired); run ihme auth login -v and report the output")
-	}
-	if note := accountNote(login); note != "" {
-		fmt.Fprintln(os.Stderr, "Note: "+note)
+		return fmt.Errorf("two-factor authentication was not completed for this session (Apple: hsaChallengeRequired); sign in again, and if it repeats, report the output of the same command with -v")
 	}
 	return nil
 }
 
-// accountNote names the first thing on a good session that can still
-// stop Hide My Email, or "" when nothing does.
+// accountNote is the fix for the first account setting Apple reports
+// that stops Hide My Email on a good session, or "" when it reports
+// none. Data access comes first: it is the cause seen in the field,
+// and with it off Apple may not list the service at all.
 func accountNote(login *AccountLoginResponse) string {
 	ds := login.DsInfo
 	hme, hasHME := login.Webservices["premiummailsettings"]
 	switch {
-	case !hasHME || isFalse(ds.HideMyEmailAvailable):
-		return "Apple reports no Hide My Email on this Apple Account; it needs an iCloud+ subscription."
 	case isFalse(ds.WebAccessAllowed):
-		return "\"Access iCloud Data on the Web\" is off for this Apple Account, and ihme uses iCloud's web API. If commands fail with \"Invalid global session\", turn it on (iPhone: Settings > [your name] > iCloud) and sign in again."
+		return DataAccessFix
+	case !hasHME || isFalse(ds.HideMyEmailAvailable):
+		return "Apple reports no Hide My Email on this Apple Account; it needs an iCloud+ subscription"
 	case hme.PcsRequired:
-		return "Apple marks Hide My Email on this account as needing approval on a trusted device (pcsRequired), which ihme cannot request yet. If commands fail with \"Invalid global session\", that is the likely cause."
+		return "Apple marks Hide My Email as needing approval on a trusted device (pcsRequired), which ihme cannot request yet; " + DataAccessFix
 	}
 	return ""
 }
@@ -133,9 +127,12 @@ func (c *Client) ResumeSession() error {
 		if err == nil {
 			return nil
 		}
-		if !IsAuthRejection(err) {
+		// A browser session reads a 421 refusal as a rejection (see
+		// ValidateSessionInfo), and Apple also sends 421 for routing
+		// hiccups; with no accountLogin behind it, it gets the retry.
+		if !IsAuthRejection(err) || browser {
 			if c.Verbose {
-				fmt.Fprintf(os.Stderr, "[svc] validate failed transiently, retrying once: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[svc] validate failed, retrying once: %v\n", err)
 			}
 			time.Sleep(1500 * time.Millisecond)
 			err = c.ValidateSession()
@@ -731,6 +728,7 @@ func (c *Client) accountLogin() error {
 	c.session.Webservices = resp.Webservices
 	c.session.ValidatedAt = time.Now()
 	c.lastLogin = &resp
+	c.fresh = true
 	return nil
 }
 
