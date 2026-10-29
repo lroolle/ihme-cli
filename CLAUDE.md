@@ -157,15 +157,6 @@ Apple SRP via idmsa.apple.com (web auth, not GSA):
 6. GET  /2sv/trust — trust token
 7. POST setup.icloud.com/accountLogin — get webservices map + cookies
 
-`ihme auth login --browser` (api/browser.go) skips all of the above:
-the user pastes the Cookie header of a browser signed in at
-icloud.com, /validate confirms it, one HME list proves it. The session
-is marked source=browser and holds no session or trust token, so
-nothing can re-mint it: ResumeSession and hmeRequest return
-ErrBrowserSessionExpired instead of calling accountLogin, and validate
-reads 421 {"success":false} as a rejection for it (made-up cookies get
-421, not 401, live).
-
 Cookie handling: manual Cookie header from session cookie list (rclone pattern).
 No Go cookie jar domain matching — cookies go to all service requests.
 Replayed byte-faithful: quoted values keep their quotes (SavedCookie.Quoted),
@@ -198,11 +189,10 @@ CN accounts: auto-fallback to setup.icloud.com.cn on 421.
    changed nothing on Apple's side, so replaying is safe even for
    mutations. Recovery is one shot, and retry loops against auth
    endpoints get accounts rate limited. A 401 on a session Apple
-   minted in this process (accountLogin, browser import, or the
-   recovery itself) is NOT expiry: it is ServiceRefusedError, the
-   account blocking web data access ("Allow Data Access", formerly
-   "Access iCloud Data on the Web"; ADP turns it off). Field-confirmed
-   (issue #14). It exits 1 and names the setting; never answer it
+   minted in this process (accountLogin or the recovery itself) is
+   NOT expiry: it is ServiceRefusedError, the account blocking web
+   data access ("Allow Data Access", formerly "Access iCloud Data on
+   the Web"; ADP turns it off). Field-confirmed (issue #14). It exits 1 and names the setting; never answer it
    with "sign in again". Fresh cookies go back to disk through
    Client.OnSessionUpdate.
 7. clientId is generated once and persisted in the session — one

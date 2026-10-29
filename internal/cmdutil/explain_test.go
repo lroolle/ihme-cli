@@ -38,13 +38,6 @@ func TestExplainAndExitCode(t *testing.T) {
 			wantCode: 1,
 		},
 		{
-			name:     "browser session expired",
-			err:      fmt.Errorf("listing HME: %w: %w", &api.HTTPError{Status: 401, URL: "https://p137-maildomainws.icloud.com/v2/hme/list?dsid=123"}, api.ErrBrowserSessionExpired),
-			wantText: "copied from your browser",
-			wantFix:  "ihme auth login --browser",
-			wantCode: 2,
-		},
-		{
 			name:     "apple is having a bad day",
 			err:      &api.TransientError{Err: fmt.Errorf("validating session: %w", &api.HTTPError{Status: 502, URL: "https://setup.icloud.com/setup/ws/1/validate"})},
 			wantText: "temporarily unreachable",
