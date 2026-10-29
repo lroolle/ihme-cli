@@ -42,7 +42,7 @@ If your Apple Account uses security keys, Apple sends no code. Use ihme 0.7.1 or
 ihme 0.7.4 or later. List the oldest first; the first column is each address's ID:
 
 ```
-ihme list --sort oldest
+ihme list --sort date:asc
 ```
 
 Pass several IDs (or full addresses) at once:
@@ -54,7 +54,7 @@ ihme delete --force 7d8e9f0a 3f9a1b2c
 
 Deactivating stops an address's mail, and `ihme reactivate` brings it back. Deleting is permanent. If an address is still the sign-in email for some account, deleting it means that account's password-reset mail has nowhere to go. When unsure, deactivate first and delete later.
 
-`delete` lists every address and asks once. `ihme export --sort oldest -o addresses.csv` gives the same list for a spreadsheet.
+`delete` lists every address and asks once. `ihme export --sort date:asc -o addresses.csv` gives the same list for a spreadsheet.
 
 ## When was an address last used?
 

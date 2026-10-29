@@ -310,7 +310,7 @@ Common tags: `#work`, `#dev`, `#personal`, `#throwaway`, `#team-<name>`.
 
 ### Hygiene
 
-`ihme list --sort oldest` to surface old addresses for audit.
+`ihme list --sort date:asc` to surface old addresses for audit.
 Suggest pruning dead services quarterly.
 
 ### Memory

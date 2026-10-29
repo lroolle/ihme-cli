@@ -1,14 +1,15 @@
 # Roadmap
 
-Current: **v0.7.4** · [MIT](LICENSE)
+Current: **v0.7.5** · [MIT](LICENSE)
 
-## Shipped in v0.7.4 — clean up old addresses
+## Shipped in v0.7.4 and v0.7.5 — clean up old addresses
 
-- **`ihme list --sort oldest`** (and `newest`), and the table's
-  CREATED column carries the year. An unknown `--sort` value is now
-  an error: it used to fall through to newest first, so `--sort
-  oldest` listed the opposite of what it asked for. Ties keep
-  Apple's order.
+- **`ihme list --sort date:asc`** lists oldest first, and the
+  table's CREATED column carries the year. An unknown `--sort` value
+  is now an error: it used to fall through to newest first, so
+  `--sort oldest` listed the opposite of what it asked for. Ties
+  keep Apple's order. v0.7.4 also took `oldest` and `newest`; v0.7.5
+  dropped them for the one `field[:dir]` grammar (TASTE.md).
 - **Several addresses at once.** `deactivate`, `reactivate`, and
   `delete` take many IDs (the first column of `ihme list`) or full
   addresses; labels stay one at a time. All are resolved before

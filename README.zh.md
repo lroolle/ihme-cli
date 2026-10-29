@@ -5,7 +5,7 @@
 ```bash
 ihme new github.com          # 从候选中选一个
 ihme list --search github    # 按标签、地址或备注查找
-ihme list --sort oldest      # 最旧的在前，方便清理
+ihme list --sort date:asc    # 最旧的在前，方便清理
 ihme deactivate              # 不带地址则从列表选择，最新在前
 ihme share netflix           # 共享该地址的收件箱
 ihme export -o backup.csv    # 导出备份

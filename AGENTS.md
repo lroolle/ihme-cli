@@ -51,7 +51,7 @@ ihme list --search netflix --json         # search label, address, or note
 ihme list --active --json                 # only active
 ihme list --inactive --json               # only inactive
 ihme list --tag dev --json                # filter by tag
-ihme list --sort oldest --json            # sort by: oldest, newest, label, label:desc
+ihme list --sort date:asc --json          # sort by: date, date:asc, label, label:desc
 ihme list --json --jq '.addresses[0:5]'   # first 5
 ihme list --json --jq '.count'            # total count
 ```

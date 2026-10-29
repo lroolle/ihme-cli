@@ -14,21 +14,22 @@ type Options struct {
 	Inactive bool
 	Tag      string
 	Search   string
-	Sort     string // "oldest", "newest", "label", "label:desc"
+	Sort     string // "date", "date:asc", "label", "label:desc"
 }
 
 // SortUsage is the --sort flag help, shared by list and export.
-const SortUsage = "Sort: oldest, newest, label, label:desc"
+const SortUsage = "Sort by: date (newest first), date:asc (oldest first), label, label:desc"
 
 // Validate rejects a --sort value it does not know. Unknown values
 // used to fall through to newest first, so a guess like "--sort
-// oldest" silently listed the opposite of what it asked for.
+// oldest" silently listed the opposite of what it asked for; now
+// it errors and names the grammar.
 func (o Options) Validate() error {
 	if o.Sort == "" {
 		return nil
 	}
 	if _, _, ok := parseSort(o.Sort); !ok {
-		return fmt.Errorf("unknown --sort %q — use oldest, newest, label, or label:desc", o.Sort)
+		return fmt.Errorf("unknown --sort %q — use date, date:asc, label, or label:desc", o.Sort)
 	}
 	return nil
 }
@@ -92,16 +93,10 @@ func Apply(emails []api.HmeEmail, opts Options) []api.HmeEmail {
 	return result
 }
 
-// parseSort reads a --sort value. oldest and newest are the words
-// people reach for; field[:asc|:desc] stays for scripts written
-// against it. A bare date means newest first, a bare label A to Z.
+// parseSort reads field[:asc|:desc]. A bare date means newest
+// first, a bare label A to Z. One grammar, no word aliases such as
+// oldest (TASTE.md).
 func parseSort(s string) (field string, desc bool, ok bool) {
-	switch s {
-	case "oldest":
-		return "date", false, true
-	case "newest":
-		return "date", true, true
-	}
 	field, dir, _ := strings.Cut(s, ":")
 	if field != "date" && field != "label" {
 		return "", false, false

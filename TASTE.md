@@ -129,3 +129,25 @@ constructed.
 **Expires.** If a future rubric scores images separately from the
 pass/fail verdict (image as scored bonus, not rationale), the
 rationale field may reference it again.
+
+---
+
+## 2026-10-29 rejected: `--sort oldest` and `--sort newest`
+
+**Why.** v0.7.4 added them because a reporter asked to sort "oldest
+to newest". `--sort` already had one grammar, `field[:asc|:desc]`:
+`date`, `date:asc`, `label`, `label:desc`. The words gave one order
+two spellings and the flag two vocabularies, and `label:desc` had no
+word, so the grammar stayed needed anyway. The spelling was not what
+failed the reporter: an unknown value silently sorted newest first,
+and the table dropped the year, so an oldest-first list across years
+could not be read. Those fixes stayed; the words went in v0.7.5.
+
+**Reuse.** A user's request names the outcome, not the API. Map it
+onto the grammar the command already has, and fix whatever made that
+grammar hard to find (a silent fallback, a missing year) instead of
+adding a synonym. An unknown value gets an error that names the
+grammar.
+
+**Expires.** If `--sort` grows fields where asc/desc reads wrong for
+most people, redesign the grammar as a whole, not one alias at a time.
