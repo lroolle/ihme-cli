@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lroolle/ihme-cli/api"
 )
@@ -46,6 +47,9 @@ func TestPrintTable(t *testing.T) {
 	}
 	if !strings.Contains(out, "active") {
 		t.Error("table missing status")
+	}
+	if day := time.UnixMilli(1705276800000).Format("2006-01-02"); !strings.Contains(out, day) {
+		t.Errorf("table should date addresses with the year (%s):\n%s", day, out)
 	}
 }
 

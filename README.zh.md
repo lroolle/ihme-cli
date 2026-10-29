@@ -5,6 +5,7 @@
 ```bash
 ihme new github.com          # 从候选中选一个
 ihme list --search github    # 按标签、地址或备注查找
+ihme list --sort oldest      # 最旧的在前，方便清理
 ihme deactivate              # 不带地址则从列表选择，最新在前
 ihme share netflix           # 共享该地址的收件箱
 ihme export -o backup.csv    # 导出备份
@@ -66,7 +67,7 @@ key 只能访问该地址的邮件：收件箱和垃圾邮件，最近 30 天，
 以下文档为英文。
 
 - [命令说明](docs/usage.md)：查找、创建、编辑、标签、共享、导出、JSON、错误
-- [常见问题](docs/faq.md)：登录成功但隐藏邮件地址拒绝访问、收不到双重认证码
+- [常见问题](docs/faq.md)：登录成功但隐藏邮件地址拒绝访问、收不到双重认证码、清理旧地址
 - [Agent 说明](docs/agents.md)：模型、确认、记忆、MCP
 - [路线图与更新记录](ROADMAP.md)
 - [安全说明](SECURITY.md)：本地存了什么，存在哪

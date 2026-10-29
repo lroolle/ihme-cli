@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -13,7 +14,23 @@ type Options struct {
 	Inactive bool
 	Tag      string
 	Search   string
-	Sort     string // "date", "label", "date:asc", "label:desc"
+	Sort     string // "oldest", "newest", "label", "label:desc"
+}
+
+// SortUsage is the --sort flag help, shared by list and export.
+const SortUsage = "Sort: oldest, newest, label, label:desc"
+
+// Validate rejects a --sort value it does not know. Unknown values
+// used to fall through to newest first, so a guess like "--sort
+// oldest" silently listed the opposite of what it asked for.
+func (o Options) Validate() error {
+	if o.Sort == "" {
+		return nil
+	}
+	if _, _, ok := parseSort(o.Sort); !ok {
+		return fmt.Errorf("unknown --sort %q — use oldest, newest, label, or label:desc", o.Sort)
+	}
+	return nil
 }
 
 func Apply(emails []api.HmeEmail, opts Options) []api.HmeEmail {
@@ -54,41 +71,48 @@ func Apply(emails []api.HmeEmail, opts Options) []api.HmeEmail {
 		result = append(result, e)
 	}
 
-	if opts.Sort != "" {
-		field, dir := parseSort(opts.Sort)
-		sort.Slice(result, func(i, j int) bool {
-			var less bool
-			switch field {
-			case "label":
-				less = strings.ToLower(result[i].Label) < strings.ToLower(result[j].Label)
-			default:
-				less = result[i].CreateTimestamp > result[j].CreateTimestamp
+	if field, desc, ok := parseSort(opts.Sort); ok {
+		less := func(a, b api.HmeEmail) bool {
+			if field == "label" {
+				return strings.ToLower(a.Label) < strings.ToLower(b.Label)
 			}
-			if dir == "asc" && field == "date" {
-				less = !less
+			return a.CreateTimestamp < b.CreateTimestamp
+		}
+		// Strict both ways (flipping < used to give <=) and stable,
+		// so addresses created in the same millisecond keep Apple's
+		// order.
+		sort.SliceStable(result, func(i, j int) bool {
+			if desc {
+				return less(result[j], result[i])
 			}
-			if dir == "desc" && field == "label" {
-				less = !less
-			}
-			return less
+			return less(result[i], result[j])
 		})
 	}
 
 	return result
 }
 
-func parseSort(s string) (field, dir string) {
-	parts := strings.SplitN(s, ":", 2)
-	field = parts[0]
-	if len(parts) == 2 {
-		dir = parts[1]
-	} else {
-		switch field {
-		case "label":
-			dir = "asc"
-		default:
-			dir = "desc"
-		}
+// parseSort reads a --sort value. oldest and newest are the words
+// people reach for; field[:asc|:desc] stays for scripts written
+// against it. A bare date means newest first, a bare label A to Z.
+func parseSort(s string) (field string, desc bool, ok bool) {
+	switch s {
+	case "oldest":
+		return "date", false, true
+	case "newest":
+		return "date", true, true
 	}
-	return
+	field, dir, _ := strings.Cut(s, ":")
+	if field != "date" && field != "label" {
+		return "", false, false
+	}
+	switch dir {
+	case "":
+		return field, field == "date", true
+	case "asc":
+		return field, false, true
+	case "desc":
+		return field, true, true
+	}
+	return "", false, false
 }

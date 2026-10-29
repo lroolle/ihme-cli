@@ -51,7 +51,7 @@ ihme list --search netflix --json         # search label, address, or note
 ihme list --active --json                 # only active
 ihme list --inactive --json               # only inactive
 ihme list --tag dev --json                # filter by tag
-ihme list --sort label --json             # sort by: label, date, label:desc, date:asc
+ihme list --sort oldest --json            # sort by: oldest, newest, label, label:desc
 ihme list --json --jq '.addresses[0:5]'   # first 5
 ihme list --json --jq '.count'            # total count
 ```
@@ -88,6 +88,8 @@ ihme copy github.com                      # clipboard; prints address if unavail
 ihme deactivate github.com --json         # stop receiving mail
 ihme reactivate github.com --json         # resume receiving mail
 ihme delete github.com --yes --json       # permanent deletion
+ihme deactivate <id> <id> --json          # several: {"results":[...],"hints":{"retry":...}}
+ihme delete <id> <id> --force --yes --json  # all resolved before any change
 ```
 
 ### Export
@@ -150,7 +152,7 @@ Errors include actionable fix commands:
 
 ```
 Error: <ref> required — an address label, email, or ID
-  Usage: ihme deactivate <ref>
+  Usage: ihme deactivate <ref>...
   Example: ihme deactivate github.com
 ```
 

@@ -15,22 +15,48 @@ import (
 
 func NewCmdDeactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "deactivate [ref]",
-		Short: "Deactivate a Hide My Email address",
+		Use:   "deactivate [ref]...",
+		Short: "Deactivate Hide My Email addresses",
 		Long: `Deactivate a Hide My Email address. Mail to this address will be rejected.
 Can be reactivated later with 'ihme reactivate'.
 
 Without <ref> at a terminal, asks which active address, newest first;
 Enter takes the one created most recently.
 
+Several refs take IDs (the first column of 'ihme list') or full
+addresses, not labels. All are resolved before anything changes; one
+that matches nothing changes nothing. Each is then deactivated in
+turn. The first failure stops the rest, and ihme prints one command
+that retries what was not done.
+
 JSON output (--json):
-  {"status":"deactivated","hme":"...","id":"...","hints":{"reactivate":"...","delete":"..."}}`,
-		Example: "  ihme deactivate github.com\n  ihme deactivate          # pick, newest first",
-		Args:    cmdutil.RefOrPick("ihme deactivate <ref>", "ihme deactivate github.com"),
+  {"status":"deactivated","hme":"...","id":"...","hints":{"reactivate":"...","delete":"..."}}
+  Several refs:
+  {"results":[{"status":"deactivated|skipped|failed|not_attempted","hme","id","reason","error"}],
+   "hints":{"retry":"..."}}`,
+		Example: "  ihme deactivate github.com\n  ihme deactivate 3f9a1b2c 7d8e9f0a   # several at once\n  ihme deactivate          # pick, newest first",
+		Args:    cmdutil.RefsOrPick("ihme deactivate <ref>...", "ihme deactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
+			}
+			if len(args) > 1 {
+				emails, err := resolveAll(client, args)
+				if err != nil {
+					return err
+				}
+				return many(cmd, emails, step{
+					use:  "ihme deactivate",
+					done: "Deactivated",
+					skip: func(e api.HmeEmail) string {
+						if !e.IsActive {
+							return "already inactive"
+						}
+						return ""
+					},
+					act: func(e api.HmeEmail) error { return client.DeactivateHme(e.AnonymousID) },
+				})
 			}
 			ref, err := cmdutil.RefFromArgs(args, client, cmdutil.Pick{
 				Verb: "deactivate",
@@ -70,20 +96,43 @@ JSON output (--json):
 
 func NewCmdReactivate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "reactivate [ref]",
-		Short: "Reactivate a deactivated Hide My Email address",
+		Use:   "reactivate [ref]...",
+		Short: "Reactivate deactivated Hide My Email addresses",
 		Long: `Reactivate a previously deactivated Hide My Email address.
 
 Without <ref> at a terminal, asks which inactive address, newest first.
 
+Several refs work as in 'ihme deactivate': IDs or full addresses,
+all resolved first, then each in turn until the first failure.
+
 JSON output (--json):
-  {"status":"reactivated","hme":"...","id":"...","hint":"ihme view <id> --json"}`,
-		Example: "  ihme reactivate github.com\n  ihme reactivate          # pick, newest first",
-		Args:    cmdutil.RefOrPick("ihme reactivate <ref>", "ihme reactivate github.com"),
+  {"status":"reactivated","hme":"...","id":"...","hint":"ihme view <id> --json"}
+  Several refs:
+  {"results":[{"status":"reactivated|skipped|failed|not_attempted","hme","id","reason","error"}],
+   "hints":{"retry":"..."}}`,
+		Example: "  ihme reactivate github.com\n  ihme reactivate 3f9a1b2c 7d8e9f0a   # several at once\n  ihme reactivate          # pick, newest first",
+		Args:    cmdutil.RefsOrPick("ihme reactivate <ref>...", "ihme reactivate github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
+			}
+			if len(args) > 1 {
+				emails, err := resolveAll(client, args)
+				if err != nil {
+					return err
+				}
+				return many(cmd, emails, step{
+					use:  "ihme reactivate",
+					done: "Reactivated",
+					skip: func(e api.HmeEmail) string {
+						if e.IsActive {
+							return "already active"
+						}
+						return ""
+					},
+					act: func(e api.HmeEmail) error { return client.ReactivateHme(e.AnonymousID) },
+				})
 			}
 			ref, err := cmdutil.RefFromArgs(args, client, cmdutil.Pick{
 				Verb: "reactivate",
@@ -132,8 +181,8 @@ func NewCmdDelete() *cobra.Command {
 	var force, yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete [ref]",
-		Short: "Permanently delete a Hide My Email address",
+		Use:   "delete [ref]...",
+		Short: "Permanently delete Hide My Email addresses",
 		Long: `Permanently delete a Hide My Email address. Apple only deletes
 inactive addresses: deactivate first, or pass --force to do both.
 
@@ -141,14 +190,51 @@ Without <ref> at a terminal, asks which inactive address (any address
 with --force), newest first. A picked address is always confirmed,
 even with --yes. Without a terminal, --yes is required.
 
+Several refs take IDs (the first column of 'ihme list --sort
+oldest') or full addresses, not labels. All are resolved and checked
+before anything is deleted, then confirmed once, listing every
+address. The first failure stops the rest, and ihme prints one
+command that retries what was not deleted.
+
 JSON output (--json):
-  {"status":"deleted","hme":"...","id":"..."}`,
-		Example: "  ihme delete github.com\n  ihme delete github.com --force --yes --json\n  ihme delete              # pick, newest first",
-		Args:    cmdutil.RefOrPick("ihme delete <ref>", "ihme delete github.com"),
+  {"status":"deleted","hme":"...","id":"..."}
+  Several refs:
+  {"results":[{"status":"deleted|failed|not_attempted","hme","id","error"}],
+   "hints":{"retry":"..."}}`,
+		Example: "  ihme delete github.com\n  ihme delete github.com --force --yes --json\n  ihme delete --force 3f9a1b2c 7d8e9f0a   # several, one confirmation\n  ihme delete              # pick, newest first",
+		Args:    cmdutil.RefsOrPick("ihme delete <ref>...", "ihme delete github.com"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := cmdutil.GetClient(cmd)
 			if err != nil {
 				return err
+			}
+			if len(args) > 1 {
+				emails, err := resolveAll(client, args)
+				if err != nil {
+					return err
+				}
+				if err := confirmDelete(os.Stdin, os.Stderr, emails, force, yes, cmdutil.CanPrompt(cmd)); err != nil {
+					return err
+				}
+				use := "ihme delete"
+				if force {
+					use += " --force"
+				}
+				if yes {
+					use += " --yes"
+				}
+				return many(cmd, emails, step{
+					use:  use,
+					done: "Deleted",
+					act: func(e api.HmeEmail) error {
+						if e.IsActive {
+							if err := client.DeactivateHme(e.AnonymousID); err != nil {
+								return fmt.Errorf("deactivating before delete: %w", err)
+							}
+						}
+						return client.DeleteHme(e.AnonymousID)
+					},
+				})
 			}
 			none := "no inactive addresses to delete — deactivate one first, or pass --force"
 			ref, err := cmdutil.RefFromArgs(args, client, cmdutil.Pick{

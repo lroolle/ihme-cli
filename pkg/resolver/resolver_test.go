@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lroolle/ihme-cli/api"
@@ -98,5 +99,33 @@ func TestResolveEmpty(t *testing.T) {
 	_, err := Resolve("", testEmails)
 	if err == nil {
 		t.Error("expected error for empty ref")
+	}
+}
+
+func TestResolveAllInOrderOnce(t *testing.T) {
+	got, err := ResolveAll([]string{"ghi789", "abc123full", "abc@privaterelay.appleid.com", "def456"}, testEmails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	for _, e := range got {
+		labels = append(labels, e.Label)
+	}
+	if strings.Join(labels, " ") != "netflix.com github.com amazon.com" {
+		t.Errorf("got %v, want netflix.com github.com amazon.com (github.com named twice, kept once)", labels)
+	}
+}
+
+// Labels are for one address. In a batch, `ihme delete --yes $L` with
+// L="github.com amazon.com" must change nothing, not delete two.
+func TestResolveAllRefusesLabelsAndMisses(t *testing.T) {
+	got, err := ResolveAll([]string{"abc123full", "github.com", "amazon.com", "abc123"}, testEmails)
+	if err == nil || got != nil {
+		t.Fatalf("got %v, %v; want nothing and an error", got, err)
+	}
+	for _, want := range []string{"nothing changed: not an ID or address", `"github.com"`, `"amazon.com"`, `"abc123"`, "not labels"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error lacks %q:\n%v", want, err)
+		}
 	}
 }

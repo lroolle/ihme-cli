@@ -23,7 +23,10 @@ cmd/
   edit/                  Edit label/note/tags
   copy/                  Copy address to clipboard
   memorycmd/             Inspect the agent memory graph (path, search, graph, card)
-  lifecycle/             deactivate, reactivate, delete (with --yes confirmation)
+  lifecycle/             deactivate, reactivate, delete (with --yes confirmation);
+                         several refs (IDs/addresses, no labels): all
+                         resolved first, one confirmation, the first
+                         failure stops the batch (many.go)
   export/                CSV/JSON export with filters
   forward/               forward-to management
   share/                 share <ref> | list | revoke: per-address access keys
@@ -42,7 +45,8 @@ internal/
   srp/                   SRP-6a (NG_2048, SHA-256, NoUserNameInX)
   securitykey/           FIDO2 assertion over USB HID (cgo-free) for
                          security-key 2FA; touch only, no PIN
-  cmdutil/               GetClient, OutputResult, ExactRefArg, RefOrPick +
+  cmdutil/               GetClient, OutputResult, ExactRefArg, RefOrPick,
+                         RefsOrPick (one or more <ref>s) +
                          PickAddress (omitted <ref> at a TTY -> newest-first
                          picker; never prompts without a TTY or with --json)
   shares/                shares.json: address -> SHA-256(key); Grant rotates,

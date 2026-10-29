@@ -118,6 +118,21 @@ func TestRefOrPickWithoutTerminal(t *testing.T) {
 	}
 }
 
+func TestRefsOrPickTakesMany(t *testing.T) {
+	cmd := &cobra.Command{Use: "delete"}
+	cmd.Flags().Bool("json", false, "")
+	cmd.Flags().String("jq", "", "")
+	args := RefsOrPick("ihme delete <ref>...", "ihme delete github.com")
+	if err := args(cmd, nil); err == nil || !strings.Contains(err.Error(), "<ref> required") {
+		t.Errorf("no ref without a terminal: err = %v", err)
+	}
+	for _, refs := range [][]string{{"a"}, {"a", "b"}, {"a", "b", "c"}} {
+		if err := args(cmd, refs); err != nil {
+			t.Errorf("%d refs: %v", len(refs), err)
+		}
+	}
+}
+
 // At a terminal, each guard alone must still turn prompting off:
 // they are what keep agents and scripts from hanging on a question.
 func TestCanPromptGuards(t *testing.T) {
