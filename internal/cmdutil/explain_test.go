@@ -34,7 +34,7 @@ func TestExplainAndExitCode(t *testing.T) {
 			name:     "hide my email refuses a good session",
 			err:      fmt.Errorf("listing HME: %w", &api.ServiceRefusedError{Err: &api.HTTPError{Status: 401, URL: "https://p50-maildomainws.icloud.com/v2/hme/list?dsid=123", Body: `{"reason":"Invalid global session","error":2}`}}),
 			wantText: "refuses this session",
-			wantFix:  "Allow Data Access",
+			wantFix:  "Data Access on iCloud.com",
 			wantCode: 1,
 		},
 		{

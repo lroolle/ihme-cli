@@ -202,8 +202,9 @@ Apple kept refusing: only an interactive login fixes it.
 An error saying Hide My Email refuses this session exits 1: iCloud
 signed in fine, but the account blocks iCloud data on the web. Do not
 ask for a login; tell the user to turn on "Allow Data Access" (iPhone:
-Settings > [your name] > iCloud > iCloud.com), as the error's Fix line
-says.
+Settings > [your name] > iCloud > iCloud.com; Mac: System Settings >
+[your name] > iCloud > Data Access on iCloud.com), as the error's Fix
+line says.
 
 ## Operational guide (for agents)
 
