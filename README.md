@@ -31,6 +31,8 @@ ihme auth login    # Apple ID, password, 2FA. Saves session, not password or cod
 ihme list
 ```
 
+If the password sign-in fails for your account, `ihme auth login --browser` uses a browser already signed in at icloud.com instead ([usage](docs/usage.md)).
+
 ## Scripts
 
 Every address command takes `--json`. `--jq` runs installed jq on it. No prompts without a terminal.

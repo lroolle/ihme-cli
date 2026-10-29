@@ -107,25 +107,38 @@ type AccountInfoResponse struct {
 	DsInfo      DsInfo                        `json:"dsInfo"`
 	Webservices map[string]WebserviceEndpoint `json:"webservices"`
 	Success     *bool                         `json:"success,omitempty"`
+	// Apple's verdict on the session's second factor. Services
+	// refuse a session that still owes 2FA with 401 "Invalid global
+	// session".
+	HsaChallengeRequired *bool `json:"hsaChallengeRequired,omitempty"`
+	HsaTrustedBrowser    *bool `json:"hsaTrustedBrowser,omitempty"`
 }
 
 type AccountLoginResponse = AccountInfoResponse
 
 type DsInfo struct {
-	Dsid              string `json:"dsid"`
-	LastName          string `json:"lastName"`
-	FirstName         string `json:"firstName"`
-	PrimaryEmail      string `json:"appleId"`
-	CountryCode       string `json:"countryCode"`
-	HsaVersion        int    `json:"hsaVersion"`
-	StatusCode        int    `json:"statusCode"`
-	ManagedAppleID    bool   `json:"isManagedAppleID"`
-	HideMyEmailActive bool   `json:"isHideMyEmailSubscriptionActive"`
+	Dsid           string `json:"dsid"`
+	LastName       string `json:"lastName"`
+	FirstName      string `json:"firstName"`
+	PrimaryEmail   string `json:"appleId"`
+	CountryCode    string `json:"countryCode"`
+	HsaVersion     int    `json:"hsaVersion"`
+	StatusCode     int    `json:"statusCode"`
+	ManagedAppleID bool   `json:"isManagedAppleID"`
+	// Pointers: absent and false mean different things, and Apple
+	// omits some of these on some accounts.
+	HideMyEmailActive    *bool `json:"isHideMyEmailSubscriptionActive,omitempty"`
+	HideMyEmailAvailable *bool `json:"isHideMyEmailFeatureAvailable,omitempty"`
+	// WebAccessAllowed is the "Access iCloud Data on the Web" setting.
+	WebAccessAllowed *bool `json:"isWebAccessAllowed,omitempty"`
 }
 
 type WebserviceEndpoint struct {
 	URL    string `json:"url"`
 	Status string `json:"status"`
+	// PcsRequired marks a service behind Advanced Data Protection:
+	// web access needs approval on a trusted device (requestPCS).
+	PcsRequired bool `json:"pcsRequired,omitempty"`
 }
 
 type AuthOptionsResponse struct {
@@ -133,6 +146,57 @@ type AuthOptionsResponse struct {
 	TrustedPhoneNumbers     []TrustedPhoneNumber     `json:"trustedPhoneNumbers,omitempty"`
 	TrustedDevices          []TrustedDevice          `json:"trustedDevices,omitempty"`
 	NoTrustedDevices        bool                     `json:"noTrustedDevices,omitempty"`
+	// Set when the account's second factor is a hardware security
+	// key. Apple then sends no code anywhere; it wants a WebAuthn
+	// assertion instead. The challenge comes either at the top level
+	// or nested under fsaVerification (seen by rclone#9734 testers).
+	SecurityKeyVerification
+	FsaVerification *SecurityKeyVerification `json:"fsaVerification,omitempty"`
+	KeyNames        []string                 `json:"keyNames,omitempty"`
+}
+
+// SecurityKeyVerification is the security-key part of Apple's 2FA
+// options.
+type SecurityKeyVerification struct {
+	FsaChallenge *SecurityKeyChallenge `json:"fsaChallenge,omitempty"`
+	// RequirePrf asks for the WebAuthn PRF extension, which no
+	// client of this flow supports.
+	RequirePrf bool `json:"requirePrf,omitempty"`
+}
+
+// securityKey returns the security-key verification wherever Apple put
+// it, or nil for an account that uses codes.
+func (o *AuthOptionsResponse) securityKey() *SecurityKeyVerification {
+	if o.FsaChallenge != nil {
+		return &o.SecurityKeyVerification
+	}
+	if o.FsaVerification != nil && o.FsaVerification.FsaChallenge != nil {
+		return o.FsaVerification
+	}
+	return nil
+}
+
+// SecurityKeyChallenge is Apple's WebAuthn request (fsaChallenge).
+// Challenge and KeyHandles are base64url, as Apple sends them.
+type SecurityKeyChallenge struct {
+	Challenge  string   `json:"challenge"`
+	KeyHandles []string `json:"keyHandles"`
+	// AllowedCredentials carries the same credential IDs, comma
+	// separated; XcodesLoginKit builds its allow list from it.
+	AllowedCredentials string `json:"allowedCredentials,omitempty"`
+	RpID               string `json:"rpId"`
+	// KeyNames are the names the user gave the keys, for the prompt.
+	KeyNames []string `json:"-"`
+}
+
+// SecurityKeyAssertion is a security key's signed answer to a
+// SecurityKeyChallenge, as raw bytes.
+type SecurityKeyAssertion struct {
+	ClientData        []byte
+	AuthenticatorData []byte
+	Signature         []byte
+	UserHandle        []byte
+	CredentialID      []byte
 }
 
 type PhoneNumberVerification struct {
@@ -166,6 +230,9 @@ type SessionData struct {
 	// and kept: a new id per invocation is a stranger every time.
 	ClientID string    `json:"clientId,omitempty"`
 	SavedAt  time.Time `json:"savedAt"`
+	// Source is SourceBrowser for a session imported from a browser,
+	// empty for a password sign-in.
+	Source string `json:"source,omitempty"`
 	// ValidatedAt is the last time Apple confirmed this session
 	// (successful validate or accountLogin). Fresh sessions skip
 	// the per-command validate round trip.

@@ -18,7 +18,12 @@ import (
 
 type TwoFactorCallback func() (string, error)
 
-func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) error {
+// SecurityKeyCallback has a hardware security key sign Apple's
+// challenge. Login calls it instead of TwoFactorCallback when the
+// account uses security keys: Apple then sends no code at all.
+type SecurityKeyCallback func(SecurityKeyChallenge) (*SecurityKeyAssertion, error)
+
+func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	c.session.AppleID = strings.ToLower(appleID)
 	c.frameID = strings.ToLower(uuid.New().String())
 
@@ -30,7 +35,7 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) 
 		return fmt.Errorf("federate: %w", err)
 	}
 
-	if err := c.srpAuthenticate(c.session.AppleID, password, otpCallback); err != nil {
+	if err := c.srpAuthenticate(c.session.AppleID, password, otpCallback, keyCallback); err != nil {
 		return err
 	}
 
@@ -42,7 +47,59 @@ func (c *Client) Login(appleID, password string, otpCallback TwoFactorCallback) 
 		return fmt.Errorf("account login: %w", err)
 	}
 
+	return c.checkAccount(c.lastLogin)
+}
+
+// checkAccount reads Apple's verdict in an accountLogin (or, for a
+// browser session, validate) answer. A session Apple still holds 2FA
+// against fails: every service answers it with 401 "Invalid global
+// session", so reporting success would only move the failure to the
+// next command. Only an explicit hsaChallengeRequired=true fails;
+// absent fields keep the old path. What else can stop Hide My Email
+// is reported by accountNote when the service actually refuses.
+func (c *Client) checkAccount(login *AccountLoginResponse) error {
+	if login == nil {
+		return nil
+	}
+	ds := login.DsInfo
+	hme, hasHME := login.Webservices["premiummailsettings"]
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] account: hsaVersion=%d hsaChallengeRequired=%s hsaTrustedBrowser=%s isWebAccessAllowed=%s isHideMyEmailFeatureAvailable=%s isHideMyEmailSubscriptionActive=%s premiummailsettings=%v status=%q pcsRequired=%v\n",
+			ds.HsaVersion, boolText(login.HsaChallengeRequired), boolText(login.HsaTrustedBrowser),
+			boolText(ds.WebAccessAllowed), boolText(ds.HideMyEmailAvailable), boolText(ds.HideMyEmailActive),
+			hasHME, hme.Status, hme.PcsRequired)
+	}
+	if login.HsaChallengeRequired != nil && *login.HsaChallengeRequired {
+		return fmt.Errorf("two-factor authentication was not completed for this session (Apple: hsaChallengeRequired); sign in again, and if it repeats, report the output of the same command with -v")
+	}
 	return nil
+}
+
+// accountNote is the fix for the first account setting Apple reports
+// that stops Hide My Email on a good session, or "" when it reports
+// none. Data access comes first: it is the cause seen in the field,
+// and with it off Apple may not list the service at all.
+func accountNote(login *AccountLoginResponse) string {
+	ds := login.DsInfo
+	hme, hasHME := login.Webservices["premiummailsettings"]
+	switch {
+	case isFalse(ds.WebAccessAllowed):
+		return DataAccessFix
+	case !hasHME || isFalse(ds.HideMyEmailAvailable):
+		return "Apple reports no Hide My Email on this Apple Account; it needs an iCloud+ subscription"
+	case hme.PcsRequired:
+		return "Apple marks Hide My Email as needing approval on a trusted device (pcsRequired), which ihme cannot request yet; " + DataAccessFix
+	}
+	return ""
+}
+
+func isFalse(b *bool) bool { return b != nil && !*b }
+
+func boolText(b *bool) string {
+	if b == nil {
+		return "absent"
+	}
+	return fmt.Sprint(*b)
 }
 
 func (c *Client) LoginWithSession() error {
@@ -53,7 +110,8 @@ func (c *Client) LoginWithSession() error {
 }
 
 func (c *Client) ResumeSession() error {
-	if c.session.SessionToken == "" && c.session.TrustToken == "" {
+	browser := c.session.Source == SourceBrowser
+	if c.session.SessionToken == "" && c.session.TrustToken == "" && !browser {
 		return fmt.Errorf("no session data")
 	}
 
@@ -69,9 +127,12 @@ func (c *Client) ResumeSession() error {
 		if err == nil {
 			return nil
 		}
-		if !IsAuthRejection(err) {
+		// A browser session reads a 421 refusal as a rejection (see
+		// ValidateSessionInfo), and Apple also sends 421 for routing
+		// hiccups; with no accountLogin behind it, it gets the retry.
+		if !IsAuthRejection(err) || browser {
 			if c.Verbose {
-				fmt.Fprintf(os.Stderr, "[svc] validate failed transiently, retrying once: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[svc] validate failed, retrying once: %v\n", err)
 			}
 			time.Sleep(1500 * time.Millisecond)
 			err = c.ValidateSession()
@@ -85,6 +146,11 @@ func (c *Client) ResumeSession() error {
 		if c.Verbose {
 			fmt.Fprintf(os.Stderr, "[svc] session rejected, falling back to accountLogin\n")
 		}
+	}
+
+	// A browser session has no tokens to trade for new cookies.
+	if browser {
+		return fmt.Errorf("validating session: %w", ErrBrowserSessionExpired)
 	}
 
 	// Fall back to accountLogin (triggers Apple sign-in email).
@@ -146,6 +212,14 @@ func (c *Client) ValidateSessionInfo() (*AccountInfoResponse, json.RawMessage, e
 				return c.ValidateSessionInfo()
 			}
 		}
+		// A browser session has no accountLogin to settle what a 421
+		// {"success":false} means, and Apple answers cookies it does
+		// not accept that way (seen live with made-up cookies: 421,
+		// not 401). Read as transient, an expired browser session
+		// would be "try again" forever.
+		if c.session.Source == SourceBrowser && refused421(err, body) {
+			return nil, nil, fmt.Errorf("validate session: %w: %w", ErrSessionInvalid, err)
+		}
 		return nil, nil, fmt.Errorf("validate session: %w", err)
 	}
 	if err != nil {
@@ -200,7 +274,7 @@ func (c *Client) authFederate(email string) error {
 	return nil
 }
 
-func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCallback) error {
+func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	params := srp.Apple2048Params()
 	client, err := srp.NewClient(params)
 	if err != nil {
@@ -269,7 +343,7 @@ func (c *Client) srpAuthenticate(email, password string, otpCallback TwoFactorCa
 		if c.Verbose {
 			fmt.Fprintf(os.Stderr, "[auth] 409 body: %s\n", string(body))
 		}
-		return c.handle2FA(otpCallback)
+		return c.handle2FA(body, otpCallback, keyCallback)
 	case 412:
 		return fmt.Errorf("account requires acknowledgment at appleid.apple.com")
 	default:
@@ -327,11 +401,11 @@ func signinError(step string, status int, body []byte) error {
 	}
 }
 
-func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
-	if otpCallback == nil {
-		return fmt.Errorf("two-factor authentication required but no callback provided")
-	}
-
+// handle2FA completes the second factor. signinBody is the 409 from
+// /signin/complete: some accounts carry the security-key challenge
+// there too (rhoopr/kei srp.rs), which is the fallback when the
+// options GET lacks it.
+func (c *Client) handle2FA(signinBody []byte, otpCallback TwoFactorCallback, keyCallback SecurityKeyCallback) error {
 	_, authBody, err := c.doAuthRequest("GET", AuthEndpoint, nil)
 	if err != nil {
 		return fmt.Errorf("fetching auth options: %w", err)
@@ -343,6 +417,36 @@ func (c *Client) handle2FA(otpCallback TwoFactorCallback) error {
 	var opts AuthOptionsResponse
 	if err := json.Unmarshal(authBody, &opts); err != nil {
 		return fmt.Errorf("parsing auth options: %w", err)
+	}
+
+	// A security-key account gets no code on any device or phone,
+	// so this check comes before every code path. fsaChallenge is
+	// in this JSON shape, not the HTML auth shell (pyicloud#363/#364).
+	verification := opts.securityKey()
+	if verification == nil {
+		var signin AuthOptionsResponse
+		if json.Unmarshal(signinBody, &signin) == nil {
+			verification = signin.securityKey()
+			if len(opts.KeyNames) == 0 {
+				opts.KeyNames = signin.KeyNames
+			}
+		}
+	}
+	if verification != nil {
+		if verification.RequirePrf {
+			return fmt.Errorf("this sign-in requires the security key PRF extension, which ihme does not support")
+		}
+		challenge := *verification.FsaChallenge
+		challenge.KeyNames = opts.KeyNames
+		return c.handle2FASecurityKey(challenge, keyCallback)
+	}
+	if len(opts.KeyNames) > 0 {
+		// Prompting for a code here would wait for one that never comes.
+		return fmt.Errorf("this Apple Account uses security keys, but Apple sent no security key challenge; run ihme auth login -v and report the output")
+	}
+
+	if otpCallback == nil {
+		return fmt.Errorf("two-factor authentication required but no callback provided")
 	}
 
 	// Some accounts nest auth state under phoneNumberVerification
@@ -450,6 +554,86 @@ func (c *Client) handle2FADevice(otpCallback TwoFactorCallback) error {
 	}
 }
 
+// handle2FASecurityKey answers Apple's WebAuthn challenge for an
+// account protected by hardware security keys: the key's signature
+// is the second factor. The request shape follows pyicloud's
+// confirm_security_key (standard base64 for the byte fields, the
+// challenge echoed back as Apple sent it).
+func (c *Client) handle2FASecurityKey(challenge SecurityKeyChallenge, keyCallback SecurityKeyCallback) error {
+	if keyCallback == nil {
+		return fmt.Errorf("this Apple Account signs in with a security key, which this client cannot use")
+	}
+	if len(challenge.KeyHandles) == 0 && challenge.AllowedCredentials != "" {
+		for _, id := range strings.Split(challenge.AllowedCredentials, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				challenge.KeyHandles = append(challenge.KeyHandles, id)
+			}
+		}
+	}
+	// Without key handles the key would look for a discoverable
+	// credential and report "not registered" for the right key.
+	if challenge.Challenge == "" || challenge.RpID == "" || len(challenge.KeyHandles) == 0 {
+		return fmt.Errorf("security key challenge from Apple is missing challenge, rpId, or key handles")
+	}
+
+	assertion, err := keyCallback(challenge)
+	if err != nil {
+		return fmt.Errorf("security key: %w", err)
+	}
+
+	resp, respBody, err := c.doAuthRequest("POST", AuthEndpoint+"/verify/security/key",
+		securityKeyRequest(challenge, assertion))
+	if err != nil {
+		return fmt.Errorf("submitting security key: %w", err)
+	}
+
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] security key: %d %s (session token renewed: %v)\n",
+			resp.StatusCode, truncate(string(respBody), 2000), resp.Header.Get("X-Apple-Session-Token") != "")
+	}
+
+	switch {
+	case resp.StatusCode == 200 || resp.StatusCode == 204:
+		return nil
+	case resp.StatusCode == 409 && !hasServiceErrors(respBody):
+		// Apple's sign-in page treats a 409 here as accepted
+		// (mandarons/icloudpy#174), as the securitycode endpoints
+		// now answer 409 for valid codes. Accepting is safe: the
+		// trust step that follows refuses a session Apple did not
+		// verify.
+		return nil
+	case resp.StatusCode == 400 || resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 409:
+		return fmt.Errorf("security key not accepted by Apple (%d): %s", resp.StatusCode, truncate(string(respBody), 200))
+	default:
+		return fmt.Errorf("security key verification returned %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+	}
+}
+
+// hasServiceErrors reports whether Apple's response names an error.
+func hasServiceErrors(body []byte) bool {
+	var parsed struct {
+		ServiceErrors []json.RawMessage `json:"serviceErrors"`
+	}
+	return json.Unmarshal(body, &parsed) == nil && len(parsed.ServiceErrors) > 0
+}
+
+func securityKeyRequest(challenge SecurityKeyChallenge, a *SecurityKeyAssertion) map[string]any {
+	b64 := base64.StdEncoding.EncodeToString
+	var userHandle any // JSON null when the key returns none
+	if len(a.UserHandle) > 0 {
+		userHandle = b64(a.UserHandle)
+	}
+	return map[string]any{
+		"challenge":         challenge.Challenge,
+		"clientData":        b64(a.ClientData),
+		"signatureData":     b64(a.Signature),
+		"authenticatorData": b64(a.AuthenticatorData),
+		"userHandle":        userHandle,
+		"credentialID":      b64(a.CredentialID),
+		"rpId":              challenge.RpID,
+	}
+}
+
 // codeAcceptedDespiteConflict reports whether Apple accepted a
 // security code while answering 409. Since ~mid-2026 the
 // securitycode endpoints answer 409 even for a valid code. Two
@@ -485,6 +669,9 @@ func (c *Client) getTrust() error {
 	}
 	if resp.StatusCode != 200 && resp.StatusCode != 204 {
 		return fmt.Errorf("get trust returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+	if c.Verbose {
+		fmt.Fprintf(os.Stderr, "[auth] trust token received: %v\n", resp.Header.Get("X-Apple-TwoSV-Trust-Token") != "")
 	}
 	return nil
 }
@@ -523,12 +710,7 @@ func (c *Client) accountLogin() error {
 		// the cookies long after, so this is often the first place the
 		// expiry shows. Retrying never helps; only a fresh sign-in does.
 		// pyicloud, icloudpd, and rclone all read it the same way.
-		var httpErr *HTTPError
-		var verdict struct {
-			Success *bool `json:"success"`
-		}
-		if errors.As(err, &httpErr) && httpErr.Status == 421 &&
-			json.Unmarshal(body, &verdict) == nil && verdict.Success != nil && !*verdict.Success {
+		if refused421(err, body) {
 			return fmt.Errorf("account login: %w: %w", ErrSessionInvalid, err)
 		}
 		return fmt.Errorf("account login: %w", err)
@@ -545,7 +727,21 @@ func (c *Client) accountLogin() error {
 	c.session.Dsid = resp.DsInfo.Dsid
 	c.session.Webservices = resp.Webservices
 	c.session.ValidatedAt = time.Now()
+	c.lastLogin = &resp
+	c.fresh = true
 	return nil
+}
+
+// refused421 reports a 421 whose body is {"success":false}: Apple's
+// verdict on the credentials rather than a routing hiccup, where the
+// caller has the context to read it that way.
+func refused421(err error, body []byte) bool {
+	var httpErr *HTTPError
+	var verdict struct {
+		Success *bool `json:"success"`
+	}
+	return errors.As(err, &httpErr) && httpErr.Status == 421 &&
+		json.Unmarshal(body, &verdict) == nil && verdict.Success != nil && !*verdict.Success
 }
 
 func derivePassword(password string, salt []byte, iterations int, protocol string) []byte {

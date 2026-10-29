@@ -2,16 +2,24 @@ package auth
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/lroolle/ihme-cli/api"
+	"github.com/lroolle/ihme-cli/internal/securitykey"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
+
+// securityKeyWait bounds how long login waits for a security key to
+// be plugged in and touched before giving up.
+const securityKeyWait = 2 * time.Minute
 
 func NewCmdAuth() *cobra.Command {
 	cmd := &cobra.Command{
@@ -19,6 +27,7 @@ func NewCmdAuth() *cobra.Command {
 		Short: "Authenticate with iCloud",
 		Example: `  ihme auth login
   ihme auth login --apple-id user@icloud.com
+  ihme auth login --browser
   ihme auth status --json
   ihme auth logout`,
 	}
@@ -29,23 +38,42 @@ func NewCmdAuth() *cobra.Command {
 }
 
 func newCmdLogin() *cobra.Command {
-	var appleID string
+	var (
+		appleID string
+		browser bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Sign in with your Apple ID",
 		Long: `Sign in with your Apple ID using SRP authentication + 2FA.
 
+2FA is a six-digit code, or, if your Apple Account uses security
+keys, a touch on a FIDO2 key plugged in over USB.
+
 Credentials are never stored. Session tokens are saved to:
   ~/.config/ihme/session.json (respects $XDG_CONFIG_HOME)
 Override with IHME_SESSION_PATH.
 
-Trust token (~30 days) allows subsequent logins without 2FA.`,
+Trust token (~30 days) allows subsequent logins without 2FA.
+
+--browser signs in with the session a browser already has at
+icloud.com instead: the browser handles the password, the second
+factor and any approval on a trusted device, and ihme reads the
+Cookie header you paste (or pipe in). Use it when the password
+sign-in does not work for your account. Such a session cannot renew
+itself: when it expires, sign in at icloud.com again and rerun
+ihme auth login --browser.`,
 		Example: `  ihme auth login
   ihme auth login --apple-id user@icloud.com
-  IHME_APPLE_ID=user@icloud.com ihme auth login`,
+  IHME_APPLE_ID=user@icloud.com ihme auth login
+  ihme auth login --browser
+  pbpaste | ihme auth login --browser`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessPath := api.DefaultSessionPath()
+			if browser {
+				return loginBrowser(cmd, sessPath)
+			}
 
 			sess, err := api.LoadSession(sessPath)
 			if err != nil {
@@ -116,8 +144,18 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 				return code, nil
 			}
 
+			keyCallback := func(challenge api.SecurityKeyChallenge) (*api.SecurityKeyAssertion, error) {
+				if len(challenge.KeyNames) > 0 {
+					fmt.Printf("This Apple Account uses security keys (%s).\n", strings.Join(challenge.KeyNames, ", "))
+				}
+				fmt.Println("Insert your security key and touch it when it flashes...")
+				ctx, cancel := context.WithTimeout(cmd.Context(), securityKeyWait)
+				defer cancel()
+				return securitykey.Assert(ctx, challenge)
+			}
+
 			fmt.Println("Authenticating...")
-			if err := client.Login(appleID, password, otpCallback); err != nil {
+			if err := client.Login(appleID, password, otpCallback, keyCallback); err != nil {
 				// %v, not %w, on purpose: the final accountLogin can
 				// fail as an auth rejection, and cmdutil.Explain would
 				// answer it with "Fix: ihme auth login" — the command
@@ -126,17 +164,37 @@ Trust token (~30 days) allows subsequent logins without 2FA.`,
 				return fmt.Errorf("sign-in failed: %v", err)
 			}
 
-			if err := api.SaveSession(sessPath, client.Session()); err != nil {
-				return fmt.Errorf("saving session: %w", err)
-			}
-
-			fmt.Println("Logged in successfully.")
-			return nil
+			return confirmHme(client, sessPath, "Logged in successfully")
 		},
 	}
 
 	cmd.Flags().StringVar(&appleID, "apple-id", "", "Apple ID email (or set IHME_APPLE_ID)")
+	cmd.Flags().BoolVar(&browser, "browser", false, "Sign in with the cookies of a browser signed in at icloud.com, read from stdin")
+	cmd.MarkFlagsMutuallyExclusive("browser", "apple-id")
 	return cmd
+}
+
+// confirmHme saves the session, then lists the addresses once, so a
+// login only reports success when Hide My Email answers, not just
+// iCloud. A refusal is returned as the login's error; the session is
+// still kept, since it is valid and its trust token spares the second
+// factor on the sign-in the fix asks for. Anything else (no network,
+// no iCloud+) is a warning on a good login.
+func confirmHme(client *api.Client, sessPath, success string) error {
+	if err := api.SaveSession(sessPath, client.Session()); err != nil {
+		return fmt.Errorf("saving session: %w", err)
+	}
+	list, err := client.ListHme()
+	if errors.As(err, new(*api.ServiceRefusedError)) {
+		return err
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not check Hide My Email: %v\n", err)
+		fmt.Println(success + ".")
+		return nil
+	}
+	fmt.Printf("%s (%d addresses).\n", success, len(list.HmeEmails))
+	return nil
 }
 
 func newCmdStatus() *cobra.Command {
@@ -178,6 +236,10 @@ JSON output (--json):
 				os.Exit(2)
 			}
 
+			loginCmd := "ihme auth login"
+			if sess.Source == api.SourceBrowser {
+				loginCmd += " --browser"
+			}
 			localExpired := sess.IsExpired()
 			out := map[string]any{
 				"loggedIn":        true,
@@ -206,7 +268,7 @@ JSON output (--json):
 					out["canAccessICloud"] = false
 					out["check"] = "icloud"
 					out["error"] = err.Error()
-					out["hint"] = "ihme auth login"
+					out["hint"] = loginCmd
 
 					if jsonFlag {
 						enc := json.NewEncoder(os.Stdout)
@@ -220,7 +282,7 @@ JSON output (--json):
 							fmt.Println("Local session may be expired.")
 						}
 						fmt.Printf("iCloud access check failed: %s\n", err)
-						fmt.Println("Run 'ihme auth login' to refresh.")
+						fmt.Printf("Run '%s' to refresh.\n", loginCmd)
 					}
 					os.Exit(2)
 				}
@@ -254,7 +316,7 @@ JSON output (--json):
 			}
 			fmt.Printf("Session saved: %s\n", sess.SavedAt.Format("2006-01-02 15:04"))
 			if localExpired && localOnly {
-				fmt.Println("Session may be expired — run 'ihme auth login' to refresh.")
+				fmt.Printf("Session may be expired — run '%s' to refresh.\n", loginCmd)
 			}
 			return nil
 		},

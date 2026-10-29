@@ -68,6 +68,7 @@ func GetClient(cmd *cobra.Command) (*api.Client, error) {
 // and are opposite advice — "try again" versus "sign in again" —
 // so the split happens here, once, for every command.
 func Explain(err error) string {
+	var refused *api.ServiceRefusedError
 	switch {
 	case err == nil:
 		return ""
@@ -75,6 +76,14 @@ func Explain(err error) string {
 		return "Cancelled."
 	case errors.Is(err, ErrNotLoggedIn):
 		return "Error: not signed in to iCloud\n  Fix: ihme auth login"
+	case errors.As(err, &refused):
+		fix := refused.Note
+		if fix == "" {
+			fix = api.DataAccessFix
+		}
+		return fmt.Sprintf("Error: iCloud signed you in, but Hide My Email refuses this session\n  Cause: %s\n  Fix: %s", err, fix)
+	case errors.Is(err, api.ErrBrowserSessionExpired):
+		return fmt.Sprintf("Error: iCloud no longer accepts the session copied from your browser\n  Cause: %s\n  Fix: sign in at https://www.icloud.com, then run ihme auth login --browser", err)
 	case api.IsAuthRejection(err):
 		return fmt.Sprintf("Error: iCloud rejected this session — the saved login is no longer valid\n  Cause: %s\n  Fix: ihme auth login", err)
 	case api.IsTransient(err):
@@ -91,6 +100,10 @@ func ExitCode(err error) int {
 	switch {
 	case err == nil, errors.Is(err, ErrCancelled):
 		return 0
+	case errors.As(err, new(*api.ServiceRefusedError)):
+		// An account setting, not a login, fixes it: exit 2 would
+		// send scripts and agents into a sign-in loop.
+		return 1
 	case errors.Is(err, ErrNotLoggedIn), api.IsAuthRejection(err):
 		return 2
 	default:
